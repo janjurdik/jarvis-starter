@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.jarvis-starter.hud</string>
+	<key>CFBundleName</key>
+	<string>Jarvis HUD</string>
+	<key>CFBundleDisplayName</key>
+	<string>Jarvis HUD</string>
+	<key>CFBundleExecutable</key>
+	<string>JarvisHUD</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleShortVersionString</key>
+	<string>2.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>sk</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Jarvis ťa počúva, keď držíš medzerník alebo ⌃⌥J, a pri zapnutom „Hey Jarvis“. Zvuk spracúva len tvoj Mac.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Jarvis prepisuje tvoju reč na text, keď s ním hovoríš.</string>
+	<key>JarvisRepo</key>
+	<string>__JARVIS_REPO__</string>
+	<key>JarvisNode</key>
+	<string>__JARVIS_NODE__</string>
+	<key>JarvisPort</key>
+	<string>__JARVIS_PORT__</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

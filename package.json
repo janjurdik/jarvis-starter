@@ -1,0 +1,24 @@
+{
+  "name": "jarvis-starter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Jarvis: osobný AI asistent s vlastnou pamäťou, HUD na ploche a rutinami, postavený na Claude Code.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node hud/server.mjs",
+    "hud": "node scripts/hud.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "routine": "node scripts/routine.mjs",
+    "schedule": "node scripts/schedule.mjs",
+    "autostart": "node scripts/autostart.mjs"
+  },
+  "dependencies": {
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "three": "0.187.0",
+    "ws": "8.22.2"
+  }
+}

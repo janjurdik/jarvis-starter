@@ -1,0 +1,11 @@
+{
+  "name": "",
+  "address": "pane",
+  "formal": true,
+  "city": "Bratislava",
+  "routines": [
+    { "id": "ranny-brief", "title": "Ranný brief", "time": "07:30", "days": "daily", "enabled": true },
+    { "id": "vecerne-zhrnutie", "title": "Večerné zhrnutie", "time": "21:30", "days": "daily", "enabled": true },
+    { "id": "tyzdenny-prehlad", "title": "Týždenný prehľad", "time": "18:00", "days": "ne", "enabled": false }
+  ]
+}

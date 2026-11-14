@@ -1,0 +1,19 @@
+node_modules/
+.env
+.env.*
+!.env.example
+
+# runtime data: caches, logs, conversation log, brain state
+/data/
+
+# your personal setup and memory stay on your computer
+/config/jarvis.json
+/memory/*
+!/memory/README.md
+
+# macOS app build output
+hud/desktop/build/
+
+.DS_Store
+Thumbs.db
+*.log

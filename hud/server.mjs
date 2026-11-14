@@ -1,0 +1,656 @@
+#!/usr/bin/env node
+/**
+ * J.A.R.V.I.S. HUD server.
+ *
+ * Serves the app, Jarvis's brain (Claude Code CLI on the user's own Claude subscription), voice
+ * (Edge TTS, optional local Whisper), a live snapshot of the local memory folder and events over
+ * SSE. API: docs/API.md.
+ *
+ *   npm start                        http://localhost:4545
+ *   JARVIS_MOCK=1 npm start          without Claude, mock answers (to try the UI)
+ *   PORT=4600 npm start              another port
+ *
+ * Settings come from .env (see .env.example) and config/jarvis.json.
+ */
+import './server/env.mjs'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { createReadStream, readFileSync, statSync } from 'node:fs'
+import { stat } from 'node:fs/promises'
+import { createServer } from 'node:http'
+import { networkInterfaces } from 'node:os'
+import { extname, join, normalize, sep } from 'node:path'
+import { AGENT_MODE } from './server/agent.mjs'
+import { Brain, CLAUDE, EFFORT, MODEL } from './server/brain.mjs'
+import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onVoiceChange, sayText, sendChat, setVoice, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
+import { CONFIG_FILE, getConfig } from './server/config.mjs'
+import { createJob, initJobs, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob } from './server/jobs.mjs'
+import { normalizeCard } from './server/cards.mjs'
+import { FILES, MEMORY_DIR, getIndex, stats } from './server/memory/index.mjs'
+import { attachMic, micStats, micStatus, micWorkerState, onVoice, setMicWake, stopMic, wakeAvailable } from './server/mic.mjs'
+import { currentSnapshot, filmNameList, forFilm, memoryStatus, refreshSnapshot, startSnapshots } from './server/snapshot.mjs'
+import { openStream, send, sendHud, setGreeting, clientCount, desktopCount, setOnRolesChange } from './server/sse.mjs'
+import { saveState, setPersist, state } from './server/state.mjs'
+import { pruneTtsCache, stopTts, ttsFileExists, ttsInfo, warmCommonPhrases } from './server/tts.mjs'
+import { BRAIN_DIR, REPO, clean, errMsg, isLoopback, log, readJson, readRaw, sendJson, slug, writeFileAtomic } from './server/util.mjs'
+import { STT_ENGINE, sttLocal, sttState, stopStt, transcribeAudio, warmStt } from './server/stt.mjs'
+import { getWeather } from './server/weather.mjs'
+import { routeInner } from './server/inner.mjs'
+
+const ROOT = import.meta.dirname
+const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
+const HOST = process.env.HUD_HOST ?? '127.0.0.1'
+/** A secondary instance (tests, screenshots) keeps its hands off the saved state. */
+const PRIMARY = process.env.JARVIS_SECONDARY !== '1'
+const MOCK_ALL = process.env.JARVIS_MOCK === '1'
+const PUBLIC_DIR = join(ROOT, 'public')
+const MODULES_DIR = join(REPO, 'node_modules')
+const BOOTED = Date.now()
+setPersist(PRIMARY)
+
+/** Token pre POST zo siete (HUD_HOST=0.0.0.0). Loopback ho nepotrebuje. */
+function hudToken() {
+  if (process.env.JARVIS_HUD_TOKEN) return process.env.JARVIS_HUD_TOKEN
+  const file = join(BRAIN_DIR, 'token')
+  try {
+    return readFileSync(file, 'utf8').trim()
+  } catch {
+    const token = randomBytes(24).toString('hex')
+    writeFileAtomic(file, token + '\n', 0o600).catch(() => {})
+    return token
+  }
+}
+const HUD_TOKEN = hudToken()
+/** Token pre MCP jarvis-hud → /api/brain/hud, nový pri každom štarte servera. */
+const BRAIN_TOKEN = randomBytes(24).toString('hex')
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.woff2': 'font/woff2',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.wav': 'audio/wav',
+  '.txt': 'text/plain; charset=utf-8',
+  '.glb': 'model/gltf-binary',
+  '.ktx2': 'image/ktx2',
+}
+
+/** Statické mounty: URL prefix → priečinok. Z node_modules len to, čo appka naozaj načíta. */
+const MOUNTS = [
+  { prefix: '/vendor/three/', dir: join(MODULES_DIR, 'three'), allow: /^(build|examples\/jsm)\//, cache: true },
+  { prefix: '/vendor/fonts/', dir: join(MODULES_DIR, '@fontsource', 'jetbrains-mono', 'files'), allow: /\.woff2$/, cache: true },
+  { prefix: '/vendor/fontsource/', dir: join(MODULES_DIR, '@fontsource'), allow: /^[a-z0-9-]+\/files\/[^/]+\.woff2$/, cache: true },
+  { prefix: '/', dir: PUBLIC_DIR, allow: /./, cache: false },
+]
+
+// ── pomocné ────────────────────────────────────────────────────────────────
+
+/** Cesta vnútri `base`, inak null. Chráni pred `../` a zakódovanými lomkami. */
+function safeJoin(base, rel) {
+  let decoded
+  try {
+    decoded = decodeURIComponent(rel)
+  } catch {
+    return null
+  }
+  if (decoded.includes('\0')) return null
+  const full = normalize(join(base, decoded))
+  return full === base || full.startsWith(base + sep) ? full : null
+}
+
+const tokenOk = (given, expected) => {
+  const a = Buffer.from(String(given ?? ''))
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+/**
+ * Prehliadač posiela Origin. Cudzia stránka otvorená v tom istom Chrome by inak mohla cez localhost
+ * spustiť príkaz (CSRF, WebSocket hijacking) a mozog ovláda počítač. Bez Origin = curl, skripty, MCP.
+ */
+function originOk(req) {
+  const origin = req.headers.origin
+  if (origin === undefined) return true
+  try {
+    return new URL(origin).host === req.headers.host
+  } catch {
+    return false
+  }
+}
+
+/** POST len z loopbacku (z vlastnej stránky), zo siete s x-hud-token. */
+function allowPost(req) {
+  if (tokenOk(req.headers['x-hud-token'], HUD_TOKEN)) return true
+  return isLoopback(req.socket.remoteAddress) && originOk(req)
+}
+
+/** Osobné dáta (rozhovor, snapshot, hlas) zo siete len s tokenom v hlavičke alebo ?token= (EventSource). */
+function allowRead(req, url) {
+  if (isLoopback(req.socket.remoteAddress)) return true
+  return tokenOk(req.headers['x-hud-token'] ?? url.searchParams.get('token'), HUD_TOKEN)
+}
+const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|inner|setup)|tts\/)/
+
+async function serveFile(req, res, file, { cache, immutable = false }) {
+  let info
+  try {
+    info = await stat(file)
+  } catch {
+    return false
+  }
+  if (info.isDirectory()) return serveFile(req, res, join(file, 'index.html'), { cache })
+  const type = MIME[extname(file).toLowerCase()] ?? 'application/octet-stream'
+  const headers = {
+    'content-type': type,
+    'cache-control': immutable ? 'public, max-age=31536000, immutable' : cache ? 'public, max-age=86400' : 'no-cache',
+    'accept-ranges': 'bytes',
+    'last-modified': info.mtime.toUTCString(),
+  }
+  // Range kvôli <audio> a posúvaniu v MP3.
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '')
+  if (range && (range[1] || range[2])) {
+    let start = range[1] ? Number(range[1]) : info.size - Number(range[2])
+    let end = range[1] && range[2] ? Number(range[2]) : info.size - 1
+    start = Math.max(0, start)
+    end = Math.min(info.size - 1, end)
+    if (start > end) {
+      res.writeHead(416, { 'content-range': `bytes */${info.size}` })
+      res.end()
+      return true
+    }
+    res.writeHead(206, { ...headers, 'content-range': `bytes ${start}-${end}/${info.size}`, 'content-length': end - start + 1 })
+    if (req.method === 'HEAD') return res.end(), true
+    createReadStream(file, { start, end }).pipe(res)
+    return true
+  }
+  res.writeHead(200, { ...headers, 'content-length': info.size })
+  if (req.method === 'HEAD') return res.end(), true
+  createReadStream(file).pipe(res)
+  return true
+}
+
+// ── brain, voice, status ──────────────────────────────────────────────────
+
+let statusTimer = null
+function statusChanged() {
+  clearTimeout(statusTimer)
+  statusTimer = setTimeout(() => send('status', statusBody()), 40)
+}
+
+setOnRolesChange(statusChanged)
+
+const brain = MOCK_ALL ? null : new Brain({ hudUrl: `http://127.0.0.1:${PORT}`, token: BRAIN_TOKEN, onStatus: statusChanged, warmup: PRIMARY })
+
+function statusBody() {
+  const b = brain?.status()
+  const tts = ttsInfo()
+  return {
+    ok: true,
+    brain: MOCK_ALL ? 'mock' : b.state,
+    model: MOCK_ALL ? 'mock' : b.model,
+    effort: EFFORT,
+    tts: tts.provider,
+    voice: tts.voice,
+    stt: sttState(),
+    sttEngine: STT_ENGINE,
+    lang: (process.env.JARVIS_LANG || 'sk').toLowerCase().startsWith('cs') ? 'cs-CZ' : 'sk-SK',
+    wake: state.wake && wakeAvailable(),
+    wakeAvailable: wakeAvailable(),
+    mic: micStatus(),
+    wakeVia: state.wake && micStatus() === 'streaming' ? 'browser' : null,
+    wakeWorker: micWorkerState(),
+    wakeStats: micStats(),
+    film: state.film,
+    mock: MOCK_ALL,
+    voiceState: voiceState(),
+    turn: currentTurnId(),
+    memory: memoryStatus(),
+    agentMode: AGENT_MODE,
+    brainInfo: b ? { pid: b.pid, startMs: b.startMs, turns: b.turns, lastError: b.lastError, mcp: b.mcp, limit: b.limit } : null,
+    primary: PRIMARY,
+    clients: clientCount(),
+    desktop: desktopCount(),
+    uptimeS: Math.round((Date.now() - BOOTED) / 1000),
+  }
+}
+
+const snapshotFor = () => currentSnapshot({ film: state.film })
+
+initChat({ brain, getSnapshot: () => snapshotFor() ?? {}, getNames: filmNameList, getExtraContext: () => jobsContextNote(), mockAll: MOCK_ALL })
+setGreeting(() => {
+  // An open HUD means push-to-talk should be ready (a cold local Whisper takes a while).
+  if (PRIMARY) warmStt()
+  return greeting()
+})
+const greeting = () => [
+  ['status', statusBody()],
+  ['mode', { film: state.film }],
+  ['voice', { state: voiceState(), heard: null, level: null, turn: currentTurnId() }],
+]
+
+/** Mock listening: states, microphone levels and a transcript without any speech engine. */
+async function mockListen(text, silent) {
+  setVoice('listening', { level: 0 })
+  const t0 = Date.now()
+  while (Date.now() - t0 < 2000) {
+    const t = (Date.now() - t0) / 1000
+    const level = Math.max(0, Math.min(1, 0.35 + 0.35 * Math.sin(t * 9) * Math.sin(t * 2.3) + (t > 1.6 ? -0.4 : 0)))
+    setVoice('listening', { level: Math.round(level * 100) / 100 })
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  setVoice('transcribing')
+  await new Promise((r) => setTimeout(r, 450))
+  sendChat({ text: text || 'Čo mám dnes v kalendári?', via: 'voice', mock: true, silent })
+}
+
+// ── memory refresh ────────────────────────────────────────────────────────
+
+async function pushSnapshot(reason) {
+  const snap = await refreshSnapshot(reason)
+  if (snap) send('snapshot', state.film ? forFilm(snap) : snap)
+  statusChanged()
+  return snap
+}
+
+/** The persona is built from ja.md and the config: when either changes, the brain restarts once it is idle. */
+const personaStamp = () => [join(MEMORY_DIR, FILES.me), CONFIG_FILE].map((f) => { try { return statSync(f).mtimeMs } catch { return 0 } }).join('|')
+let lastPersona = personaStamp()
+setInterval(() => {
+  const now = personaStamp()
+  if (now === lastPersona || !brain?.proc || brain.state !== 'ready' || currentTurnId()) return
+  lastPersona = now
+  brain.restart('zmena profilu v pamäti', { warmup: false }).catch((err) => log('brain', errMsg(err)))
+}, 20_000).unref()
+
+// ── events ────────────────────────────────────────────────────────────────
+
+const EVENT_TYPES = new Set(['info', 'action', 'alert', 'done', 'guard', 'voice'])
+
+/** A LOG line from another local process (routines, scripts). */
+async function postEvent(req, res) {
+  if (!isLoopback(req.socket.remoteAddress)) return sendJson(res, 403, { ok: false, error: 'udalosti len z localhostu' })
+  const body = await readJson(req)
+  const event = {
+    type: EVENT_TYPES.has(body.type) ? body.type : 'info',
+    text: clean(body.text, 140),
+    icon: slug(body.icon) || null,
+    say: clean(body.say, 240) || null,
+    heard: clean(body.heard, 140) || null,
+    node: slug(body.node) || null,
+    source: clean(body.source, 24) || null,
+  }
+  if (!event.text && !event.say) return sendJson(res, 400, { ok: false, error: 'chýba text alebo say' })
+  const sent = sendHud(event)
+  return sendJson(res, 202, { ok: true, id: sent.id, clients: clientCount() })
+}
+
+/**
+ * A routine reaches out: a card in the chat, a LOG line and (unless silent) Jarvis says it aloud.
+ * Body: { title, text, say?, node?, icon?, silent? }. Loopback only.
+ */
+let announceSeq = 0
+async function postAnnounce(req, res) {
+  if (!isLoopback(req.socket.remoteAddress)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
+  const body = await readJson(req, 64_000)
+  const title = clean(body.title, 60) || 'Jarvis'
+  const text = typeof body.text === 'string' ? body.text.trim() : ''
+  if (!text && !body.say) return sendJson(res, 400, { ok: false, error: 'chýba text' })
+  const card = normalizeCard({ kind: 'text', title, icon: slug(body.icon) || 'routine', node: slug(body.node) || 'rutiny', text: text.replace(/\s+/g, ' ').slice(0, 400), accent: 'ice' }, `c-r${++announceSeq}-${Date.now().toString(36)}`)
+  if (card.ok) send('chat', { turn: `routine-${announceSeq}`, phase: 'card', card: card.card })
+  sendHud({ type: 'done', text: `${title} · pripravené`, icon: 'routine', say: null, heard: null, node: 'rutiny', source: 'jarvis' })
+  const spoken = clean(body.say, 900) || clean(text, 900)
+  if (body.silent !== true && spoken && clientCount() > 0) {
+    announceQueue.push({ say: spoken })
+    drainAnnounce().catch((err) => log('announce', errMsg(err)))
+  }
+  pushSnapshot('rutina').catch(() => {})
+  return sendJson(res, 202, { ok: true, clients: clientCount() })
+}
+
+/**
+ * Push-to-talk from the page with a local Whisper: the body is a recording (audio/webm from
+ * MediaRecorder, ogg, wav, mp4). With ?send=1 (default) the transcript goes straight to the chat.
+ */
+async function postStt(req, res) {
+  const url = new URL(req.url ?? '/', 'http://hud.local')
+  const sendIt = url.searchParams.get('send') !== '0'
+  const audio = await readRaw(req, 6_000_000)
+  if (!sttLocal()) return sendJson(res, 409, { ok: false, error: 'lokálny prepis reči nie je zapnutý, stránka má použiť rozpoznávanie v prehliadači', engine: STT_ENGINE })
+  if (audio.length < 1200) return sendJson(res, 400, { ok: false, error: 'nahrávka je prázdna' })
+  if (voiceState() === 'speaking' || currentTurnId()) stopChat('počúvanie')
+  setVoice('transcribing')
+  const t0 = Date.now()
+  try {
+    const { text, ms } = await transcribeAudio(audio, req.headers['content-type'])
+    const clean1 = clean(text, 2000)
+    log('stt', `prepis ${ms} ms (spolu ${Date.now() - t0} ms), ${clean1 ? `${clean1.length} znakov` : 'ticho'}`)
+    if (!clean1) {
+      setVoice('idle')
+      sendHud({ type: 'info', text: 'Nič som nepočul', icon: 'mic', say: null, heard: null, node: null, source: 'hud' })
+      return sendJson(res, 200, { ok: true, text: '', turn: null, ms: Date.now() - t0 })
+    }
+    const turn = sendIt ? sendChat({ text: clean1, via: 'voice' }) : null
+    if (!sendIt) setVoice('idle')
+    return sendJson(res, 200, { ok: true, text: clean1, turn, ms: Date.now() - t0 })
+  } catch (err) {
+    setVoice('idle')
+    return sendJson(res, 502, { ok: false, error: `prepis zlyhal: ${errMsg(err)}` })
+  }
+}
+
+/** What the onboarding and the page need to know about this installation. */
+async function setupBody() {
+  const cfg = getConfig()
+  const mem = stats(await getIndex())
+  return {
+    ok: true,
+    configured: cfg.configured,
+    name: cfg.name || null,
+    claude: Boolean(CLAUDE),
+    brain: MOCK_ALL ? 'mock' : brain.status().state,
+    brainError: brain?.status().lastError ?? null,
+    memoryDir: MEMORY_DIR,
+    notes: mem.notes,
+    tts: ttsInfo().provider,
+    sttEngine: STT_ENGINE,
+    wakeAvailable: wakeAvailable(),
+    agentMode: AGENT_MODE,
+    routines: cfg.routines,
+    platform: process.platform,
+    node: process.version,
+  }
+}
+
+// ── router ────────────────────────────────────────────────────────────────
+
+async function routePost(req, res, path) {
+  if (path === '/api/event') {
+    if (!originOk(req)) return sendJson(res, 403, { ok: false, error: 'cudzí origin' })
+    return postEvent(req, res)
+  }
+  if (path === '/api/announce') {
+    if (!originOk(req)) return sendJson(res, 403, { ok: false, error: 'cudzí origin' })
+    return postAnnounce(req, res)
+  }
+  if (path === '/api/brain/hud') {
+    if (!isLoopback(req.socket.remoteAddress) || !tokenOk(req.headers['x-brain-token'], BRAIN_TOKEN)) return sendJson(res, 403, { ok: false, error: 'zlý token' })
+    const body = await readJson(req, 64_000)
+    if (body.action === 'memory_changed') {
+      pushSnapshot('zápis do pamäte').catch(() => {})
+      return sendJson(res, 200, { ok: true })
+    }
+    const result = String(body.action ?? '').startsWith('job_') ? await jobAction(body) : hudAction(body)
+    return sendJson(res, result.ok ? 200 : 400, result)
+  }
+  if (!allowPost(req)) return sendJson(res, 403, { ok: false, error: 'POST len z localhostu alebo s x-hud-token' })
+  if (path === '/api/stt') return postStt(req, res)
+  const body = await readJson(req, 32_000)
+  const jobPath = /^\/api\/jobs\/(j\d+)\/(stop|reply)$/.exec(path)
+  if (jobPath) {
+    try {
+      const job = jobPath[2] === 'stop' ? stopJob(jobPath[1]) : replyJob(jobPath[1], body.text)
+      return sendJson(res, 200, { ok: true, job })
+    } catch (err) {
+      return sendJson(res, err.status ?? 500, { ok: false, error: err.message })
+    }
+  }
+  if (path === '/api/jobs') {
+    const job = await createJob({ task: body.task, title: body.title, mock: body.mock === true, silent: body.silent === true })
+    return sendJson(res, 202, { ok: true, job })
+  }
+
+  switch (path) {
+    case '/api/chat': {
+      const turn = sendChat({ text: body.text, via: body.via, mock: body.mock === true, silent: body.silent === true, scenario: typeof body.scenario === 'string' ? body.scenario : null })
+      return sendJson(res, 202, { ok: true, turn })
+    }
+    case '/api/chat/stop':
+      return sendJson(res, 200, { ok: true, ...stopChat('stop') })
+    case '/api/listen': {
+      // Server-side listening exists only as a mock (UI tests). Real voice comes from the page.
+      if (body.mock === true || MOCK_ALL) {
+        if (voiceState() === 'speaking' || currentTurnId()) stopChat('počúvanie')
+        mockListen(clean(body.text, 400), body.silent === true).catch((err) => log('listen', errMsg(err)))
+        return sendJson(res, 202, { ok: true, state: 'listening', mock: true })
+      }
+      return sendJson(res, 409, { ok: false, error: 'hovor cez medzerník v okne HUD' })
+    }
+    case '/api/listen/wake': {
+      if (body.on === true && !wakeAvailable()) return sendJson(res, 409, { ok: false, error: 'Hey Jarvis potrebuje lokálny prepis reči (pozri docs/HLAS.md)' })
+      state.wake = body.on === true
+      await saveState()
+      setMicWake(state.wake)
+      statusChanged()
+      return sendJson(res, 200, { ok: true, wake: state.wake, mic: micStatus(), wakeVia: statusBody().wakeVia })
+    }
+    case '/api/mode': {
+      if (typeof body.film !== 'boolean') return sendJson(res, 400, { ok: false, error: 'film musí byť true alebo false' })
+      const changed = state.film !== body.film
+      state.film = body.film
+      await saveState()
+      if (changed) {
+        onFilmChange(state.film)
+        send('mode', { film: state.film })
+        const snap = snapshotFor()
+        if (snap) send('snapshot', snap)
+        // Clean brain memory: nothing from the conversation before filming (names) may reach the screen.
+        if (state.film && brain?.proc) brain.restart('režim natáčania', { warmup: false }).catch((err) => log('brain', errMsg(err)))
+        statusChanged()
+      }
+      return sendJson(res, 200, { ok: true, film: state.film })
+    }
+    case '/api/stt/warm':
+      warmStt()
+      return sendJson(res, 202, { ok: true, stt: sttState() })
+    case '/api/say':
+      return sendJson(res, 202, { ok: true, turn: sayText(body.text) })
+    case '/api/tts/played':
+      return sendJson(res, 200, { ok: ttsPlayed(body.turn, Number(body.seq)) })
+    case '/api/brain/restart':
+      if (!brain) return sendJson(res, 409, { ok: false, error: 'mock režim, mozog nebeží' })
+      brain.restart('ručný reštart').catch((err) => log('brain', errMsg(err)))
+      return sendJson(res, 202, { ok: true })
+    case '/api/quit':
+      // Lets `node scripts/hud.mjs --stop` end the server no matter who started it.
+      if (!isLoopback(req.socket.remoteAddress)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
+      sendJson(res, 200, { ok: true })
+      setTimeout(() => shutdown('api/quit'), 50)
+      return
+    case '/api/snapshot/refresh': {
+      const snap = await pushSnapshot('ručne')
+      return sendJson(res, 200, { ok: true, source: snap?.source ?? null, errors: snap?.errors ?? [] })
+    }
+    default:
+      return sendJson(res, 404, { ok: false, error: `nenájdené: POST ${path}` })
+  }
+}
+
+async function route(req, res) {
+  const url = new URL(req.url ?? '/', 'http://hud.local')
+  const path = url.pathname
+
+  if (req.method === 'POST') return routePost(req, res, path)
+  if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { ok: false, error: 'len GET, HEAD a POST' })
+  if (PRIVATE_GET.test(path) && !allowRead(req, url)) return sendJson(res, 403, { ok: false, error: 'zo siete len s tokenom (x-hud-token alebo ?token=)' })
+
+  if (path === '/api/events') return openStream(req, res, { role: url.searchParams.get('client') === 'desktop' ? 'desktop' : 'browser' })
+  if (path === '/api/status') return sendJson(res, 200, statusBody())
+  if (path === '/api/setup') return sendJson(res, 200, await setupBody())
+  if (path === '/api/mode') return sendJson(res, 200, { film: state.film })
+  if (path === '/api/jobs') return sendJson(res, 200, listJobs())
+  if (path === '/api/chat/history') return sendJson(res, 200, getHistory())
+  if (path === '/api/metrics') return sendJson(res, 200, { turns: chatMetrics(), brain: brain?.status() ?? null })
+  if (path === '/api/snapshot') return sendJson(res, 200, snapshotFor() ?? (await refreshSnapshot('prvé načítanie')) ?? {})
+  // Inner worlds of the planets from the memory folder (server/inner.mjs), 403 in filming mode.
+  if (await routeInner(req, res, url, { film: state.film })) return
+  if (path === '/api/weather') {
+    try {
+      const days = Math.min(7, Math.max(1, Number(url.searchParams.get('days')) || 3))
+      return sendJson(res, 200, await getWeather(url.searchParams.get('place') || getConfig().city, days))
+    } catch (err) {
+      return sendJson(res, 502, { ok: false, error: errMsg(err) })
+    }
+  }
+  if (path.startsWith('/tts/')) {
+    const file = await ttsFileExists(path.slice(5))
+    if (file && (await serveFile(req, res, file, { cache: true, immutable: true }))) return
+    return sendJson(res, 404, { ok: false, error: 'klip neexistuje' })
+  }
+  if (path === '/api/health') return sendJson(res, 200, { ok: true, port: PORT, clients: clientCount(), primary: PRIMARY })
+
+  for (const mount of MOUNTS) {
+    if (!path.startsWith(mount.prefix)) continue
+    const rel = path.slice(mount.prefix.length) || 'index.html'
+    if (!mount.allow.test(rel)) continue
+    const file = safeJoin(mount.dir, rel)
+    if (file && (await serveFile(req, res, file, mount))) return
+  }
+  sendJson(res, 404, { ok: false, error: `nenájdené: ${path}` })
+}
+
+const server = createServer((req, res) => {
+  route(req, res).catch((err) => {
+    const status = err.status ?? 500
+    if (status >= 500) console.error(`✗ ${req.method} ${req.url}: ${err.message}`)
+    if (!res.headersSent) sendJson(res, status, { ok: false, error: err.message })
+    else res.end()
+  })
+})
+
+// ── background jobs ───────────────────────────────────────────────────────
+
+/** Tools agent_* from the MCP server jarvis-hud. A job inherits silent and mock from the turn that started it. */
+async function jobAction(body) {
+  const info = currentTurnInfo()
+  try {
+    if (body.action === 'job_task') return { ok: true, job: await createJob({ task: body.task, title: body.title, mock: info?.mock, silent: info?.silent }) }
+    if (body.action === 'job_list') return { ok: true, jobs: listJobs() }
+    if (body.action === 'job_reply') return { ok: true, job: replyJob(String(body.id ?? ''), body.text) }
+    if (body.action === 'job_stop') return { ok: true, job: stopJob(String(body.id ?? '')) }
+    return { ok: false, error: `neznáma akcia ${body.action}` }
+  } catch (err) {
+    return { ok: false, error: err.message }
+  }
+}
+
+const STATUS_SK = { done: 'hotová', needs_ok: 'čaká na súhlas', error: 'zlyhala' }
+const announceQueue = []
+let announcing = false
+/** Announcements (finished jobs, routines) wait until Jarvis stops talking and no turn or listening runs. */
+async function drainAnnounce() {
+  if (announcing) return
+  announcing = true
+  try {
+    while (announceQueue.length) {
+      while (voiceState() !== 'idle' || currentTurnId()) await new Promise((r) => setTimeout(r, 400))
+      const { job, silent, say } = announceQueue.shift()
+      if (say) {
+        sayText(say)
+        await new Promise((r) => setTimeout(r, 1200))
+        continue
+      }
+      const title = job.title
+      const lead = job.status === 'done' ? `Úloha ${title} je hotová.` : job.status === 'needs_ok' ? `Úloha ${title} čaká na váš súhlas.` : `Úloha ${title} zlyhala.`
+      const res = normalizeCard(
+        {
+          kind: 'text',
+          title: `Úloha: ${title}`,
+          icon: job.status === 'done' ? 'check' : job.status === 'needs_ok' ? 'alarm' : 'shield',
+          node: 'projekty',
+          accent: job.status === 'done' ? 'ice' : job.status === 'needs_ok' ? 'amber' : 'red',
+          text: [job.summary, job.needsOk ? `Čaká na súhlas: ${job.needsOk}` : null].filter(Boolean).join(' · ') || lead,
+          caption: job.cost?.ms ? `${Math.round(job.cost.ms / 1000)} s, ${job.cost.turns} krokov` : null,
+        },
+        `c-${job.id}-${Date.now().toString(36)}`,
+      )
+      if (res.ok) send('chat', { turn: `job-${job.id}`, phase: 'card', card: res.card, job: job.id })
+      sendHud({ type: job.status === 'done' ? 'done' : 'alert', text: `Úloha ${title} · ${STATUS_SK[job.status] ?? job.status}`, icon: job.status === 'done' ? 'check' : 'alarm', say: null, heard: null, node: 'projekty', source: 'jarvis' })
+      pushSnapshot('úloha').catch(() => {})
+      if (!silent) {
+        sayText(`${lead} ${job.summary ?? ''}`.slice(0, 600))
+        await new Promise((r) => setTimeout(r, 1200))
+      }
+    }
+  } finally {
+    announcing = false
+  }
+}
+
+initJobs({
+  send,
+  isFilm: () => state.film,
+  persist: PRIMARY,
+  announce: (job, { silent }) => {
+    announceQueue.push({ job, silent })
+    drainAnnounce().catch((err) => log('jobs', errMsg(err)))
+  },
+})
+if (PRIMARY) loadJobs().catch(() => {})
+
+attachMic(server, {
+  allow: (req, url) => tokenOk(req.headers['x-hud-token'] ?? url.searchParams.get('token'), HUD_TOKEN) || (isLoopback(req.socket.remoteAddress) && originOk(req)),
+  setVoice,
+  voiceState,
+  onCommand: (text, { mock, silent }) => {
+    try {
+      sendChat({ text, via: 'voice', mock, silent })
+    } catch (err) {
+      log('mic', errMsg(err))
+    }
+  },
+  onNothing: () => sendHud({ type: 'info', text: 'Nič som nepočul', icon: 'mic', say: null, heard: null, node: null, source: 'hud' }),
+  // "Hey Jarvis" while thinking is a new command, the running answer is interrupted.
+  onWakeWord: () => {
+    if (currentTurnId()) stopChat('wake word')
+  },
+  statusChanged,
+  fallback: async () => {},
+})
+onVoiceChange(onVoice)
+
+server.on('error', (err) => {
+  console.error(err.code === 'EADDRINUSE' ? `✗ port ${PORT} je obsadený. Beží už HUD? Iný port: PORT=4546 npm start` : `✗ ${err.message}`)
+  process.exit(1)
+})
+
+function shutdown(signal) {
+  log('hud', `koniec (${signal})`)
+  brain?.stop()
+  stopAllJobs()
+  stopMic()
+  stopTts()
+  stopStt()
+  setTimeout(() => process.exit(0), 300).unref()
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))
+
+server.listen(PORT, HOST, async () => {
+  const urls = [`http://localhost:${PORT}`]
+  if (HOST === '0.0.0.0') {
+    for (const list of Object.values(networkInterfaces())) {
+      for (const net of list ?? []) if (net.family === 'IPv4' && !net.internal) urls.push(`http://${net.address}:${PORT}`)
+    }
+  }
+  const cfg = getConfig()
+  console.log(`\n  J.A.R.V.I.S. HUD${PRIMARY ? '' : ' (vedľajšia inštancia)'}\n`)
+  for (const u of urls) console.log(`  ${u}`)
+  console.log(`\n  mozog: ${MOCK_ALL ? 'MOCK (JARVIS_MOCK=1)' : CLAUDE ? `${MODEL}, effort ${EFFORT}` : 'Claude Code CLI sa nenašiel'} · hlas: ${ttsInfo().provider} · reč: ${STT_ENGINE}`)
+  console.log(`  pamäť: ${MEMORY_DIR}${cfg.configured ? '' : '\n  nastavenie ešte neprebehlo: otvor tento priečinok v Claude a napíš „štart"'}\n`)
+  await startSnapshots(() => state.film).catch((err) => log('snapshot', errMsg(err)))
+  if (PRIMARY) {
+    pruneTtsCache()
+      .then(() => warmCommonPhrases())
+      .catch(() => {})
+    if (brain && CLAUDE && process.env.JARVIS_BRAIN_AUTOSTART !== '0') brain.start('štart servera').catch((err) => log('brain', errMsg(err)))
+    if (state.wake) setMicWake(true)
+  }
+})
