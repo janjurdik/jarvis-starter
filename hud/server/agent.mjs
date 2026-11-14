@@ -11,9 +11,9 @@
  * (allow-connectors.mjs) lets MCP tools through, passed with --settings.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { delimiter, dirname, join, sep } from 'node:path'
+import { dirname, join, sep } from 'node:path'
 import { MEMORY_DIR } from './memory/index.mjs'
-import { BRAIN_DIR, HOME, REPO, ROOT, findBin } from './util.mjs'
+import { BRAIN_DIR, HOME, REPO, ROOT, findBin, withPath } from './util.mjs'
 
 export const CLAUDE_BIN = findBin('claude', { override: process.env.JARVIS_CLAUDE_BIN })
 export const AGENT_MODE = (process.env.JARVIS_AGENT_MODE || 'safe').toLowerCase() === 'full' ? 'full' : 'safe'
@@ -23,11 +23,10 @@ const SETTINGS_FILE = join(BRAIN_DIR, 'agent-settings.json')
 
 /** Environment for Claude child processes: the parent's, minus anything that would switch Claude to an API key. */
 export function cleanEnv() {
-  const env = { ...process.env }
+  const env = withPath(process.env, [dirname(process.execPath), join(HOME, '.local', 'bin')])
   for (const key of Object.keys(env)) {
     if (key === 'ANTHROPIC_API_KEY' || key === 'ANTHROPIC_AUTH_TOKEN' || key === 'ANTHROPIC_BASE_URL' || key === 'CLAUDECODE' || key.startsWith('CLAUDE_CODE_')) delete env[key]
   }
-  env.PATH = [dirname(process.execPath), join(HOME, '.local', 'bin'), env.PATH ?? env.Path ?? ''].filter(Boolean).join(delimiter)
   env.DISABLE_AUTOUPDATER = '1'
   return env
 }
@@ -40,7 +39,9 @@ const dirArgs = () => (MEMORY_EXTERNAL ? ['--add-dir', MEMORY_DIR] : [])
 /** CLI arguments that set the permission level of a headless run. */
 export function permissionArgs() {
   if (AGENT_MODE === 'full') return ['--permission-mode', 'bypassPermissions', ...dirArgs()]
-  const hook = `"${process.execPath}" "${join(ROOT, 'server', 'allow-connectors.mjs')}"`
+  // Forward slashes: the hook runs through a shell, where backslashes in Windows paths are fragile.
+  const fwd = (p) => p.replace(/\\/g, '/')
+  const hook = `"${fwd(process.execPath)}" "${fwd(join(ROOT, 'server', 'allow-connectors.mjs'))}"`
   mkdirSync(BRAIN_DIR, { recursive: true })
   writeFileSync(SETTINGS_FILE, JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'mcp__.*', hooks: [{ type: 'command', command: hook }] }] } }, null, 2), { mode: 0o600 })
   return ['--permission-mode', 'dontAsk', '--allowedTools', SAFE_TOOLS.join(','), '--settings', SETTINGS_FILE, ...dirArgs()]

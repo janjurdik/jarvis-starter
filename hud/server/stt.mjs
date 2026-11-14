@@ -10,9 +10,9 @@
  */
 import { randomBytes } from 'node:crypto'
 import { mkdir, unlink, writeFile } from 'node:fs/promises'
-import { delimiter, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
-import { BRAIN_DIR, ROOT, errMsg, findBin, log, spawnBin } from './util.mjs'
+import { BRAIN_DIR, ROOT, errMsg, findBin, log, spawnBin, withPath } from './util.mjs'
 
 const UV = findBin('uv', { override: process.env.UV_BIN })
 const FFMPEG = findBin('ffmpeg')
@@ -49,7 +49,7 @@ function start() {
     log('stt', `spúšťam Whisper worker (${STT_ENGINE}), prvý štart sťahuje model`)
     const child = spawnBin(UV, ['run', '--quiet', join(ROOT, WORKER)], {
       cwd: ROOT,
-      env: { ...process.env, PYTHONUNBUFFERED: '1', PATH: [FFMPEG ? dirname(FFMPEG) : null, process.env.PATH ?? ''].filter(Boolean).join(delimiter) },
+      env: { ...withPath(process.env, FFMPEG ? [dirname(FFMPEG)] : []), PYTHONUNBUFFERED: '1' },
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     proc = child

@@ -7,7 +7,7 @@ na celú obrazovku. Všetko ostatné (pamäť, hlas, rutiny) funguje rovnako.
 
 - Windows 10 alebo 11
 - Node.js 20 alebo novší: `winget install OpenJS.NodeJS.LTS`
-- Claude Code: v PowerShelli `irm https://claude.ai/install.ps1 | iex`, potom `claude` a prihlásenie
+- Claude Code: v PowerShelli `irm https://claude.ai/install.ps1 | iex`, potom `claude` a prihlásenie. Ak si vypýta Git for Windows, nainštaluj ho cez `winget install Git.Git`.
 - Microsoft Edge (je vo Windows) alebo Google Chrome
 - voliteľne `uv` pre pekný hlas: `irm https://astral.sh/uv/install.ps1 | iex`
 

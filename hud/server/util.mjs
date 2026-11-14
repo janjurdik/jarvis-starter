@@ -105,6 +105,17 @@ export async function writeFileAtomic(file, data, mode = 0o644) {
   await rename(tmp, file)
 }
 
+/**
+ * Copy of an environment with extra directories in front of PATH. On Windows the variable is
+ * usually spelled `Path`: the existing key is reused, so the child never gets two of them.
+ */
+export function withPath(env, dirs = []) {
+  const out = { ...env }
+  const key = Object.keys(out).find((k) => k.toLowerCase() === 'path') ?? 'PATH'
+  out[key] = [...dirs, out[key] ?? ''].filter(Boolean).join(delimiter)
+  return out
+}
+
 /** First existing path from the list. */
 export function firstExisting(...paths) {
   return paths.flat().find((p) => p && existsSync(p)) ?? null

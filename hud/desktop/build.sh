@@ -35,6 +35,16 @@ codesign --verify "$OUT/$APP_NAME"
 
 if [ "${1:-}" = "--no-install" ]; then echo "postavené: $PWD/$OUT/$APP_NAME"; exit 0; fi
 
+# Never replace an app of the same name that did not come from this project.
+if [ -d "$DEST" ]; then
+  existing="$(/usr/bin/defaults read "$DEST/Contents/Info" CFBundleIdentifier 2>/dev/null || true)"
+  if [ "$existing" != "com.jarvis-starter.hud" ] && [ "${1:-}" != "--force" ]; then
+    echo "V $DEST už je iná appka s rovnakým názvom ($existing). Nič neprepisujem."
+    echo "Postavená appka je tu: $PWD/$OUT/$APP_NAME"
+    exit 1
+  fi
+fi
+
 was_running=0
 if pgrep -x JarvisHUD >/dev/null 2>&1; then was_running=1; pkill -x JarvisHUD || true; sleep 1; fi
 mkdir -p "$HOME/Applications"

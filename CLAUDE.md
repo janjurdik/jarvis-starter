@@ -46,7 +46,7 @@ Cieľ: počítač má všetko, čo Jarvis potrebuje.
    - **deps** (balíčky HUD): spusti `npm install` (na Windows v PowerShelli `npm.cmd install`). Trvá do minúty.
    - **claude** (Claude Code CLI chýba): Jarvisov HUD a rutiny bežia cez program `claude`. Nainštaluj ho:
      - macOS: `curl -fsSL https://claude.ai/install.sh | bash`
-     - Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`
+     - Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`. Ak si Claude Code na Windows vypýta Git for Windows, nainštaluj ho: `winget install Git.Git`.
    - **claude-login** (neprihlásený): popros používateľa, nech otvorí Terminál (macOS) alebo PowerShell (Windows), napíše `claude` a prihlási sa cez prehliadač tým istým účtom, ktorý používa tu. Potom over cez `claude auth status`.
      Jarvis potrebuje platené predplatné Claude (Pro alebo Max). Ak ho nemá, povedz mu to na rovinu: bez neho HUD ani rutiny nepobežia.
    - **location** (len macOS, priečinok je v Stiahnutých, na Ploche alebo v Dokumentoch): vysvetli, že macOS tieto priečinky stráži a rutiny na pozadí by sa k nim nemuseli dostať. Odporuč presunúť celý priečinok do domovského priečinka (napr. `~/Jarvis`): zavrieť Claude, presunúť priečinok vo Finderi, otvoriť ho v Claude znova a napísať `štart`. Ak ho chce nechať tam, kde je, pokračuj. Pri prvej rutine sa macOS spýta na povolenie a stačí kliknúť Povoliť.
