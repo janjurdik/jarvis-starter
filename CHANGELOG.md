@@ -2,6 +2,10 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.1.2 (2026-11-15)
+
+- **Jarvis má povahu.** Suchý humor, sarkazmus a občas odvráva, ako vo filmoch. Prácu spraví vždy, len si k nej niečo povie.
+
 ## 1.1.1 (2026-11-15)
 
 - **Úlohy na pozadí hovoria krátko.** Keď Jarvis dokončí úlohu, povie jednu až dve vety a nie celý výsledok. Ten nájdeš na karte a v súbore.

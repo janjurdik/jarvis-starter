@@ -1,12 +1,12 @@
 {
   "name": "jarvis-starter",
-  "version": "1.1.1",
-  "released": "2026-11-15T18:31:30.666Z",
+  "version": "1.1.2",
+  "released": "2026-11-15T18:42:17.048Z",
   "files": {
     ".claude/settings.json": "dcd69ce11b111fa201b9ac5d2ff2eff1ffafdce73fbc01e1f3a74ae4cc1572dd",
     ".env.example": "9841fca2b382be48b05f353033c9308e170ba94dc4091d2cc2d99d9dcf345483",
     ".gitignore": "2f21880f2fcfd478319e1c7957872a3a2590d54be4263e03063609c622561059",
-    "CHANGELOG.md": "44435a57b52994ecd4ea15922f3529938dbaec07add6762ecdc6888b13af929d",
+    "CHANGELOG.md": "cf7570097f3bea57e28437c9bf46e26103bebf2cd34e745545f9517223cc2ae6",
     "CLAUDE.md": "7d1f196588040e401bf08edbf7137c30a3657114e9a17acbee79c323fd600007",
     "LICENSE": "bc4a534dba9cfd3b6272e45c9d1ed8621bac5e46a71ea955524e2b007cd565ad",
     "README.md": "33111d8892ca59a25bd637538d9fd448d9d19495d52f50a177d4db7d846153cd",
@@ -96,7 +96,7 @@
     "hud/server/memory/index.mjs": "99eb536175ff96a24a355ba9f7678a7532d97bf48ace240286ffb1c8ba27a664",
     "hud/server/mic.mjs": "75fc3f42ecdf8c487f30b7638c346d289f2cc32aeb3c3028d24568dc71950147",
     "hud/server/mock.mjs": "ab3c0967bf1ede3650ee44af7988ec38c717152d728155d55dbb2b210068a189",
-    "hud/server/persona.mjs": "fa3ce413e30cf403a678b8da07023b4c8a5012cd4bd54e99af5822c385bbd860",
+    "hud/server/persona.mjs": "b1f102923f6a542337710074d19b9c1a607cb2a4dbd8c88b7bd23f537b602996",
     "hud/server/snapshot.mjs": "ec521d62c7cf5535f12b2005cca3b3467d62d781bce0ad9fda5e2bc682ce77af",
     "hud/server/sse.mjs": "3ee4fba6a34ef44b38bc848be38e0e61e8002f0d8b46fa39679f45356d6749e6",
     "hud/server/state.mjs": "4741af95dbfbd9b7a17e8ce3f85bed3e9913f8b89b23d619a98c593a91a12dab",
@@ -112,8 +112,8 @@
     "hud/server/wake/wake_worker.py": "2453a0c9bc5f7aa4c062815a6502f07ae453520e0ef34d2404922789f2243edd",
     "hud/server/weather.mjs": "e86baccde2a7b37a53a52f7f3e5b4badeae4ffad50f5e7eb429231272ab74cf7",
     "memory/README.md": "70ea20c5390017ea8fe950ddb98916e94931f46f0e1c93de07e23653ea112f78",
-    "package-lock.json": "2d80de46459cbef93281fe7b92735ae3c46b825d7e08e250c5d4356a768aac7b",
-    "package.json": "8e7dbd8bbf4174c7209ba50f5d88e9827d6dd5a5041889da8b6810b81ef78eeb",
+    "package-lock.json": "d810e5c159bf362ddd08678c0bd8c9278587725dd61d5f80fadcc9fb86995aa7",
+    "package.json": "e216672b410f85974c26989b55f7667d48f74db61f405f3dae149b6d7a80eb9a",
     "routines/import-analyza.md": "93be491087c2a389d01b234832910efbeffa10346ce2b85441a39fa4f5b258f3",
     "routines/ranny-brief.md": "b08cc79b19f064caf13ce8b1c424a9bb6aefc074a5d168ee0e315839948ca258",
     "routines/straz-posty.md": "7f88a55ce6c50946ef3057289b4d3f12b95aa9988ac68c90cfd023adc3c90f1c",
@@ -180,6 +180,7 @@
     "scripts/update/verify.mjs": "5d8bf4f9e85be8342c2d2e3cef3a6f07a7a02d946eb347a47087894ad529573b",
     "updates/1.1.0.md": "513578d41b7af6b4c94d7b664ffe3c0815195196294a65ce319dc31fa6b63af5",
     "updates/1.1.1.md": "7b52949620ad5ea90eb51ba704a52444266a6ab2119106871ab8bdaa33acb8f7",
+    "updates/1.1.2.md": "396a17fee562dd7c7deb7093d823012a89a4e72ca73658faba7a43ee1dbd99da",
     "updates/README.md": "ed970b356087a236131aa30f8839b167ee770945decceb8c0371e4dc696a6fef",
     "updates/manifests/1.0.0.json": "00bdfe03d3251c83f7562c6664cb9b585a5b42f8a259deb1c17b10f2bff5e377"
   }
