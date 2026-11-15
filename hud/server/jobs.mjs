@@ -6,10 +6,13 @@
  *   claude -p --output-format stream-json --verbose <permission args> --append-system-prompt-file …
  *   cwd = the Jarvis folder (its CLAUDE.md and memory), the task goes in over stdin.
  *
- * At most 3 at once, the rest wait. State in data/brain/jobs.json, a log per job in
- * data/jobs/<id>.jsonl (0600). Anything that would go out to other people ends with a
- * `NEEDS_OK: …` line and waits for the user's approval.
+ * At most 3 at once, the rest wait. State in data/brain/jobs.json, a raw log per job in
+ * data/jobs/<id>.jsonl and a readable feed in data/jobs/<id>.feed.jsonl (both 0600). The feed
+ * is what the HUD shows when the user opens a job: the assignment, every step with its time,
+ * what the agent said along the way and how it ended. Anything that would go out to other
+ * people ends with a `NEEDS_OK: …` line and waits for the user's approval.
  */
+import { spawn } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
@@ -24,6 +27,10 @@ const MAX_PARALLEL = 3
 const STATE_FILE = join(BRAIN_DIR, 'jobs.json')
 const LOG_DIR = join(DATA_DIR, 'jobs')
 const CONTEXT_FILE = join(BRAIN_DIR, 'job-context.md')
+const FEED_MAX = 400
+/** Pace of a mock job's steps (UI tests slow it down to have time to look inside and stop it). */
+const MOCK_STEP_MS = Number(process.env.JARVIS_MOCK_STEP_MS || 900)
+const feedFile = (id) => join(LOG_DIR, `${id}.feed.jsonl`)
 
 const contextPrompt = (film) =>
   [
@@ -74,7 +81,7 @@ function scheduleSave() {
   if (opts.persist === false) return
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
-    const all = [...jobs.values()].slice(-60).map(({ proc, timer, ...rest }) => rest)
+    const all = [...jobs.values()].slice(-60).map(({ proc, timer, feed, ...rest }) => rest)
     writeFileAtomic(STATE_FILE, JSON.stringify({ seq, jobs: all }, null, 1), 0o600).catch((err) => log('jobs', errMsg(err)))
   }, 300)
 }
@@ -94,6 +101,79 @@ export async function loadJobs() {
     }
   } catch {
     // prvý štart
+  }
+}
+
+// ── feed: what the user sees when they open a job ───────────────────────
+
+/**
+ * One line of a job's feed. kind: task (the assignment), reply (a follow-up from the user),
+ * step (a tool the agent used), say (what the agent wrote between steps), state (start, end).
+ * `safe` is the wording for filming mode; entries without it are hidden there.
+ */
+function addFeed(j, kind, text, safe = null) {
+  const body = String(text ?? '').trim().slice(0, 2400)
+  if (!body) return
+  const entry = { t: Date.now(), kind, text: body }
+  if (safe !== null) entry.safe = safe
+  j.feed ??= []
+  j.feed.push(entry)
+  if (j.feed.length > FEED_MAX) j.feed.shift()
+  appendFile(feedFile(j.id), JSON.stringify(entry) + '\n', { mode: 0o600 }).catch(() => {})
+  const shown = feedPub(entry, opts.isFilm())
+  if (shown) opts.send('job-feed', { id: j.id, entry: shown })
+}
+
+/** Markdown reduced to plain lines: the feed shows text, not markup. Links and file paths stay as they are. */
+const plain = (text) =>
+  String(text ?? '')
+    .replace(/```\w*\n?/g, '')
+    .replace(/(\*\*|__)(?=\S)(.+?)\1/g, '$2')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/`([^`\n]*)`/g, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+function feedPub(e, film) {
+  if (!film) return { t: e.t, kind: e.kind, text: e.text }
+  return e.safe ? { t: e.t, kind: e.kind, text: e.safe } : null
+}
+
+/** The feed of a job from before the last restart lives only in its file. Jobs older than the feed fall back to their step list. */
+async function ensureFeed(j) {
+  if (j.feed) return j.feed
+  const feed = []
+  try {
+    for (const line of (await readFile(feedFile(j.id), 'utf8')).split('\n').slice(-FEED_MAX - 1)) {
+      if (!line) continue
+      try {
+        const e = JSON.parse(line)
+        if (e && typeof e.text === 'string') feed.push(e)
+      } catch {
+        // a half-written last line
+      }
+    }
+  } catch {
+    for (const text of j.steps ?? []) feed.push({ t: null, kind: 'step', text, safe: text })
+  }
+  j.feed ??= feed
+  return j.feed
+}
+
+/** Everything about one job for the detail view in the HUD. */
+export async function jobDetail(id) {
+  const j = jobs.get(id)
+  if (!j) throw Object.assign(new Error(`úloha ${id} neexistuje`), { status: 404 })
+  const film = opts.isFilm()
+  const feed = await ensureFeed(j)
+  const active = j.status === 'running' || j.status === 'queued'
+  return {
+    ...pub(j),
+    createdAt: j.createdAt,
+    task: film ? null : j.task,
+    film,
+    canReply: !active && Boolean(j.mock || j.sessionId),
+    feed: feed.map((e) => feedPub(e, film)).filter(Boolean),
   }
 }
 
@@ -150,8 +230,10 @@ function pump() {
   }
 }
 
-function addStep(j, label) {
-  if (!label || label === j.step) return
+function addStep(j, label, safe = label) {
+  if (!label) return
+  addFeed(j, 'step', label, safe)
+  if (label === j.step) return
   j.step = label
   j.steps.push(label)
   if (j.steps.length > 30) j.steps.shift()
@@ -192,6 +274,8 @@ function finish(j, status, { summary = null, error = null } = {}) {
     j.say = null
   }
   j.step = j.status === 'done' ? 'Hotovo' : j.status === 'needs_ok' ? 'Čaká na súhlas' : j.status === 'stopped' ? 'Zastavené' : 'Chyba'
+  const tail = j.status === 'needs_ok' ? j.needsOk : j.status === 'stopped' ? null : j.summary
+  addFeed(j, 'state', tail ? `${j.step}: ${tail}` : j.step, j.step)
   j.reported = false
   emit(j)
   log('jobs', `${j.id} ${j.status} · ${j.cost.turns} krokov · ${Math.round(j.cost.ms / 1000)} s`)
@@ -204,10 +288,14 @@ function run(j) {
   j.startedAt = j.startedAt ?? new Date().toISOString()
   j.endedAt = null
   j.runT0 = Date.now()
-  j.step = j.resume ? 'Pokračujem' : 'Začínam'
+  const reply = j.replyText ?? null
+  j.replyText = null
+  j.step = reply ? 'Pokračujem' : 'Začínam'
   j.steps.push(j.step)
+  addFeed(j, reply ? 'reply' : 'task', reply ?? j.task)
+  addFeed(j, 'state', j.step, j.step)
   emit(j)
-  if (j.mock) return runMock(j)
+  if (j.mock) return runMock(j, reply ?? '')
   if (!CLAUDE) return finish(j, 'error', { error: 'Claude Code CLI sa nenašiel' })
   mkdirSync(BRAIN_DIR, { recursive: true })
   startProcess(j).catch((err) => finish(j, 'error', { error: errMsg(err) }))
@@ -233,6 +321,7 @@ async function startProcess(j) {
   j.proc = proc
   const logFile = join(LOG_DIR, `${j.id}.jsonl`)
   let lastText = ''
+  let said = ''
   let resultSeen = false
   createInterface({ input: proc.stdout }).on('line', (line) => {
     appendFile(logFile, line + '\n', { mode: 0o600 }).catch(() => {})
@@ -248,8 +337,15 @@ async function startProcess(j) {
       scheduleSave()
     } else if (m.type === 'assistant') {
       for (const b of m.message?.content ?? []) {
-        if (b.type === 'tool_use') addStep(j, stepLabel(b.name, b.input ?? {}, opts.isFilm()))
-        else if (b.type === 'text' && b.text?.trim()) lastText = b.text
+        if (b.type === 'tool_use') {
+          // Text followed by a tool call is commentary along the way. The last text of a run is its result and is shown as such.
+          if (said) addFeed(j, 'say', plain(said))
+          said = ''
+          addStep(j, stepLabel(b.name, b.input ?? {}, opts.isFilm()), stepLabel(b.name, b.input ?? {}, true))
+        } else if (b.type === 'text' && b.text?.trim()) {
+          lastText = b.text
+          said = b.text
+        }
       }
     } else if (m.type === 'result') {
       resultSeen = true
@@ -270,19 +366,20 @@ async function startProcess(j) {
   proc.on('error', (err) => finish(j, 'error', { error: errMsg(err) }))
 }
 
-function runMock(j) {
+function runMock(j, said = '') {
   const steps = ['Čítam CLAUDE.md', 'Hľadám: podklady', 'Čítam web', 'Píšem zhrnutie.md']
   let i = 0
   const tick = () => {
     if (j.status !== 'running') return
     if (i < steps.length) {
+      if (i === 2) addFeed(j, 'say', 'Podklady mám, ešte si overím dva zdroje a spíšem to.')
       addStep(j, steps[i])
       i++
-      j.timer = setTimeout(tick, 900)
+      j.timer = setTimeout(tick, MOCK_STEP_MS)
       return
     }
     j.cost = { turns: steps.length, ms: Date.now() - j.runT0 }
-    finish(j, 'done', { summary: /needs_ok|súhlas/i.test(j.task) ? 'Pripravil som znenie správy (mock).\nNEEDS_OK: poslať skúšobnú správu' : 'Mock úloha je hotová, nič sa reálne nezmenilo.' })
+    finish(j, 'done', { summary: /needs_ok|súhlas/i.test(`${j.task} ${said}`) ? 'Pripravil som znenie správy (mock).\nNEEDS_OK: poslať skúšobnú správu' : 'Mock úloha je hotová, nič sa reálne nezmenilo.' })
   }
   j.proc = { kill: () => clearTimeout(j.timer) }
   j.timer = setTimeout(tick, 600)
@@ -333,7 +430,7 @@ export function replyJob(id, text) {
   if (j.status === 'running' || j.status === 'queued') throw Object.assign(new Error('úloha ešte beží, počkaj na jej koniec alebo ju zastav'), { status: 409 })
   if (!j.mock && !j.sessionId) throw Object.assign(new Error('úloha nemá session, nedá sa v nej pokračovať'), { status: 409 })
   j.resume = j.mock ? null : msg
-  if (j.mock) j.task = msg
+  j.replyText = msg
   j.status = 'queued'
   j.step = 'Vo fronte'
   j.needsOk = null
@@ -357,10 +454,27 @@ export function stopJob(id) {
     j.proc?.kill()
     finish(j, 'stopped')
   } else {
-    j.proc?.kill('SIGTERM')
-    setTimeout(() => j.proc?.kill?.('SIGKILL'), 5000)
+    killTree(j.proc)
+    setTimeout(() => j.stopping && j.proc?.kill?.('SIGKILL'), 5000)
   }
   return pub(j)
+}
+
+/**
+ * Ends a job's process together with what it started. On Windows the CLI runs behind a shell
+ * shim, so a plain kill would end only the shim and leave the agent working.
+ */
+function killTree(proc) {
+  if (!proc?.pid) return
+  if (process.platform === 'win32') {
+    try {
+      spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).on('error', () => proc.kill())
+      return
+    } catch {
+      // falls through to a plain kill
+    }
+  }
+  proc.kill('SIGTERM')
 }
 
 /** Krátky stav úloh do kontextu ďalšej správy rýchlemu mozgu (dokončené len raz). */
@@ -379,5 +493,5 @@ export function jobsContextNote() {
 }
 
 export function stopAllJobs() {
-  for (const j of jobs.values()) if (j.status === 'running') j.proc?.kill?.('SIGTERM')
+  for (const j of jobs.values()) if (j.status === 'running') (j.mock ? j.proc?.kill?.() : killTree(j.proc))
 }

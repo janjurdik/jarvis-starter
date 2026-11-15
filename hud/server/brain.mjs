@@ -28,9 +28,9 @@ const PERSONA_FILE = join(BRAIN_DIR, 'persona.md')
 const MEMORY_TOOLS = ['calendar_list', 'get_health', 'view_todo', 'list_goals', 'upcoming_celebrations', 'memory_stats', 'read_note', 'search_notes', 'remember', 'add_todo', 'complete_todo', 'add_event', 'log_day', 'write_note', 'remind', 'search_messages', 'read_thread']
 
 /**
- * Permission rule for the built-in Read tool, limited to one folder. Claude Code writes absolute
- * paths in rules with a double slash (`Read(//Users/…/**)`), Windows drives as `//c/…`. A path
- * with brackets cannot be written into the tool list, so null means "no narrow rule possible".
+ * Permission rule for the built-in Read tool on one folder. Claude Code writes absolute paths in
+ * rules with a double slash (`Read(//Users/…/**)`), Windows drives as `//c/…`. A path with
+ * brackets cannot be written into a rule, so null means "no rule possible".
  */
 export function readRule(dir) {
   const abs = resolve(dir).replace(/\\/g, '/')
@@ -39,9 +39,11 @@ export function readRule(dir) {
   return `Read(/${win ? `/${win[1].toLowerCase()}/${win[2]}` : abs}/**)`
 }
 
-/** Files dropped into the HUD land here (memory/prilohy): the only place the brain may open with Read. */
-const ATTACH_DIR = join(MEMORY_DIR, 'prilohy')
-
+/**
+ * The voice brain runs without permission questions, like every other part of Jarvis. It stays
+ * fast by having few built-in tools (--tools): the web and Read for any file on the computer.
+ * Real work (shell, editing, connectors) goes to a background job through agent_task.
+ */
 export function allowedTools() {
   return [
     ...MEMORY_TOOLS.map((t) => `mcp__memory__${t}`),
@@ -58,12 +60,11 @@ export function allowedTools() {
     'mcp__jarvis-hud__agent_stop',
     'WebSearch',
     'WebFetch',
-    // Attachments: the brain looks at dropped photos and documents itself. Only inside memory/prilohy.
-    readRule(ATTACH_DIR) ?? 'Read',
+    'Read',
   ]
 }
 
-/** Never readable, whatever else is allowed: the HUD's own tokens and state in data/brain. */
+/** The one thing that stays closed: the HUD's own access token in data/brain. It is of no use to the user and would open the HUD to another device. */
 export function deniedTools() {
   return [readRule(BRAIN_DIR)].filter(Boolean)
 }
@@ -156,7 +157,7 @@ export class Brain {
       '--tools', 'WebSearch,WebFetch,Read',
       '--allowedTools', allowedTools().join(','),
       ...(deniedTools().length ? ['--disallowedTools', deniedTools().join(',')] : []),
-      '--permission-mode', 'dontAsk',
+      '--permission-mode', 'bypassPermissions',
       '--setting-sources', 'project',
       '--disable-slash-commands',
       '--no-session-persistence',

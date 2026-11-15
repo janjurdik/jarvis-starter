@@ -2,6 +2,14 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.2.0 (2026-11-15)
+
+- **Jarvis smie všetko, čo ty.** Obmedzený režim je preč. Úlohy na pozadí, rutiny aj hlasový Jarvis pracujú so súbormi kdekoľvek
+  v počítači a spúšťajú príkazy bez pýtania. Jediné, čo stále čaká na tvoje „áno", je to, čo má ísť von k iným ľuďom.
+- **Do úlohy sa dá nahliadnuť.** Klikni na úlohu v paneli Úlohy a uvidíš jej zadanie a priebeh krok po kroku, naživo a s časmi.
+- **Úloha sa dá zastaviť jedným klikom.** Priamo na riadku alebo v otvorenej úlohe. Zastavenú alebo hotovú úlohu vieš
+  doplniť a pustiť ďalej. Hlasom: „čo robí tá úloha?" a „zruš to".
+
 ## 1.1.2 (2026-11-15)
 
 - **Jarvis má povahu.** Suchý humor, sarkazmus a občas odvráva, ako vo filmoch. Prácu spraví vždy, len si k nej niečo povie.

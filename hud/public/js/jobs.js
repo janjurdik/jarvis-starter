@@ -3,6 +3,10 @@
 //
 // job: {id, title, status: queued|running|needs_ok|done|error|stopped, step, steps[], startedAt, endedAt,
 //       summary, needsOk, cost: {turns, ms}}
+//
+// A row shows the current step and has its own stop button. A click on the row opens the job:
+// the assignment, the whole feed with times (SSE `job-feed` adds lines while it runs), the result
+// and a field to continue in a job that has ended (GET /api/jobs/<id>, POST …/stop, …/reply).
 
 import { icon } from './icons.js'
 import { esc, plural } from './format.js'
@@ -33,13 +37,21 @@ function elapsed(ms) {
   return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
 }
 
-export function createJobs({ api, onChange, capture = false, clock = () => Date.now() }) {
+/** 14:05:09 in local time, for a line of the feed. */
+function clockTime(ms) {
+  if (!Number.isFinite(ms)) return ''
+  const d = new Date(ms)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+export function createJobs({ api, ui = null, onChange, capture = false, clock = () => Date.now() }) {
   const section = document.getElementById('mod-jobs')
   const list = document.getElementById('jobs')
   const more = document.getElementById('jobs-more')
   const jobs = new Map()
   const rows = new Map()
-  let open = null
+  const view = capture ? null : createView()
 
   const ts = (v) => (typeof v === 'number' ? (v < 1e12 ? v * 1000 : v) : v ? Date.parse(v) : NaN)
 
@@ -48,6 +60,7 @@ export function createJobs({ api, onChange, capture = false, clock = () => Date.
     const prev = jobs.get(job.id) ?? {}
     jobs.set(job.id, { ...prev, ...job })
     render()
+    view?.jobChanged(job.id)
     onChange?.()
   }
 
@@ -69,23 +82,15 @@ export function createJobs({ api, onChange, capture = false, clock = () => Date.
     const end = ts(j.endedAt)
     const run = Number.isFinite(start) ? elapsed((Number.isFinite(end) ? end : nowMs) - start) : ''
     const step = j.status === 'needs_ok' ? j.needsOk || j.step || 'Čaká na váš súhlas' : j.step || STATUS_TEXT[j.status] || ''
-    const isOpen = open === j.id
-    let detail = ''
-    if (isOpen) {
-      const steps = (j.steps ?? []).slice(-6)
-      detail =
-        '<div class="jb-detail">' +
-        (steps.length ? `<ol class="jb-steps">${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : '') +
-        (j.summary ? `<p class="jb-sum">${esc(j.summary)}</p>` : '') +
-        (ACTIVE.has(j.status)
-          ? `<div class="jb-acts">${j.status === 'needs_ok' ? `<button type="button" class="jb-btn jb-approve" data-act="ok">${icon('check')}<span>Schváliť</span></button>` : ''}<button type="button" class="jb-btn" data-act="stop">${icon('stop')}<span>Zastaviť</span></button></div>`
-          : '') +
-        '</div>'
-    }
+    const quick = ACTIVE.has(j.status)
+      ? '<span class="jb-quick">' +
+        (j.status === 'needs_ok' ? `<button type="button" class="jb-q jb-q-ok" data-act="ok" title="Schváliť" aria-label="Schváliť">${icon('check')}</button>` : '') +
+        `<button type="button" class="jb-q" data-act="stop" title="Zastaviť úlohu" aria-label="Zastaviť úlohu">${icon('stop')}</button></span>`
+      : ''
     return (
-      `<button type="button" class="jb-head" data-act="toggle">${statusIcon(j.status)}` +
+      `<button type="button" class="jb-head" data-act="open" title="Otvoriť priebeh úlohy">${statusIcon(j.status)}` +
       `<span class="jb-main"><span class="jb-title">${esc(j.title || 'Úloha')}</span><span class="jb-step" data-step="${esc(step)}">${esc(step)}</span></span>` +
-      `<span class="jb-time">${esc(run)}</span></button>${detail}`
+      `<span class="jb-time">${esc(run)}</span></button>${quick}`
     )
   }
 
@@ -110,7 +115,7 @@ export function createJobs({ api, onChange, capture = false, clock = () => Date.
         rows.set(j.id, row)
       }
       if (list.children[i] !== row) list.insertBefore(row, list.children[i] ?? null)
-      const cls = `jb st-${j.status}${open === j.id ? ' is-open' : ''}`
+      const cls = `jb st-${j.status}${j.status === 'needs_ok' ? ' q2' : ACTIVE.has(j.status) ? ' q1' : ''}`
       if (row._cls !== cls) row.className = row._cls = cls
       const html = rowHtml(j, nowMs)
       if (row._html === html) return
@@ -126,31 +131,219 @@ export function createJobs({ api, onChange, capture = false, clock = () => Date.
     if (more.textContent !== text) more.textContent = text
   }
 
-  list.addEventListener('click', async (e) => {
+  /** Stop and approve, shared by the row and the open job. */
+  async function act(id, what, btn = null) {
+    if (btn) btn.disabled = true
+    try {
+      if (what === 'stop') await api.jobStop(id)
+      if (what === 'ok') await api.jobReply(id, APPROVE)
+      return true
+    } catch (err) {
+      ui?.toast(esc(`Nepodarilo sa: ${err?.message ?? err}`), { kind: 'warn', iconName: 'alarm' })
+      if (btn) btn.disabled = false
+      return false
+    }
+  }
+
+  list.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-act]')
     const row = e.target.closest('.jb')
     if (!btn || !row) return
-    const id = row.dataset.id
-    const act = btn.dataset.act
-    if (act === 'toggle') {
-      open = open === id ? null : id
-      return render()
-    }
-    btn.disabled = true
-    try {
-      if (act === 'stop') await api.jobStop(id)
-      if (act === 'ok') await api.jobReply(id, APPROVE)
-    } catch (err) {
-      console.warn('úloha:', err?.message ?? err)
-      btn.disabled = false
-    }
+    if (btn.dataset.act === 'open') return view?.open(row.dataset.id)
+    act(row.dataset.id, btn.dataset.act, btn)
   })
+
+  // ── an open job ──
+  function createView() {
+    const root = document.getElementById('job-view')
+    if (!root) return null
+    let id = null
+    /** { task, feed, canReply, film } from the server, null while loading */
+    let detail = null
+    let error = null
+    let pending = []
+    let sending = false
+    let stick = true
+
+    const job = () => (id ? jobs.get(id) : null)
+    const feedKey = (e) => `${e.t}|${e.kind}|${e.text}`
+
+    async function load() {
+      const want = id
+      try {
+        const res = await api.job(want)
+        if (id !== want) return
+        const feed = res.job?.feed ?? []
+        const known = new Set(feed.map(feedKey))
+        detail = { ...res.job, feed: [...feed, ...pending.filter((e) => !known.has(feedKey(e)))] }
+        error = null
+      } catch (err) {
+        if (id !== want) return
+        // A sample job (?demo=1) lives only in the page: its steps are all there is to show.
+        const j = jobs.get(want)
+        if (err?.status === 404 && j) detail = { task: null, canReply: false, film: false, feed: (j.steps ?? []).map((text) => ({ t: null, kind: 'step', text })) }
+        else error = err?.message ?? String(err)
+      }
+      pending = []
+      render()
+    }
+
+    function feedHtml(all) {
+      // The assignment has its own place above the feed.
+      const feed = all.filter((e) => e.kind !== 'task')
+      if (!feed.length) return '<p class="jv-empty">Zatiaľ nič. Úloha čaká, kým na ňu príde rad.</p>'
+      return `<ol class="jv-lines">${feed
+        .map((e) => `<li class="jv-l k-${esc(e.kind)}"><time>${esc(clockTime(e.t))}</time><span>${esc(e.text)}</span></li>`)
+        .join('')}</ol>`
+    }
+
+    function headSub(j) {
+      const start = ts(j.startedAt)
+      const end = ts(j.endedAt)
+      const run = Number.isFinite(start) ? elapsed((Number.isFinite(end) ? end : clock()) - start) : ''
+      const steps = (detail?.feed ?? []).filter((e) => e.kind === 'step').length
+      return [STATUS_TEXT[j.status] ?? j.status, run, steps ? `${steps} ${plural(steps, 'krok', 'kroky', 'krokov')}` : ''].filter(Boolean).join(' · ')
+    }
+
+    function render() {
+      const j = job()
+      if (!j) return
+      const active = ACTIVE.has(j.status)
+      const typed = root.querySelector('.jv-input')?.value ?? ''
+      const hadFocus = document.activeElement?.classList?.contains('jv-input')
+      const box = root.querySelector('.jv-feed')
+      if (box) stick = box.scrollHeight - box.scrollTop - box.clientHeight < 40
+      const task = detail?.film ? '<p class="jv-muted">V režime natáčania je zadanie skryté.</p>' : detail?.task ? `<p>${esc(detail.task)}</p>` : ''
+      const canReply = Boolean(detail?.canReply) && !active
+      root.innerHTML =
+        `<div class="jv-in st-${esc(j.status)}">` +
+        `<header class="jv-top">${statusIcon(j.status)}<div class="jv-h"><h2>${esc(j.title || 'Úloha')}</h2><p class="jv-sub">${esc(headSub(j))}</p></div>` +
+        '<div class="jv-tools">' +
+        (j.status === 'needs_ok' ? `<button type="button" class="pv-btn is-main" data-act="ok">${icon('check')}<span>Schváliť</span></button>` : '') +
+        (active ? `<button type="button" class="pv-btn" data-act="stop">${icon('stop')}<span>Zastaviť</span></button>` : '') +
+        `<button type="button" class="pv-x" data-act="close" title="Zavrieť (Esc)" aria-label="Zavrieť">${icon('close')}</button></div></header>` +
+        (j.status === 'needs_ok' && j.needsOk ? `<p class="jv-ask">${icon('hourglass')}<span>${esc(j.needsOk)}</span></p>` : '') +
+        '<div class="jv-body">' +
+        (task ? `<section class="jv-task"><h3>Zadanie</h3>${task}</section>` : '') +
+        `<section class="jv-feed"><h3>Priebeh</h3>${error ? `<p class="jv-empty">${esc(`Priebeh sa nepodarilo načítať: ${error}`)}</p>` : detail ? feedHtml(detail.feed) : '<p class="jv-empty">Načítavam…</p>'}</section>` +
+        '</div>' +
+        (canReply
+          ? `<form class="jv-reply"><input class="jv-input" type="text" autocomplete="off" maxlength="4000" placeholder="${j.status === 'stopped' ? 'Pokračuj v úlohe: napíš, čo má dorobiť alebo zmeniť' : 'Doplň alebo oprav túto úlohu'}"><button type="submit" class="pv-btn is-main"${sending ? ' disabled' : ''}>${icon('send')}<span>Poslať</span></button></form>`
+          : active && j.status !== 'needs_ok'
+            ? '<p class="jv-foot">Kým úloha beží, dá sa zastaviť. Zastavenú alebo hotovú vieš odtiaľto doplniť a pustiť ďalej.</p>'
+            : '') +
+        '</div>'
+      const input = root.querySelector('.jv-input')
+      if (input) {
+        input.value = typed
+        if (hadFocus) input.focus()
+      }
+      const next = root.querySelector('.jv-feed')
+      if (next && stick) next.scrollTop = next.scrollHeight
+    }
+
+    async function reply() {
+      const input = root.querySelector('.jv-input')
+      const text = input?.value.trim()
+      if (!text || sending || !id) return
+      sending = true
+      try {
+        await api.jobReply(id, text)
+        input.value = ''
+        if (detail) detail.canReply = false
+      } catch (err) {
+        ui?.toast(esc(`Nepodarilo sa: ${err?.message ?? err}`), { kind: 'warn', iconName: 'alarm' })
+      }
+      sending = false
+      render()
+    }
+
+    root.addEventListener('click', (e) => {
+      if (e.target === root) return close()
+      const btn = e.target.closest('[data-act]')
+      if (!btn || !id) return
+      if (btn.dataset.act === 'close') return close()
+      act(id, btn.dataset.act, btn)
+    })
+    root.addEventListener('submit', (e) => {
+      e.preventDefault()
+      reply()
+    })
+
+    /** Capture phase: while a job is open no key reaches the HUD under it (push-to-talk, the command bar). */
+    window.addEventListener(
+      'keydown',
+      (e) => {
+        if (!id) return
+        e.stopPropagation()
+        if (e.key !== 'Escape') return
+        e.preventDefault()
+        const el = document.activeElement
+        if (el?.classList?.contains('jv-input') && el.value) el.value = ''
+        else close()
+      },
+      true,
+    )
+    window.addEventListener('keyup', (e) => id && e.stopPropagation(), true)
+
+    function open(jobId) {
+      if (!jobs.has(jobId)) return
+      id = jobId
+      detail = null
+      error = null
+      pending = []
+      stick = true
+      root.hidden = false
+      document.body.classList.add('job-open')
+      requestAnimationFrame(() => root.classList.add('is-on'))
+      document.activeElement?.blur?.()
+      render()
+      load()
+    }
+
+    function close() {
+      if (!id) return
+      id = null
+      detail = null
+      root.classList.remove('is-on')
+      root.hidden = true
+      root.innerHTML = ''
+      document.body.classList.remove('job-open')
+    }
+
+    return {
+      open,
+      close,
+      isOpen: () => Boolean(id),
+      /** A new line of the feed from the server (SSE `job-feed`). */
+      feed(jobId, entry) {
+        if (jobId !== id || !entry) return
+        if (!detail) return void pending.push(entry)
+        if (detail.feed.some((e) => feedKey(e) === feedKey(entry))) return
+        detail.feed.push(entry)
+        render()
+      },
+      /** The job changed state: a job that has just ended can be continued, which only the server knows for sure. */
+      jobChanged(jobId) {
+        if (jobId !== id) return
+        const j = job()
+        if (detail && j && !ACTIVE.has(j.status) && !detail.canReply) load()
+        else render()
+      },
+      tick() {
+        const j = job()
+        const sub = root.querySelector('.jv-sub')
+        if (j && sub && ACTIVE.has(j.status)) sub.textContent = headSub(j)
+      },
+    }
+  }
 
   // Čas behu raz za sekundu, len keď niečo beží a stránka je viditeľná.
   if (!capture) {
     setInterval(() => {
       if (document.hidden || !running()) return
       render()
+      view?.tick()
     }, 1000)
   }
 
@@ -160,6 +353,14 @@ export function createJobs({ api, onChange, capture = false, clock = () => Date.
     apply,
     load,
     render,
+    /** A line of a job's feed from the server. */
+    feed: (id, entry) => view?.feed(id, entry),
+    /** Opens a job's detail. Without an id the one that most needs attention: waiting for approval, then running, then the latest. */
+    open(id = null) {
+      const pick = id ?? visible(clock()).sort((a, b) => (b.status === 'needs_ok') - (a.status === 'needs_ok'))[0]?.id
+      if (pick) view?.open(pick)
+    },
+    isOpen: () => Boolean(view?.isOpen()),
     /** Počet aktívnych úloh (čip v lište, prúd do uzla projekty). */
     get active() {
       return running()

@@ -112,20 +112,29 @@ Ručne:
 3. Vyskúšaj: `node scripts/routine.mjs vikendovy-plan`.
 4. Zaregistruj: `node scripts/schedule.mjs install`.
 
-## Koľko smie Jarvis sám
+## Čo smie Jarvis sám
 
-Nastavuje sa v `.env` ako `JARVIS_AGENT_MODE`. Platí pre rutiny aj pre úlohy z HUD.
+Všetko, čo ty. Úlohy na pozadí aj rutiny bežia s plným prístupom: súbory kdekoľvek v počítači, príkazy v termináli,
+web a tvoje konektory (kalendár, mail…). Na nič sa nepýta, lebo pri tej práci nikto nesedí, kto by odpovedal.
+Žiadny obmedzený režim neexistuje a nič sa nenastavuje.
 
-| Režim | Smie | Nesmie |
-|---|---|---|
-| `safe` (predvolené) | čítať a písať súbory v priečinku Jarvisa a v pamäti, hľadať na webe, používať tvoje konektory (kalendár, mail…), spúšťať vlastné skripty Jarvisa (import, hľadanie v správach, aktualizácia) | spúšťať iné príkazy v počítači |
-| `full` | všetko, čo Claude Code, vrátane príkazov v termináli | |
+Jedna vec platí vždy: ľuďom nič neposiela sám. Pripraví presné znenie, v HUD ohlási, že čaká na súhlas, a pošle,
+až keď povieš „pošli to" alebo klikneš na Schváliť. Pri konektoroch, ktoré vedia posielať (mail), si v nastaveniach
+Claude môžeš navyše určiť, čo smú robiť bez potvrdenia.
 
-V oboch režimoch má Jarvis v zadaní, že ľuďom nič neposiela sám: pripraví návrh, v HUD ohlási, že čaká na súhlas,
-a pošle až keď povieš „pošli to". Pri konektoroch, ktoré vedia posielať (mail), si v nastaveniach Claude môžeš
-navyše určiť, čo smú robiť bez potvrdenia.
+## Úlohy: nahliadnuť a zastaviť
 
-Režim `full` zapni, len keď rozumieš, čo to znamená: Jarvis vtedy môže na počítači spraviť čokoľvek, čo ty v termináli.
+Každú úlohu, ktorú si Jarvis pustil na pozadí, vidíš v HUD v paneli **Úlohy** (a v lište hore, kým niečo beží).
+
+- **Riadok úlohy** ukazuje, čo práve robí, a ako dlho beží. Tlačidlo so štvorčekom vpravo ju hneď zastaví.
+- **Klik na úlohu** ju otvorí: zadanie, ktoré dostala, a priebeh krok po kroku s časmi. Vidíš príkazy, ktoré spustila,
+  súbory, ktoré čítala a písala, a čo si pri tom Jarvis poznačil. Kým beží, pribúda to naživo.
+- **Zastaviť** úlohu ukončí aj so všetkým, čo spustila. Nič sa nestratí: zastavenú alebo hotovú úlohu vieš
+  v tom istom okne doplniť („dorob to, ale len za tento týždeň") a pokračuje tam, kde skončila.
+- **Schváliť** sa ukáže, keď úloha pripravila niečo, čo má ísť von, a čaká na teba.
+- **Hlasom:** „čo robí tá úloha?", „zruš to", „pošli to".
+
+Podrobný záznam každej úlohy ostáva v `data/jobs/`.
 
 ## Čo treba vedieť
 

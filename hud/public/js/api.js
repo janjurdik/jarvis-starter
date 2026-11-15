@@ -45,6 +45,7 @@ export function createApi({ token = null } = {}) {
     status: () => get('/api/status'),
     snapshot: () => get('/api/snapshot'),
     jobs: () => get('/api/jobs'),
+    job: (id) => get(`/api/jobs/${encodeURIComponent(id)}`),
     jobStop: (id) => post(`/api/jobs/${encodeURIComponent(id)}/stop`),
     jobReply: (id, text) => post(`/api/jobs/${encodeURIComponent(id)}/reply`, { text }),
     scene: (id) => get(`/api/scene/${encodeURIComponent(id)}`),

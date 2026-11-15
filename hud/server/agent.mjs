@@ -1,27 +1,17 @@
 /**
  * How full Claude Code runs are started on Jarvis's behalf (background jobs from the HUD and
- * scheduled routines). One place decides what such a run may do without asking:
+ * scheduled routines). Jarvis works with everything the user's own Claude Code can do: files
+ * anywhere on the computer, any shell command, the web and every connector. Nothing asks for
+ * permission, because nobody sits at these runs to answer.
  *
- *   JARVIS_AGENT_MODE=safe   (default) files in the Jarvis folder, web search, the user's
- *                            connectors (mail, calendar, …) and Jarvis's own scripts in scripts/.
- *                            Any other shell command is refused.
- *   JARVIS_AGENT_MODE=full   everything Claude Code can do, including any shell command.
- *
- * Connector names are not known in advance, so in safe mode a small PreToolUse hook
- * (allow-connectors.mjs) lets MCP tools through, passed with --settings.
+ * What still holds is in the task itself, not in a permission list: anything that would go out
+ * to other people (a mail, a message, an order) is prepared and waits for the user's yes.
  */
-import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
 import { MEMORY_DIR } from './memory/index.mjs'
-import { BRAIN_DIR, HOME, REPO, ROOT, findBin, withPath } from './util.mjs'
+import { HOME, REPO, findBin, withPath } from './util.mjs'
 
 export const CLAUDE_BIN = findBin('claude', { override: process.env.JARVIS_CLAUDE_BIN })
-export const AGENT_MODE = (process.env.JARVIS_AGENT_MODE || 'safe').toLowerCase() === 'full' ? 'full' : 'safe'
-
-const SAFE_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'TodoWrite', 'Task', 'Agent', 'Skill']
-/** Jarvis's own scripts are part of the safe set: importing an export, searching messages or updating must work without full mode. */
-const SAFE_SCRIPTS = ['doctor', 'scan', 'import', 'pulse', 'routine', 'schedule', 'update', 'hud', 'call'].map((n) => `Bash(node scripts/${n}.mjs:*)`)
-const SETTINGS_FILE = join(BRAIN_DIR, 'agent-settings.json')
 
 /** Environment for Claude child processes: the parent's, minus anything that would switch Claude to an API key. */
 export function cleanEnv() {
@@ -38,15 +28,9 @@ export const MEMORY_EXTERNAL = !(MEMORY_DIR + sep).startsWith(REPO + sep)
 /** A headless run works in the Jarvis folder: an external memory folder has to be added explicitly. */
 const dirArgs = () => (MEMORY_EXTERNAL ? ['--add-dir', MEMORY_DIR] : [])
 
-/** CLI arguments that set the permission level of a headless run. */
+/** CLI arguments of a headless run: full access, no questions. */
 export function permissionArgs() {
-  if (AGENT_MODE === 'full') return ['--permission-mode', 'bypassPermissions', ...dirArgs()]
-  // Forward slashes: the hook runs through a shell, where backslashes in Windows paths are fragile.
-  const fwd = (p) => p.replace(/\\/g, '/')
-  const hook = `"${fwd(process.execPath)}" "${fwd(join(ROOT, 'server', 'allow-connectors.mjs'))}"`
-  mkdirSync(BRAIN_DIR, { recursive: true })
-  writeFileSync(SETTINGS_FILE, JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'mcp__.*', hooks: [{ type: 'command', command: hook }] }] } }, null, 2), { mode: 0o600 })
-  return ['--permission-mode', 'dontAsk', '--allowedTools', [...SAFE_TOOLS, ...SAFE_SCRIPTS, 'Bash(npm install)', 'Bash(npm.cmd install)'].join(','), '--settings', SETTINGS_FILE, ...dirArgs()]
+  return ['--permission-mode', 'bypassPermissions', ...dirArgs()]
 }
 
 /**

@@ -974,7 +974,17 @@ body.scene .keys, body.capture .keys { display: none; }
 .mod-jobs { flex: 0 0 auto; }
 .mod-jobs[hidden] { display: none; }
 .jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
-.jb { border-radius: 0.9rem; transition: background 0.25s; }
+.jb { position: relative; border-radius: 0.9rem; transition: background 0.25s; }
+/* Stop and approve sit on the row itself: no need to open a job to end it. */
+.jb.q1 .jb-head { padding-right: 2.5rem; }
+.jb.q2 .jb-head { padding-right: 4.6rem; }
+.jb-quick { position: absolute; right: -0.25rem; top: 50%; transform: translateY(-50%); display: flex; gap: 0.2rem; }
+.jb-q { width: 1.9rem; height: 1.9rem; border-radius: 50%; display: grid; place-items: center; color: var(--t3); transition: background 0.2s, color 0.2s; }
+.jb-q .ic { width: 1rem; height: 1rem; filter: none; }
+.jb-q:hover { background: rgba(255, 90, 78, 0.16); color: var(--red); }
+.jb-q-ok { color: var(--amber); }
+.jb-q-ok:hover { background: rgba(255, 178, 92, 0.18); color: var(--amber); }
+.jb-q:disabled { opacity: 0.4; }
 .jb.is-open { background: var(--fill); }
 .jb-head { width: 100%; display: grid; grid-template-columns: 1.5rem 1fr auto; align-items: center; column-gap: 0.7rem; padding: 0.45rem 0.6rem; margin: 0 -0.6rem; width: calc(100% + 1.2rem); border-radius: 0.9rem; text-align: left; }
 .jb-head:hover { background: var(--fill); }
@@ -1015,3 +1025,69 @@ body.scene .keys, body.capture .keys { display: none; }
 .jobs-more:empty { display: none; }
 .chip-jobs .ic { animation: breathe 1.6s ease-in-out infinite; }
 body.capture .jb-step.step-in { animation: none; }
+
+/* ── an open job: assignment, live feed, stop and continue ─────────────── */
+
+body.job-open .toast { z-index: 48; }
+.jv-in {
+  position: absolute;
+  top: calc(var(--safe-top) + 1.5rem);
+  bottom: calc(var(--safe-bottom) + 1.5rem);
+  left: max(calc(var(--safe-left) + 1.5rem), calc(50% - 27rem));
+  right: max(calc(var(--safe-right) + 1.5rem), calc(50% - 27rem));
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transform: translateY(0.6rem);
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.jv.is-on .jv-in { transform: none; }
+.jv-top { flex: none; display: flex; align-items: center; gap: 0.9rem; padding: 0 0.4rem; }
+.jv-top > .jb-ic { flex: none; width: 1.9rem; height: 1.9rem; }
+.jv-h { flex: 1 1 auto; min-width: 0; }
+.jv-h h2 { margin: 0; font: 600 1.5rem/1.15 var(--sans); letter-spacing: -0.015em; color: var(--white); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jv-sub { margin: 0.3rem 0 0; font: 500 0.875rem/1.2 var(--mono); color: var(--t3); }
+.st-running .jv-sub { color: var(--ice); }
+.st-needs_ok .jv-sub { color: var(--amber); }
+.st-error .jv-sub { color: var(--red); }
+.jv-tools { flex: none; display: flex; align-items: center; gap: 0.5rem; }
+.jv-ask { flex: none; display: flex; align-items: flex-start; gap: 0.6rem; margin: 0; padding: 0.8rem 1rem; border-radius: 1.1rem; background: rgba(255, 178, 92, 0.1); font: 500 0.9375rem/1.4 var(--sans); color: var(--t1); }
+.jv-ask .ic { flex: none; width: 1.15rem; height: 1.15rem; margin-top: 0.1rem; color: var(--amber); }
+.jv-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 1.75rem;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, transparent 4%, rgba(210, 250, 255, 0.26) 50%, transparent 96%) top / 100% 1px no-repeat,
+    linear-gradient(180deg, rgba(150, 235, 255, 0.05), rgba(150, 235, 255, 0) 30%),
+    linear-gradient(180deg, rgba(10, 22, 30, 0.74), rgba(6, 13, 19, 0.68));
+}
+.jv-body h3 { margin: 0 0 0.5rem; font: 500 0.8125rem/1 var(--sans); color: var(--t3); }
+.jv-task { flex: none; max-height: 30%; overflow-y: auto; padding: 1.2rem 1.5rem 1rem; box-shadow: inset 0 -1px 0 rgba(176, 246, 255, 0.08); }
+.jv-task p { margin: 0; font: 400 0.9375rem/1.5 var(--sans); color: var(--t1); white-space: pre-wrap; overflow-wrap: anywhere; }
+.jv-muted { color: var(--t3) !important; }
+.jv-feed { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 1.2rem 1.5rem 1.4rem; overscroll-behavior: contain; }
+.jv-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.jv-l { display: grid; grid-template-columns: 4.6rem minmax(0, 1fr); column-gap: 0.9rem; align-items: baseline; }
+.jv-l time { font: 500 0.75rem/1.5 var(--mono); color: var(--t4); }
+.jv-l span { font: 500 0.9375rem/1.45 var(--sans); color: var(--t2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.jv-l.k-step span { font: 500 0.8125rem/1.6 var(--mono); color: var(--t2); }
+.jv-l.k-say span { color: var(--t1); font-weight: 400; }
+.jv-l.k-task span, .jv-l.k-reply span { color: var(--t3); font-weight: 400; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.jv-l.k-reply span { color: var(--ice); }
+.jv-l.k-state span { color: var(--white); font-weight: 600; }
+.jv-l:last-child.k-step span { color: var(--ice); }
+.jv-empty { margin: 0; font: 400 0.9375rem/1.4 var(--sans); color: var(--t3); }
+.jv-reply { flex: none; display: flex; gap: 0.6rem; }
+.jv-input { flex: 1 1 auto; min-width: 0; height: 2.75rem; padding: 0 1.15rem; border: 0; border-radius: 1.375rem; background: var(--fill-2); font: 400 0.9375rem/1 var(--sans); color: var(--t1); outline: none; transition: box-shadow 0.2s, background 0.2s; }
+.jv-input::placeholder { color: var(--t3); }
+.jv-input:focus { background: rgba(127, 243, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.4); }
+.jv-reply .pv-btn { height: 2.75rem; border-radius: 1.375rem; }
+.jv-foot { flex: none; margin: 0; padding: 0 0.4rem; font: 400 0.875rem/1.4 var(--sans); color: var(--t3); }
+@media (max-width: 40rem) {
+  .jv-top { flex-wrap: wrap; }
+  .jv-l { grid-template-columns: 1fr; }
+}

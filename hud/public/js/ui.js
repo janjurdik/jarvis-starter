@@ -105,7 +105,7 @@ export function createUI({ capture }) {
     `<button type="button" class="chip chip-wake" id="chip-voice" title="Hlas a počúvanie, klik zapne Hey Jarvis">${icon('speaker')}<span>Hlas</span></button>`,
     `<span class="chip chip-life" id="chip-life" title="Pamäť">${icon('pamat')}<span>Pamäť</span></span>`,
     `<button type="button" class="chip chip-film" id="chip-film" title="Režim natáčania (N)">${icon('film')}<span>Natáčanie</span></button>`,
-    `<span class="chip chip-jobs" id="chip-jobs" hidden>${icon('projekty')}<span></span></span>`,
+    `<button type="button" class="chip chip-jobs" id="chip-jobs" hidden>${icon('projekty')}<span></span></button>`,
     `<span class="chip chip-app" id="chip-app" hidden>${icon('app')}<span></span></span>`,
   ].join('')
   const chip = {
@@ -461,7 +461,7 @@ export function createUI({ capture }) {
     const text = waiting
       ? `${waiting} ${plural(waiting, 'úloha čaká', 'úlohy čakajú', 'úloh čaká')} na súhlas`
       : `${active} ${plural(active, 'úloha beží', 'úlohy bežia', 'úloh beží')}`
-    setChip('jobs', chip.jobs, { hidden: !active, cls: waiting ? 'is-warn' : 'is-busy', html: `${icon(waiting ? 'hourglass' : 'projekty')}<span>${text}</span>`, title: 'Úlohy Jarvisa na pozadí' })
+    setChip('jobs', chip.jobs, { hidden: !active, cls: waiting ? 'is-warn' : 'is-busy', html: `${icon(waiting ? 'hourglass' : 'projekty')}<span>${text}</span>`, title: 'Úlohy Jarvisa na pozadí, klik otvorí priebeh' })
   }
 
   // ── LOG ──

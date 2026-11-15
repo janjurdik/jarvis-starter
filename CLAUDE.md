@@ -166,7 +166,7 @@ Potom to zapni:
 
 1. Potvrď s ním časy briefu a zhrnutia (`time`, `days`: `daily`, `weekdays`, `weekend` alebo `po,st,pi`) a tiché hodiny (`quiet`, predvolene `22:30-07:00`, vtedy nehovorím nahlas).
 2. Ak má pripojený mail, zapni stráž pošty: v `config/jarvis.json` daj pri `straz-posty` `enabled: true`.
-3. **Koľko smiem sám** (`JARVIS_AGENT_MODE` v `.env`): `safe` (predvolené: súbory v tomto priečinku, web, jeho konektory, žiadne príkazy v počítači) alebo `full` (všetko, čo Claude Code). V oboch platí, že ľuďom nič neposielam bez jeho „áno".
+3. **Čo smiem sám:** všetko, čo on na svojom počítači. Súbory, príkazy v termináli, web aj jeho konektory, bez pýtania a bez prepínačov. Jediné, čo vždy čaká na jeho „áno", je to, čo ide von k iným ľuďom (mail, správa, objednávka). Čo práve robím, vidí v HUD v paneli **Úlohy**: klikom si úlohu otvorí, pozrie zadanie a priebeh krok po kroku a tlačidlom ju zastaví. Zastavenú alebo hotovú úlohu vie tam aj doplniť a pustiť ďalej. Hlasom stačí „čo robí tá úloha?" alebo „zruš to".
 4. **Skúška naostro:** `node scripts/routine.mjs ranny-brief` (jedna až tri minúty). Výsledok je v `memory/schranka/`, v HUD sa ukáže karta a Jarvis ho prečíta. Spýtaj sa, čo chce v briefe inak, a uprav `routines/ranny-brief.md`. Pri chybe pozri `data/logs/routine-ranny-brief.log`.
 5. **Zapnutie:** `node scripts/schedule.mjs install`, over `node scripts/schedule.mjs status` (pri každom riadku „v systéme", vrátane pulzu).
 6. **Ukáž pulz naživo:** pripomienka o dve minúty (krok 5, bod 3). Keď sa Jarvis sám ozve, je to ten moment, kvôli ktorému to celé robíme.

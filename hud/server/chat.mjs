@@ -252,8 +252,8 @@ function sinkFor(turn) {
     },
     tool({ id, name, input, status }) {
       if (!live() || !id) return
-      // The built-in Read is only ever used on dropped files (see brain.mjs).
-      const meta = name === 'Read' ? { name, label: 'Pozerám prílohu', icon: 'eye', node: 'fotky' } : toolMeta(name, input, { film: state.film })
+      // The built-in Read opens dropped files and any other file the user points at (see brain.mjs).
+      const meta = name === 'Read' ? { name, label: /[\\/]prilohy[\\/]/.test(String(input?.file_path ?? '')) ? 'Pozerám prílohu' : 'Čítam súbor', icon: 'eye', node: 'fotky' } : toolMeta(name, input, { film: state.film })
       if (HIDDEN_TOOLS.has(meta.name)) return
       const prev = turn.tools.get(id)
       if (!prev && status === 'run') turn.splitter.softFlush()

@@ -37,7 +37,7 @@ With `HUD_HOST=0.0.0.0` other machines need the token from `data/brain/token` (h
 | `POST /api/say` | `{ text }` speaks a sentence without Claude. |
 | `POST /api/announce` | `{ title, text, say?, silent? }` from routines: card + LOG line + voice. Loopback only. |
 | `POST /api/event` | `{ type, text, icon?, node? }` adds a LOG line. Loopback only. |
-| `GET /api/jobs`, `POST /api/jobs` | Background jobs (full Claude Code runs). `POST /api/jobs/:id/stop`, `POST /api/jobs/:id/reply`. |
+| `GET /api/jobs`, `POST /api/jobs` | Background jobs (full Claude Code runs, full access). `GET /api/jobs/:id` → one job with its assignment and feed `[{ t, kind: task\|reply\|step\|say\|state, text }]`. `POST /api/jobs/:id/stop` ends it with everything it started, `POST /api/jobs/:id/reply` `{ text }` continues an ended job in the same session. |
 | `POST /api/mode` | `{ film }` filming mode: names of people and private titles are hidden. |
 | `POST /api/brain/restart` | Restarts the Claude process. |
 | `GET /tts/<hash>.mp3` | Synthesised voice clips (cached in `data/tts/`). |
@@ -70,7 +70,7 @@ the uploaded copy of an export after its import (otherwise it is removed, the ar
 
 ## SSE `/api/events`
 
-Named events: `status`, `mode`, `voice`, `chat`, `tts`, `world`, `snapshot`, `job`, `import`, `hud`, `history`.
+Named events: `status`, `mode`, `voice`, `chat`, `tts`, `world`, `snapshot`, `job`, `job-feed` (`{ id, entry }`, one new line of a job's feed), `import`, `hud`, `history`.
 
 One chat turn:
 

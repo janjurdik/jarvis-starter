@@ -648,6 +648,7 @@ function connectEvents() {
   on('snapshot', (snap) => paint('snapshot', () => onSnapshot(snap)))
   // Úlohy: bez wakeUp, bežiaca úloha pokojový režim nebrzdí.
   on('job', (job) => jobs?.apply(job))
+  on('job-feed', (m) => jobs?.feed(m.id, m.entry))
   on('import', (ev) => drop?.applyImport(ev))
   on('status', onStatus)
   on('mode', (m) => typeof m?.film === 'boolean' && setFilm(m.film, { remote: true }))
@@ -1009,6 +1010,7 @@ function bindControls() {
   // Po kliknutí na čip alebo orb fokus preč, inak by medzerník „klikol" tlačidlo namiesto počúvania.
   for (const b of document.querySelectorAll('button')) b.addEventListener('mouseup', () => b.blur())
   document.getElementById('chip-film').addEventListener('click', () => setFilm(!film))
+  document.getElementById('chip-jobs').addEventListener('click', () => jobs?.open())
   document.getElementById('chip-voice').addEventListener('click', toggleWake)
 
   // Uzly: klik na objekt v 3D alebo na jeho popisok priblíži kameru.
@@ -1138,6 +1140,7 @@ async function main() {
   ui = createUI({ capture: CAPTURE })
   jobs = createJobs({
     api,
+    ui,
     capture: CAPTURE,
     onChange: () => paint('jobs', () => ui.renderJobsChip(jobs.active, jobs.waiting)),
   })

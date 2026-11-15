@@ -20,11 +20,10 @@ import { stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { networkInterfaces } from 'node:os'
 import { extname, join, normalize, sep } from 'node:path'
-import { AGENT_MODE } from './server/agent.mjs'
 import { Brain, CLAUDE, EFFORT, MODEL } from './server/brain.mjs'
 import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onVoiceChange, sayText, sendChat, setVoice, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
 import { CONFIG_FILE, getConfig } from './server/config.mjs'
-import { createJob, initJobs, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob } from './server/jobs.mjs'
+import { createJob, initJobs, jobDetail, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob } from './server/jobs.mjs'
 import { normalizeCard } from './server/cards.mjs'
 import { FILES, MEMORY_DIR, getIndex, stats } from './server/memory/index.mjs'
 import { attachMic, micStats, micStatus, micWorkerState, onVoice, setMicWake, stopMic, wakeAvailable } from './server/mic.mjs'
@@ -244,7 +243,6 @@ function statusBody() {
     voiceState: voiceState(),
     turn: currentTurnId(),
     memory: memoryStatus(),
-    agentMode: AGENT_MODE,
     brainInfo: b ? { pid: b.pid, startMs: b.startMs, turns: b.turns, lastError: b.lastError, mcp: b.mcp, limit: b.limit } : null,
     primary: PRIMARY,
     clients: clientCount(),
@@ -404,7 +402,6 @@ async function setupBody() {
     tts: ttsInfo().provider,
     sttEngine: STT_ENGINE,
     wakeAvailable: wakeAvailable(),
-    agentMode: AGENT_MODE,
     routines: cfg.routines,
     platform: process.platform,
     node: process.version,
@@ -544,6 +541,15 @@ async function route(req, res) {
   if (path === '/api/setup') return sendJson(res, 200, await setupBody())
   if (path === '/api/mode') return sendJson(res, 200, { film: state.film })
   if (path === '/api/jobs') return sendJson(res, 200, listJobs())
+  // One job with its assignment and the whole feed, for the detail view.
+  const jobOne = /^\/api\/jobs\/(j\d+)$/.exec(path)
+  if (jobOne) {
+    try {
+      return sendJson(res, 200, { ok: true, job: await jobDetail(jobOne[1]) })
+    } catch (err) {
+      return sendJson(res, err.status ?? 500, { ok: false, error: err.message })
+    }
+  }
   if (path === '/api/chat/history') return sendJson(res, 200, getHistory())
   if (path === '/api/metrics') return sendJson(res, 200, { turns: chatMetrics(), brain: brain?.status() ?? null })
   if (path === '/api/snapshot') return sendJson(res, 200, snapshotFor() ?? (await refreshSnapshot('prvé načítanie')) ?? {})

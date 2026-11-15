@@ -1,27 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node scripts/doctor.mjs:*)",
-      "Bash(node scripts/hud.mjs:*)",
-      "Bash(node scripts/routine.mjs:*)",
-      "Bash(node scripts/schedule.mjs:*)",
-      "Bash(node scripts/autostart.mjs:*)",
-      "Bash(node -e:*)",
-      "Bash(node --version)",
-      "Bash(npm install)",
-      "Bash(npm.cmd install)",
-      "Bash(npm run:*)",
-      "Bash(claude --version)",
-      "Bash(claude auth status:*)",
-      "Edit(memory/**)",
-      "Edit(config/**)",
-      "Edit(routines/**)",
-      "Bash(node scripts/scan.mjs:*)",
-      "Bash(node scripts/import.mjs:*)",
-      "Bash(node scripts/pulse.mjs:*)",
-      "Bash(node scripts/call.mjs:*)",
-      "Bash(node scripts/update.mjs:*)",
-      "Edit(data/setup.json)"
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "WebFetch",
+      "WebSearch"
     ]
   }
 }
