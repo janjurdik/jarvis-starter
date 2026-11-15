@@ -17,6 +17,7 @@ import { createInterface } from 'node:readline'
 import { CLAUDE_BIN as CLAUDE, MEMORY_EXTERNAL, cleanEnv, modelArgs, permissionArgs } from './agent.mjs'
 import { MEMORY_DIR } from './memory/index.mjs'
 import { BRAIN_DIR, DATA_DIR, REPO, clean, errMsg, log, spawnBin, writeFileAtomic } from './util.mjs'
+import { speakable } from './tts.mjs'
 
 const CWD = process.env.JARVIS_JOB_CWD || REPO
 const MAX_PARALLEL = 3
@@ -31,7 +32,7 @@ const contextPrompt = (film) =>
     `Si Jarvis: pamäť používateľa je v priečinku ${MEMORY_EXTERNAL ? MEMORY_DIR : 'memory/'} (pozri CLAUDE.md). Čo sa o ňom dozvieš nové a trvalé, zapíš tam.`,
     'Keď treba niečo poslať alebo zverejniť za používateľa (mail, správa, príspevok, objednávka), priprav presné znenie, napíš komu a kam, a odpoveď ukonči samostatným riadkom `NEEDS_OK: <čo a komu>`. Odošli až po schválení.',
     'Keď bez používateľa nevieš pokračovať (chýba informácia), ukonči riadkom `NEEDS_OK: <otázka>`.',
-    'Tvoja úplne posledná správa je 1 až 3 krátke vety po slovensky na prečítanie nahlas: čo je hotové a kde. Bez markdownu, odrážok a emoji.',
+    'Tvoja úplne posledná správa má presne tento tvar. Najprv výsledok: najviac päť krátkych riadkov obyčajného textu, čo je hotové a kde. Žiadny markdown: žiadne hviezdičky, mriežky, tabuľky, odrážky, kód ani emoji. Dlhý výstup (rešerš, zoznam, návrh textu) ulož do súboru a napíš len, kde je. Potom samostatný posledný riadok `HLAS: …` s jednou až dvoma krátkymi vetami, ktoré Jarvis povie nahlas (zdvorilo, vecne, pokojne so suchým humorom).',
     film ? 'Režim natáčania: v poslednej správe ani v NEEDS_OK nespomínaj mená ľudí ani firiem.' : '',
   ]
     .filter(Boolean)
@@ -55,6 +56,7 @@ const pub = (j) => ({
   startedAt: j.startedAt,
   endedAt: j.endedAt,
   summary: j.summary,
+  say: j.say ?? null,
   needsOk: j.needsOk,
   cost: j.cost,
   mock: j.mock || undefined,
@@ -156,6 +158,16 @@ function addStep(j, label) {
   emit(j)
 }
 
+/** The first few sentences of a text, for reading aloud when a job gave no spoken line. */
+function firstSentences(text, count, max) {
+  const out = []
+  for (const part of String(text ?? '').split(/(?<=[.!?…])\s+/)) {
+    if (out.length >= count || `${out.join(' ')} ${part}`.length > max) break
+    out.push(part)
+  }
+  return out.join(' ').trim() || String(text ?? '').slice(0, max).trim()
+}
+
 function finish(j, status, { summary = null, error = null } = {}) {
   if (j.status !== 'running' && j.status !== 'queued') return
   j.proc = null
@@ -168,9 +180,17 @@ function finish(j, status, { summary = null, error = null } = {}) {
       j.status = 'needs_ok'
       j.needsOk = clean(m[1], 400)
     } else j.needsOk = null
-    j.summary = clean(summary.replace(/^\s*NEEDS_OK:.*$/m, ''), 1200) || null
+    const body = summary.replace(/^\s*NEEDS_OK:.*$/m, '')
+    // What Jarvis says aloud is the `HLAS:` line. When the model forgot it, the first two plain sentences are read instead of the whole report.
+    const voice = speakable(/^\s*HLAS:\s*(.+)$/im.exec(body)?.[1] ?? '')
+    const text = speakable(body.replace(/^\s*HLAS:.*$/gim, ''))
+    j.summary = clean(text, 600) || clean(voice, 600) || null
+    j.say = clean(voice, 300) || firstSentences(text, 2, 240) || null
   }
-  if (error) j.summary = clean(error, 400)
+  if (error) {
+    j.summary = clean(error, 400)
+    j.say = null
+  }
   j.step = j.status === 'done' ? 'Hotovo' : j.status === 'needs_ok' ? 'Čaká na súhlas' : j.status === 'stopped' ? 'Zastavené' : 'Chyba'
   j.reported = false
   emit(j)
@@ -288,6 +308,7 @@ export async function createJob({ task, title, mock = false, silent = false }) {
     startedAt: null,
     endedAt: null,
     summary: null,
+    say: null,
     needsOk: null,
     cost: { turns: 0, ms: 0 },
     sessionId: null,

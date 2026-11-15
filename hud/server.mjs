@@ -626,7 +626,7 @@ async function drainAnnounce() {
           icon: job.status === 'done' ? 'check' : job.status === 'needs_ok' ? 'alarm' : 'shield',
           node: 'projekty',
           accent: job.status === 'done' ? 'ice' : job.status === 'needs_ok' ? 'amber' : 'red',
-          text: [job.summary, job.needsOk ? `Čaká na súhlas: ${job.needsOk}` : null].filter(Boolean).join(' · ') || lead,
+          text: [job.summary && job.summary.length > 300 ? `${job.summary.slice(0, 297).trimEnd()}…` : job.summary, job.needsOk ? `Čaká na súhlas: ${job.needsOk}` : null].filter(Boolean).join(' · ') || lead,
           caption: job.cost?.ms ? `${Math.round(job.cost.ms / 1000)} s, ${job.cost.turns} krokov` : null,
         },
         `c-${job.id}-${Date.now().toString(36)}`,
@@ -638,7 +638,8 @@ async function drainAnnounce() {
       sendHud({ type: job.status === 'done' ? 'done' : 'alert', text: `Úloha ${title} · ${STATUS_SK[job.status] ?? job.status}`, icon: job.status === 'done' ? 'check' : 'alarm', say: null, heard: null, node: 'projekty', source: 'jarvis' })
       pushSnapshot('úloha').catch(() => {})
       if (!silent) {
-        sayText(`${lead} ${job.summary ?? ''}`.slice(0, 600))
+        // Only the short spoken line of the job is read, never the whole written result.
+        sayText(`${lead} ${job.say ?? ''}`.trim().slice(0, 420))
         await new Promise((r) => setTimeout(r, 1200))
       }
     }

@@ -42,6 +42,10 @@ export function speakable(text) {
     .replace(/(\*\*|__|\*|_)(?=\S)([^*_]+?)\1/g, '$2')
     .replace(/^\s{0,3}#{1,6}\s+/gm, '')
     .replace(/^\s*[-*•]\s+/gm, '')
+    .replace(/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/gm, ' ')
+    .replace(/^\s*>+\s?/gm, '')
+    .replace(/^\s*\|\s*|\s*\|\s*$/gm, '')
+    .replace(/\s*\|\s*/g, ', ')
     .replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, '')
     .replace(/\s+[–—]\s+/g, ', ')
     .replace(/\b(\d+)\s*h\b/g, (_, n) => `${n} ${plural(Number(n), 'hodina', 'hodiny', 'hodín')}`)
@@ -49,6 +53,9 @@ export function speakable(text) {
     .replace(/\bnapr\./g, 'napríklad')
     .replace(/\batď\./g, 'a tak ďalej')
     .replace(/\btzn\./g, 'to znamená')
+    // Whatever markup is left (an unclosed **, a stray #, ~~, a backtick) would be read out as "hviezdička".
+    .replace(/[*~#`]+|(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, ' ')
+    .replace(/\s+([,.!?])/g, '$1')
     .replace(/\s+/g, ' ')
     .trim()
 }

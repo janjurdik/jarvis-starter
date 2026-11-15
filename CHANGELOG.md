@@ -2,6 +2,11 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.1.1 (2026-11-15)
+
+- **Úlohy na pozadí hovoria krátko.** Keď Jarvis dokončí úlohu, povie jednu až dve vety a nie celý výsledok. Ten nájdeš na karte a v súbore.
+- **Hlas už nečíta značky.** Hviezdičky, mriežky a tabuľky z textu sa do reči nedostanú.
+
 ## 1.1.0 (2026-11-15)
 
 - **Aktualizácie bez straty úprav.** Jarvis ti povie, keď vyjde nová verzia. Stačí napísať „aktualizuj Jarvisa" a dostaneš
