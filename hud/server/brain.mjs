@@ -10,7 +10,7 @@
  */
 import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { cleanEnv } from './agent.mjs'
 import { MEMORY_DIR } from './memory/index.mjs'
@@ -25,7 +25,22 @@ const MAX_TURNS_PER_SESSION = Number(process.env.JARVIS_MAX_TURNS || 30)
 const MCP_FILE = join(BRAIN_DIR, 'mcp.json')
 const PERSONA_FILE = join(BRAIN_DIR, 'persona.md')
 
-const MEMORY_TOOLS = ['calendar_list', 'get_health', 'view_todo', 'list_goals', 'upcoming_celebrations', 'memory_stats', 'read_note', 'search_notes', 'remember', 'add_todo', 'complete_todo', 'add_event', 'log_day', 'write_note']
+const MEMORY_TOOLS = ['calendar_list', 'get_health', 'view_todo', 'list_goals', 'upcoming_celebrations', 'memory_stats', 'read_note', 'search_notes', 'remember', 'add_todo', 'complete_todo', 'add_event', 'log_day', 'write_note', 'remind', 'search_messages', 'read_thread']
+
+/**
+ * Permission rule for the built-in Read tool, limited to one folder. Claude Code writes absolute
+ * paths in rules with a double slash (`Read(//Users/…/**)`), Windows drives as `//c/…`. A path
+ * with brackets cannot be written into the tool list, so null means "no narrow rule possible".
+ */
+export function readRule(dir) {
+  const abs = resolve(dir).replace(/\\/g, '/')
+  if (/[()]/.test(abs)) return null
+  const win = /^([A-Za-z]):\/(.*)$/.exec(abs)
+  return `Read(/${win ? `/${win[1].toLowerCase()}/${win[2]}` : abs}/**)`
+}
+
+/** Files dropped into the HUD land here (memory/prilohy): the only place the brain may open with Read. */
+const ATTACH_DIR = join(MEMORY_DIR, 'prilohy')
 
 export function allowedTools() {
   return [
@@ -36,13 +51,21 @@ export function allowedTools() {
     'mcp__jarvis-hud__hud_card',
     'mcp__jarvis-hud__hud_log',
     'mcp__jarvis-hud__weather',
+    'mcp__jarvis-hud__call_user',
     'mcp__jarvis-hud__agent_task',
     'mcp__jarvis-hud__agent_jobs',
     'mcp__jarvis-hud__agent_reply',
     'mcp__jarvis-hud__agent_stop',
     'WebSearch',
     'WebFetch',
+    // Attachments: the brain looks at dropped photos and documents itself. Only inside memory/prilohy.
+    readRule(ATTACH_DIR) ?? 'Read',
   ]
+}
+
+/** Never readable, whatever else is allowed: the HUD's own tokens and state in data/brain. */
+export function deniedTools() {
+  return [readRule(BRAIN_DIR)].filter(Boolean)
 }
 
 /** MCP server config for the CLI. File is 0600 in data/brain (never committed), tokens never go to the log. */
@@ -130,8 +153,9 @@ export class Brain {
       '--system-prompt-file', PERSONA_FILE,
       '--mcp-config', MCP_FILE,
       '--strict-mcp-config',
-      '--tools', 'WebSearch,WebFetch',
+      '--tools', 'WebSearch,WebFetch,Read',
       '--allowedTools', allowedTools().join(','),
+      ...(deniedTools().length ? ['--disallowedTools', deniedTools().join(',')] : []),
       '--permission-mode', 'dontAsk',
       '--setting-sources', 'project',
       '--disable-slash-commands',

@@ -21,6 +21,8 @@ import { createSpeech } from './speech.js'
 import { createApi } from './api.js'
 import { createWake } from './wake.js'
 import { createJobs, demoJobs } from './jobs.js'
+import { createDrop } from './drop.js'
+import { createPeople } from './people.js'
 import { DEMO_HISTORY } from './demo.js'
 import { toolIcon } from './icons.js'
 import { levelAt, loadAudio, play, syntheticLevel, syntheticWave, waveAt } from './audio.js'
@@ -254,6 +256,9 @@ let film = params.get('film') === '1'
 let keysHidden = false
 let wake = null
 let jobs = null
+/** Dropped files and imports (drop.js) and the people review (people.js). Not in capture and scenes. */
+let drop = null
+let people = null
 let jobsSince = null
 let micState = 'off'
 /** Jeden prehrávač hlasu: appka na ploche, inak karta v prehliadači, keď appka nebeží. */
@@ -643,6 +648,7 @@ function connectEvents() {
   on('snapshot', (snap) => paint('snapshot', () => onSnapshot(snap)))
   // Úlohy: bez wakeUp, bežiaca úloha pokojový režim nebrzdí.
   on('job', (job) => jobs?.apply(job))
+  on('import', (ev) => drop?.applyImport(ev))
   on('status', onStatus)
   on('mode', (m) => typeof m?.film === 'boolean' && setFilm(m.film, { remote: true }))
   source.addEventListener('open', () => {
@@ -684,13 +690,16 @@ async function send(text, via = 'text') {
   const clean = String(text ?? '').trim()
   if (!clean) return
   speech.unlock()
+  // Files waiting above the command bar go with this message.
+  const files = drop?.take() ?? []
   try {
-    const res = await api.chat(clean, via, MOCK ? { mock: true } : {})
+    const res = await api.chat(clean, via, { ...(MOCK ? { mock: true } : {}), ...(files.length ? { attachments: files.map((a) => a.rel) } : {}) })
     if (res?.turn !== undefined) {
-      chat.apply({ turn: res.turn, phase: 'user', text: clean, via })
+      chat.apply({ turn: res.turn, phase: 'user', text: clean, via, attachments: files })
       chat.apply({ turn: res.turn, phase: 'start' })
     }
   } catch (err) {
+    drop?.restore(files)
     const turn = `local-${Date.now()}`
     chat.apply({ turn, phase: 'user', text: clean, via })
     chat.apply({ turn, phase: 'error', message: errorText(err, 'Správa neodišla') })
@@ -787,15 +796,20 @@ async function pttStop({ cancel = false } = {}) {
   // Kým server nepošle `voice transcribing`, riadok ukazuje prepis hneď.
   voice.local = 'transcribing'
   voice.localAt = now()
+  const files = drop?.take() ?? []
   try {
-    const res = await api.stt(rec.blob)
+    const res = await api.stt(rec.blob, files.map((a) => a.rel))
     if (res?.text) {
       if (res.turn !== undefined && res.turn !== null) {
-        chat.apply({ turn: res.turn, phase: 'user', text: res.text, via: 'voice' })
+        chat.apply({ turn: res.turn, phase: 'user', text: res.text, via: 'voice', attachments: files })
         chat.apply({ turn: res.turn, phase: 'start' })
       }
-    } else voice.notice = { text: 'Nič som nepočul', at: now() }
+    } else {
+      drop?.restore(files)
+      voice.notice = { text: 'Nič som nepočul', at: now() }
+    }
   } catch (err) {
+    drop?.restore(files)
     ui.toast(errorText(err, 'Prepis hlasu'), { kind: 'warn', iconName: 'mic' })
   } finally {
     if (voice.local === 'transcribing') voice.local = null
@@ -830,6 +844,8 @@ function setFilm(on, { remote = false } = {}) {
   film = on
   chat.setFilm(on)
   dossier?.setFilm(on)
+  // Names of people must not stay on a recorded screen.
+  if (on) people?.close()
   document.body.classList.toggle('film', on)
   renderStatusChips()
   if (!remote && !CAPTURE && !scene) api.mode(on).catch((err) => ui.toast(errorText(err, 'Režim natáčania'), { kind: 'warn', iconName: 'film' }))
@@ -1125,7 +1141,11 @@ async function main() {
     capture: CAPTURE,
     onChange: () => paint('jobs', () => ui.renderJobsChip(jobs.active, jobs.waiting)),
   })
-  chat = createChat({ onSend: (text, via) => send(text, via), capture: CAPTURE })
+  chat = createChat({ onSend: (text, via) => send(text, via), capture: CAPTURE, fileUrl: api.fileUrl })
+  if (!CAPTURE && !SCENE_ID) {
+    people = createPeople({ api, ui, isFilm: () => film, onApplied: () => drop?.load() })
+    drop = createDrop({ api, ui, desktop: DESKTOP, onSend: (text, via) => send(text, via), onReview: () => people.open() })
+  }
   ui.setSnapshot(snapshot, nodes)
   if (!counted && !SCENE_ID)
     loadInnerCounts(30_000).then((ok) => {
@@ -1149,6 +1169,7 @@ async function main() {
   if (params.has('debug')) {
     window.__hudCore = core
     window.__hudDossier = dossier
+    window.__hudDrop = drop
   }
   layout()
   window.addEventListener('resize', layout)
@@ -1177,6 +1198,8 @@ async function main() {
       connectEvents()
       refreshStatus()
       setInterval(refreshStatus, 30_000)
+      drop?.load()
+      people?.openFromHash()
       if (film) api.mode(true).catch(() => undefined)
     }
   }

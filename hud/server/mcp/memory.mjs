@@ -11,6 +11,7 @@ import { addEvent, calendarRange } from '../memory/calendar.mjs'
 import { FILES, FOLDERS, addTodo, appendUnder, completeTodo, dayStats, findNote, getIndex, goals, logDay, search, slugify, stats, todos, writeNote } from '../memory/index.mjs'
 import { DOW_LONG, addDays, dowOf, isoDay } from '../util.mjs'
 import { READ_ONLY, serveMcp } from './stdio.mjs'
+import { formatHits, search as searchMessages, thread as readThread } from '../../../scripts/import/search.mjs'
 
 const dayArg = (v, fallback) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : fallback)
 const fmtMin = (m) => (m === null || m === undefined ? '–' : `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')} min`)
@@ -185,6 +186,54 @@ serveMcp({
       },
     },
     {
+      name: 'search_messages',
+      description:
+        'Hľadá v importovaných konverzáciách používateľa (Instagram, Messenger, WhatsApp, Discord, Telegram, rozhovory s ChatGPT a Claude). Nezáleží na veľkosti písmen ani na diakritike. query = hľadaný text (môže byť prázdny, ak je zadaná person: vtedy vráti jej najnovšie správy). person = meno človeka, source = len jeden zdroj, from a to = dátumy YYYY-MM-DD. Vráti najnovšie zhody s dvoma správami pred a po a s id vlákna pre read_thread.',
+      annotations: READ_ONLY,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+          person: { type: 'string' },
+          source: { type: 'string', enum: ['instagram', 'facebook', 'whatsapp', 'discord', 'telegram', 'chatgpt', 'claude'] },
+          from: { type: 'string', description: 'YYYY-MM-DD' },
+          to: { type: 'string', description: 'YYYY-MM-DD' },
+          limit: { type: 'integer', minimum: 1, maximum: 50 },
+        },
+      },
+      handler: async ({ query, person, source, from, to, limit }) => {
+        const opts = { person: person || null, source: source || null, from: dayArg(from, null), to: dayArg(to, null), limit: Math.min(50, Number(limit) || 10) }
+        const q = String(query ?? '').trim()
+        let res = await searchMessages(q, opts)
+        let note = ''
+        // Slovak words change their endings ("Žilina", "v Žiline"): one word without its last vowel finds them all
+        const stem = /^\S{5,}$/.test(q) ? q.replace(/[aáeéiíoóuúyý]+$/i, '') : q
+        if (!res.hits.length && stem !== q && stem.length >= 4) {
+          res = await searchMessages(stem, opts)
+          note = ` (hľadal som aj iné tvary slova: „${stem}")`
+        }
+        if (!res.hits.length) return `V importovaných konverzáciách som k „${q || person || ''}" nič nenašiel. Skús kratší výraz alebo len koreň slova.`
+        return `Zhôd spolu: ${res.total}, ukazujem ${res.hits.length} najnovších${note}.\n\n${formatHits(res)}`
+      },
+    },
+    {
+      name: 'read_thread',
+      description:
+        'Prečíta časť jednej importovanej konverzácie. source a thread sú z výsledku search_messages (thread je id vlákna). around = dátum alebo čas (YYYY-MM-DD alebo ISO), okolo ktorého má čítať; bez neho vráti najnovšie správy. limit = počet správ, default 60.',
+      annotations: READ_ONLY,
+      inputSchema: {
+        type: 'object',
+        properties: { source: { type: 'string' }, thread: { type: 'string' }, around: { type: 'string' }, limit: { type: 'integer', minimum: 1, maximum: 200 } },
+        required: ['source', 'thread'],
+      },
+      handler: async ({ source, thread, around, limit }) => {
+        const res = await readThread(String(source ?? ''), String(thread ?? ''), { around: around || null, limit: Math.min(200, Number(limit) || 60) })
+        const local = (t) => new Date(t).toLocaleString('sv-SE').slice(0, 16)
+        const lines = res.messages.map((m) => `${local(m.t)} ${m.from || 'systém'}: ${(m.text || `[${m.type}]`).slice(0, 1500)}`)
+        return `# ${res.title} (${res.source}, ${res.kind}, spolu ${res.total} správ, ukazujem ${res.messages.length})\n\n${lines.join('\n')}`
+      },
+    },
+    {
       name: 'remember',
       description:
         'Zapíše nový trvalý fakt do pamäte. about = koho alebo čoho sa týka: prázdne alebo "ja" = používateľ sám (ja.md), meno človeka = jeho poznámka v ludia (vytvorí sa, ak nie je), názov projektu = poznámka v projekty. fact = jedna veta. Pre nového človeka pridaj relation (napr. rodina, priateľ, kolega, klient) a ak vieš, birthday (YYYY-MM-DD alebo MM-DD).',
@@ -224,6 +273,21 @@ serveMcp({
         const line = await addTodo(String(text), dayArg(due, null))
         await changed()
         return `Pridané: ${line}`
+      },
+    },
+    {
+      name: 'remind',
+      description:
+        'Nastaví pripomienku: v daný deň a čas ju Jarvis sám povie nahlas, bez toho, aby sa používateľ pýtal. Použi na „pripomeň mi…". day YYYY-MM-DD, time HH:MM (24 h). call: true, keď mu máš v ten čas aj zavolať na mobil („zavolaj mi o tretej a pripomeň…", alebo keď to nesmie zmeškať). Na udalosti s trvaním použi add_event.',
+      inputSchema: { type: 'object', properties: { text: { type: 'string' }, day: { type: 'string' }, time: { type: 'string' }, call: { type: 'boolean' } }, required: ['text', 'day', 'time'] },
+      handler: async ({ text, day, time, call }) => {
+        const d = dayArg(day, null)
+        const t = /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(time ?? '')) ? String(time).padStart(5, '0') : null
+        const what = String(text ?? '').replace(/\s+/g, ' ').trim()
+        if (!d || !t || !what) return { text: 'Pripomienka potrebuje text, deň (YYYY-MM-DD) a čas (HH:MM).', isError: true }
+        await appendUnder('pripomienky.md', 'Pripomienky', `- [ ] ${d} ${t} ${call === true ? '!' : ''}${what.replace(/^!+\s*/, '')}`)
+        await changed()
+        return `Pripomeniem ${label(d)} o ${t}${call === true ? ' aj telefonátom' : ''}: ${what}`
       },
     },
     {

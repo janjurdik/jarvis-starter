@@ -100,12 +100,13 @@ function stopLocal() {
 
 // ── turn ─────────────────────────────────────────────────────────────────
 
-function makeTurn({ text, via, silent, mock, scenario }) {
+function makeTurn({ text, via, silent, mock, scenario, attachments = [] }) {
   const id = ++turnSeq
   const turn = {
     id,
     via,
     user: text,
+    attachments,
     text: '',
     tools: new Map(),
     cards: [],
@@ -150,11 +151,15 @@ function makeTurn({ text, via, silent, mock, scenario }) {
   return turn
 }
 
+/** Attachments as the page sees them: no absolute paths. */
+const pubAttachments = (items = []) => items.map(({ rel, name, type }) => ({ rel, name, type }))
+
 function historyEntry(turn) {
   return {
     turn: turn.id,
     via: turn.via,
     user: turn.user,
+    attachments: pubAttachments(turn.attachments),
     jarvis: turn.text.trim(),
     tools: [...turn.tools.values()].map(({ name, label, icon, node, status }) => ({ name, label, icon, node, status })),
     cards: turn.cards,
@@ -190,7 +195,7 @@ function finish(turn, { error = null, stopped = false, meta = {} } = {}) {
   history.push(entry)
   if (history.length > 20) history.shift()
   // Real conversations are kept for the evening summary (data/chat). Filming and mock turns are not.
-  if (!turn.mock && !turn.film && !error) logTurn({ user: turn.user, jarvis: entry.jarvis, via: turn.via, tools: entry.tools.map((t) => t.name), at: turn.at }).catch(() => {})
+  if (!turn.mock && !turn.film && !error) logTurn({ user: turn.attachments.length ? `${turn.user} [prílohy: ${turn.attachments.map((a) => a.rel).join(', ')}]` : turn.user, jarvis: entry.jarvis, via: turn.via, tools: entry.tools.map((t) => t.name), at: turn.at }).catch(() => {})
   const m = {
     turn: turn.id,
     mock: turn.mock,
@@ -247,7 +252,8 @@ function sinkFor(turn) {
     },
     tool({ id, name, input, status }) {
       if (!live() || !id) return
-      const meta = toolMeta(name, input, { film: state.film })
+      // The built-in Read is only ever used on dropped files (see brain.mjs).
+      const meta = name === 'Read' ? { name, label: 'Pozerám prílohu', icon: 'eye', node: 'fotky' } : toolMeta(name, input, { film: state.film })
       if (HIDDEN_TOOLS.has(meta.name)) return
       const prev = turn.tools.get(id)
       if (!prev && status === 'run') turn.splitter.softFlush()
@@ -288,16 +294,21 @@ export const currentTurnId = () => (current?.active ? current.id : null)
 /** Bežiaci turn pre úlohy na pozadí (zdedia silent a mock). */
 export const currentTurnInfo = () => (current?.active ? { id: current.id, silent: current.silent, mock: current.mock } : null)
 
-/** Spustí turn. Bežiaci turn sa preruší (nová veta má prednosť). Vráti id turnu. */
-export function sendChat({ text, via = 'text', mock = false, silent = false, scenario = null }) {
+/**
+ * Spustí turn. Bežiaci turn sa preruší (nová veta má prednosť). Vráti id turnu.
+ * `attachments` are files already stored in memory/prilohy ([{ rel, name, type, path }], checked by
+ * the caller): the brain gets their absolute paths on an extra line and opens them with Read.
+ */
+export function sendChat({ text, via = 'text', mock = false, silent = false, scenario = null, attachments = [] }) {
   const message = clean(text, 2000)
   if (!message) throw Object.assign(new Error('chýba text'), { status: 400 })
   if (current?.active) stopChat('nová správa')
   clearTimeout(idleTimer)
   const useMock = mockAll || mock || !brain
-  const turn = makeTurn({ text: message, via: via === 'voice' ? 'voice' : 'text', silent, mock: useMock, scenario })
+  const files = Array.isArray(attachments) ? attachments.filter((a) => a?.path && a?.rel).slice(0, 12) : []
+  const turn = makeTurn({ text: message, via: via === 'voice' ? 'voice' : 'text', silent, mock: useMock, scenario, attachments: files })
   current = turn
-  send('chat', { turn: turn.id, phase: 'user', text: message, via: turn.via })
+  send('chat', { turn: turn.id, phase: 'user', text: message, via: turn.via, ...(files.length ? { attachments: pubAttachments(files) } : {}) })
   send('chat', { turn: turn.id, phase: 'start' })
   setVoice('thinking', { turn: turn.id })
   if (!silent) warmTts()
@@ -305,7 +316,7 @@ export function sendChat({ text, via = 'text', mock = false, silent = false, sce
   turn.sink = sink
   const job = useMock
     ? runMock(sink, { text: message, scenario, snapshot: getSnapshot() })
-    : brain.run({ id: turn.id, text: message, via: turn.via, film: state.film, extra: getExtraContext() }, sink)
+    : brain.run({ id: turn.id, text: files.length ? `${message}\n[prílohy: ${files.map((a) => a.path).join(', ')}]` : message, via: turn.via, film: state.film, extra: getExtraContext() }, sink)
   Promise.resolve(job).catch((err) => sink.error(errMsg(err)))
   return turn.id
 }

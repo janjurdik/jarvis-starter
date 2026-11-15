@@ -14,6 +14,7 @@
  */
 import './server/env.mjs'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { spawn } from 'node:child_process'
 import { createReadStream, readFileSync, statSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -35,6 +36,9 @@ import { BRAIN_DIR, REPO, clean, errMsg, isLoopback, log, readJson, readRaw, sen
 import { STT_ENGINE, sttLocal, sttState, stopStt, transcribeAudio, warmStt } from './server/stt.mjs'
 import { getWeather } from './server/weather.mjs'
 import { routeInner } from './server/inner.mjs'
+import { initImports, loadImports, resolveAttachments, routeImportGet, routeImportPost, stopImports } from './server/imports.mjs'
+import { startUpdateWatch, updateInfo } from './server/updates.mjs'
+import { callProblems } from './server/call.mjs'
 
 const ROOT = import.meta.dirname
 const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
@@ -113,6 +117,33 @@ const tokenOk = (given, expected) => {
 }
 
 /**
+ * Who is asking. "Local" is only a request made on this computer straight to localhost: loopback
+ * socket, a localhost Host header and no proxy headers. Everything else is remote and needs the
+ * token, including requests that a tunnel or `tailscale serve` forwards from 127.0.0.1, and a
+ * foreign web page that points its own domain at 127.0.0.1 (DNS rebinding).
+ */
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+const PROXY_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'forwarded', 'x-real-ip', 'cf-connecting-ip', 'tailscale-user-login']
+const hostName = (req) => String(req.headers.host ?? '').replace(/:\d+$/, '').toLowerCase()
+const isIpHost = (h) => /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || /^\[[0-9a-f:.]+\]$/.test(h)
+function isLocal(req) {
+  return isLoopback(req.socket.remoteAddress) && LOCAL_HOSTS.has(hostName(req)) && !PROXY_HEADERS.some((h) => req.headers[h] !== undefined)
+}
+/** Names this server may be reached under from the network, when the user opened it on purpose (HUD_HOST=0.0.0.0): JARVIS_ALLOWED_HOSTS. */
+const remoteHosts = () => new Set(String(process.env.JARVIS_ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean))
+/** A Host header we do not know is refused outright: it is either a misconfigured tunnel or an attack. */
+function hostAllowed(req) {
+  const h = hostName(req)
+  return LOCAL_HOSTS.has(h) || isIpHost(h) || remoteHosts().has(h)
+}
+
+/** The token is 192 random bits from the header, or ?token= where headers cannot be set (EventSource). */
+function remoteTokenOk(req, url = null) {
+  const given = req.headers['x-hud-token'] ?? url?.searchParams.get('token') ?? ''
+  return Boolean(given) && tokenOk(given, HUD_TOKEN)
+}
+
+/**
  * Prehliadač posiela Origin. Cudzia stránka otvorená v tom istom Chrome by inak mohla cez localhost
  * spustiť príkaz (CSRF, WebSocket hijacking) a mozog ovláda počítač. Bez Origin = curl, skripty, MCP.
  */
@@ -128,16 +159,16 @@ function originOk(req) {
 
 /** POST len z loopbacku (z vlastnej stránky), zo siete s x-hud-token. */
 function allowPost(req) {
-  if (tokenOk(req.headers['x-hud-token'], HUD_TOKEN)) return true
-  return isLoopback(req.socket.remoteAddress) && originOk(req)
+  if (isLocal(req)) return originOk(req)
+  return originOk(req) && remoteTokenOk(req)
 }
 
 /** Osobné dáta (rozhovor, snapshot, hlas) zo siete len s tokenom v hlavičke alebo ?token= (EventSource). */
 function allowRead(req, url) {
-  if (isLoopback(req.socket.remoteAddress)) return true
-  return tokenOk(req.headers['x-hud-token'] ?? url.searchParams.get('token'), HUD_TOKEN)
+  if (isLocal(req)) return true
+  return remoteTokenOk(req, url)
 }
-const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|inner|setup)|tts\/)/
+const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|inner|setup|attachment|import|update)|tts\/)/
 
 async function serveFile(req, res, file, { cache, immutable = false }) {
   let info
@@ -276,7 +307,7 @@ const EVENT_TYPES = new Set(['info', 'action', 'alert', 'done', 'guard', 'voice'
 
 /** A LOG line from another local process (routines, scripts). */
 async function postEvent(req, res) {
-  if (!isLoopback(req.socket.remoteAddress)) return sendJson(res, 403, { ok: false, error: 'udalosti len z localhostu' })
+  if (!isLocal(req)) return sendJson(res, 403, { ok: false, error: 'udalosti len z localhostu' })
   const body = await readJson(req)
   const event = {
     type: EVENT_TYPES.has(body.type) ? body.type : 'info',
@@ -298,13 +329,17 @@ async function postEvent(req, res) {
  */
 let announceSeq = 0
 async function postAnnounce(req, res) {
-  if (!isLoopback(req.socket.remoteAddress)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
+  if (!isLocal(req)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
   const body = await readJson(req, 64_000)
   const title = clean(body.title, 60) || 'Jarvis'
   const text = typeof body.text === 'string' ? body.text.trim() : ''
   if (!text && !body.say) return sendJson(res, 400, { ok: false, error: 'chýba text' })
   const card = normalizeCard({ kind: 'text', title, icon: slug(body.icon) || 'routine', node: slug(body.node) || 'rutiny', text: text.replace(/\s+/g, ' ').slice(0, 400), accent: 'ice' }, `c-r${++announceSeq}-${Date.now().toString(36)}`)
-  if (card.ok) send('chat', { turn: `routine-${announceSeq}`, phase: 'card', card: card.card })
+  if (card.ok) {
+    send('chat', { turn: `routine-${announceSeq}`, phase: 'card', card: card.card })
+    // A card on its own is a finished turn: without this the chat keeps showing the thinking dots under it.
+    send('chat', { turn: `routine-${announceSeq}`, phase: 'done', text: '', ms: 0, stopped: false })
+  }
   sendHud({ type: 'done', text: `${title} · pripravené`, icon: 'routine', say: null, heard: null, node: 'rutiny', source: 'jarvis' })
   const spoken = clean(body.say, 900) || clean(text, 900)
   if (body.silent !== true && spoken && clientCount() > 0) {
@@ -337,7 +372,14 @@ async function postStt(req, res) {
       sendHud({ type: 'info', text: 'Nič som nepočul', icon: 'mic', say: null, heard: null, node: null, source: 'hud' })
       return sendJson(res, 200, { ok: true, text: '', turn: null, ms: Date.now() - t0 })
     }
-    const turn = sendIt ? sendChat({ text: clean1, via: 'voice' }) : null
+    // Files waiting above the command bar go with the spoken message too (?attach=<JSON list of paths>).
+    let attach = []
+    try {
+      attach = JSON.parse(url.searchParams.get('attach') ?? '[]')
+    } catch {
+      attach = []
+    }
+    const turn = sendIt ? sendChat({ text: clean1, via: 'voice', attachments: await resolveAttachments(attach) }) : null
     if (!sendIt) setVoice('idle')
     return sendJson(res, 200, { ok: true, text: clean1, turn, ms: Date.now() - t0 })
   } catch (err) {
@@ -381,10 +423,21 @@ async function routePost(req, res, path) {
     return postAnnounce(req, res)
   }
   if (path === '/api/brain/hud') {
-    if (!isLoopback(req.socket.remoteAddress) || !tokenOk(req.headers['x-brain-token'], BRAIN_TOKEN)) return sendJson(res, 403, { ok: false, error: 'zlý token' })
+    if (!isLocal(req) || !tokenOk(req.headers['x-brain-token'], BRAIN_TOKEN)) return sendJson(res, 403, { ok: false, error: 'zlý token' })
     const body = await readJson(req, 64_000)
     if (body.action === 'memory_changed') {
       pushSnapshot('zápis do pamäte').catch(() => {})
+      return sendJson(res, 200, { ok: true })
+    }
+    if (body.action === 'call') {
+      // The brain asked for a phone call: the call script runs on its own, the turn does not wait for it.
+      const problems = callProblems()
+      const text = clean(body.text, 1200).replace(/^-+/, '')
+      if (problems.length) return sendJson(res, 400, { ok: false, error: `Hovory nie sú nastavené. ${problems[0]} Postup je v docs/HOVORY.md.` })
+      if (!text) return sendJson(res, 400, { ok: false, error: 'chýba text' })
+      if (currentTurnInfo()?.mock) return sendJson(res, 200, { ok: true, mock: true })
+      spawn(process.execPath, [join(REPO, 'scripts', 'call.mjs'), text, '--source=hud'], { cwd: REPO, detached: true, stdio: 'ignore', windowsHide: true }).unref()
+      sendHud({ type: 'action', text: 'Volám na mobil', icon: 'alarm', say: null, heard: null, node: null, source: 'jarvis' })
       return sendJson(res, 200, { ok: true })
     }
     const result = String(body.action ?? '').startsWith('job_') ? await jobAction(body) : hudAction(body)
@@ -392,6 +445,8 @@ async function routePost(req, res, path) {
   }
   if (!allowPost(req)) return sendJson(res, 403, { ok: false, error: 'POST len z localhostu alebo s x-hud-token' })
   if (path === '/api/stt') return postStt(req, res)
+  // Uploads (streamed bodies), imports and the people review: server/imports.mjs.
+  if (await routeImportPost(req, res, new URL(req.url ?? '/', 'http://hud.local'), { local: isLocal(req), film: state.film })) return
   const body = await readJson(req, 32_000)
   const jobPath = /^\/api\/jobs\/(j\d+)\/(stop|reply)$/.exec(path)
   if (jobPath) {
@@ -409,7 +464,8 @@ async function routePost(req, res, path) {
 
   switch (path) {
     case '/api/chat': {
-      const turn = sendChat({ text: body.text, via: body.via, mock: body.mock === true, silent: body.silent === true, scenario: typeof body.scenario === 'string' ? body.scenario : null })
+      const attachments = await resolveAttachments(body.attachments)
+      const turn = sendChat({ text: body.text, via: body.via, mock: body.mock === true, silent: body.silent === true, scenario: typeof body.scenario === 'string' ? body.scenario : null, attachments })
       return sendJson(res, 202, { ok: true, turn })
     }
     case '/api/chat/stop':
@@ -460,7 +516,7 @@ async function routePost(req, res, path) {
       return sendJson(res, 202, { ok: true })
     case '/api/quit':
       // Lets `node scripts/hud.mjs --stop` end the server no matter who started it.
-      if (!isLoopback(req.socket.remoteAddress)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
+      if (!isLocal(req)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
       sendJson(res, 200, { ok: true })
       setTimeout(() => shutdown('api/quit'), 50)
       return
@@ -477,10 +533,12 @@ async function route(req, res) {
   const url = new URL(req.url ?? '/', 'http://hud.local')
   const path = url.pathname
 
+  if (!hostAllowed(req)) return sendJson(res, 421, { ok: false, error: 'neznáma adresa: Jarvis odpovedá len na localhost' })
   if (req.method === 'POST') return routePost(req, res, path)
   if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { ok: false, error: 'len GET, HEAD a POST' })
   if (PRIVATE_GET.test(path) && !allowRead(req, url)) return sendJson(res, 403, { ok: false, error: 'zo siete len s tokenom (x-hud-token alebo ?token=)' })
 
+  if (path === '/api/update') return sendJson(res, 200, { ok: true, ...(await updateInfo()) })
   if (path === '/api/events') return openStream(req, res, { role: url.searchParams.get('client') === 'desktop' ? 'desktop' : 'browser' })
   if (path === '/api/status') return sendJson(res, 200, statusBody())
   if (path === '/api/setup') return sendJson(res, 200, await setupBody())
@@ -491,6 +549,8 @@ async function route(req, res) {
   if (path === '/api/snapshot') return sendJson(res, 200, snapshotFor() ?? (await refreshSnapshot('prvé načítanie')) ?? {})
   // Inner worlds of the planets from the memory folder (server/inner.mjs), 403 in filming mode.
   if (await routeInner(req, res, url, { film: state.film })) return
+  // Attachments, import status and the people review (server/imports.mjs).
+  if (await routeImportGet(req, res, url, { film: state.film })) return
   if (path === '/api/weather') {
     try {
       const days = Math.min(7, Math.max(1, Number(url.searchParams.get('days')) || 3))
@@ -571,7 +631,10 @@ async function drainAnnounce() {
         },
         `c-${job.id}-${Date.now().toString(36)}`,
       )
-      if (res.ok) send('chat', { turn: `job-${job.id}`, phase: 'card', card: res.card, job: job.id })
+      if (res.ok) {
+        send('chat', { turn: `job-${job.id}`, phase: 'card', card: res.card, job: job.id })
+        send('chat', { turn: `job-${job.id}`, phase: 'done', text: '', ms: 0, stopped: false })
+      }
       sendHud({ type: job.status === 'done' ? 'done' : 'alert', text: `Úloha ${title} · ${STATUS_SK[job.status] ?? job.status}`, icon: job.status === 'done' ? 'check' : 'alarm', say: null, heard: null, node: 'projekty', source: 'jarvis' })
       pushSnapshot('úloha').catch(() => {})
       if (!silent) {
@@ -595,8 +658,24 @@ initJobs({
 })
 if (PRIMARY) loadJobs().catch(() => {})
 
+initImports({
+  send,
+  sendHud,
+  createJob,
+  pushSnapshot,
+  isFilm: () => state.film,
+  persist: PRIMARY,
+  // One sentence after the people review, said once Jarvis is quiet (same queue as routines).
+  say: (text) => {
+    if (!text || clientCount() === 0) return
+    announceQueue.push({ say: text })
+    drainAnnounce().catch((err) => log('import', errMsg(err)))
+  },
+})
+if (PRIMARY) loadImports().catch(() => {})
+
 attachMic(server, {
-  allow: (req, url) => tokenOk(req.headers['x-hud-token'] ?? url.searchParams.get('token'), HUD_TOKEN) || (isLoopback(req.socket.remoteAddress) && originOk(req)),
+  allow: (req, url) => hostAllowed(req) && originOk(req) && (isLocal(req) || remoteTokenOk(req, url)),
   setVoice,
   voiceState,
   onCommand: (text, { mock, silent }) => {
@@ -625,6 +704,7 @@ function shutdown(signal) {
   log('hud', `koniec (${signal})`)
   brain?.stop()
   stopAllJobs()
+  stopImports()
   stopMic()
   stopTts()
   stopStt()
@@ -652,5 +732,20 @@ server.listen(PORT, HOST, async () => {
       .catch(() => {})
     if (brain && CLAUDE && process.env.JARVIS_BRAIN_AUTOSTART !== '0') brain.start('štart servera').catch((err) => log('brain', errMsg(err)))
     if (state.wake) setMicWake(true)
+    // A new version on GitHub: say it once and wait for the user's yes (the update itself is docs/AKTUALIZACIE.md).
+    startUpdateWatch({
+      onAvailable: ({ version, summary }) => {
+        const card = normalizeCard({ kind: 'text', title: `Nová verzia Jarvisa ${version}`, icon: 'routine', node: 'rutiny', text: clean(summary, 400) || 'Je dostupná nová verzia.', caption: 'Povedz „aktualizuj Jarvisa"', accent: 'ice' }, `c-u-${Date.now().toString(36)}`)
+        if (card.ok) {
+          send('chat', { turn: `update-${version}`, phase: 'card', card: card.card })
+          send('chat', { turn: `update-${version}`, phase: 'done', text: '', ms: 0, stopped: false })
+        }
+        sendHud({ type: 'info', text: `Nová verzia ${version}`, icon: 'routine', say: null, heard: null, node: 'rutiny', source: 'jarvis' })
+        if (clientCount() > 0) {
+          announceQueue.push({ say: `Vyšla nová verzia Jarvisa, ${version}. Stačí povedať aktualizuj a nainštalujem ju tak, aby vám ostali vaše úpravy.` })
+          drainAnnounce().catch((err) => log('update', errMsg(err)))
+        }
+      },
+    })
   }
 })

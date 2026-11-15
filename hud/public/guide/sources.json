@@ -1,0 +1,42 @@
+{
+  "about": "List of export sources for the guide at /guide/. Deep link: /guide/#<id> or /guide/#<id>/<variant>. level: 1 easy, 2 medium, 3 harder. waitDays: typical wait in days (0 = same day, null = not known), maxDays: official maximum, both null when the file is ready at once.",
+  "groups": [
+    { "id": "ludia", "name": "Ľudia a rozhovory", "tiles": ["instagram", "facebook", "whatsapp", "discord", "telegram"] },
+    { "id": "ai", "name": "Tvoje AI", "tiles": ["chatgpt", "claude"] },
+    { "id": "zabava", "name": "Hudba a zábava", "tiles": ["spotify", "apple", "steam", "netflix", "google"] },
+    { "id": "zivot", "name": "Miesta a život", "tiles": ["google", "apple", "health", "strava", "garmin"] },
+    { "id": "citanie", "name": "Čítanie a poznámky", "tiles": ["notion", "kindle", "goodreads", "letterboxd"] },
+    { "id": "ostatne", "name": "Ostatné", "tiles": ["x", "linkedin", "tiktok", "snapchat"] }
+  ],
+  "start": ["instagram", "whatsapp", "chatgpt"],
+  "sources": [
+    { "id": "instagram", "name": "Instagram", "mono": "IG", "group": "ludia", "gives": "Správy, ľudia, ktorých sleduješ, a tvoje príspevky.", "where": "telefón alebo web", "devices": ["phone", "web"], "time": "5 minút a potom čakanie do 2 dní", "level": 2, "waits": true, "waitDays": 2, "maxDays": 30, "why": "Roky správ s ľuďmi, na ktorých ti záleží." },
+    { "id": "facebook", "name": "Facebook a Messenger", "mono": "FB", "group": "ludia", "gives": "Roky správ z Messengera, priatelia a príspevky.", "where": "web, šifrované chaty len na počítači", "devices": ["web", "computer"], "time": "10 minút a potom čakanie pár hodín", "level": 3, "waits": true, "waitDays": 1, "maxDays": 30 },
+    { "id": "whatsapp", "name": "WhatsApp", "mono": "WA", "group": "ludia", "gives": "Rozhovory s najbližšími ľuďmi.", "where": "telefón", "devices": ["phone"], "time": "1 minúta na každý chat, bez čakania", "level": 1, "waits": false, "waitDays": null, "maxDays": null, "why": "Tu sú tvoji najbližší. Stačí 5 až 10 chatov." },
+    { "id": "discord", "name": "Discord", "mono": "DC", "group": "ludia", "gives": "Tvoje správy zo serverov a súkromných chatov.", "where": "počítač alebo telefón", "devices": ["computer", "phone"], "time": "3 minúty a potom čakanie pár dní", "level": 1, "waits": true, "waitDays": null, "waitHint": "pár dní", "maxDays": 30 },
+    { "id": "telegram", "name": "Telegram", "mono": "TG", "group": "ludia", "gives": "Celé chaty a skupiny.", "where": "počítač", "devices": ["computer"], "time": "10 minút, bez čakania na mail", "level": 2, "waits": false, "waitDays": null, "maxDays": null },
+
+    { "id": "chatgpt", "name": "ChatGPT", "mono": "GPT", "group": "ai", "gives": "Všetko, čo si kedy riešil s ChatGPT.", "where": "web", "devices": ["web"], "time": "2 minúty a potom čakanie pár hodín", "level": 1, "waits": true, "waitDays": 1, "maxDays": 7, "why": "Tvoje plány, projekty a otázky na jednom mieste." },
+    { "id": "claude", "name": "Claude", "mono": "CL", "group": "ai", "gives": "Tvoje rozhovory a projekty z Claude.", "where": "počítač", "devices": ["computer"], "time": "2 minúty a potom pár minút čakania", "level": 1, "waits": true, "waitDays": 0, "maxDays": null },
+
+    { "id": "spotify", "name": "Spotify", "mono": "SP", "group": "zabava", "gives": "Čo počúvaš, kedy a ako často.", "where": "web", "devices": ["web"], "time": "3 minúty a potom čakanie 5 až 30 dní", "level": 1, "waits": true, "waitDays": 5, "maxDays": 30 },
+    { "id": "steam", "name": "Steam", "mono": "ST", "group": "zabava", "gives": "Aké hry máš a kedy si ich hral.", "where": "počítač", "devices": ["computer"], "time": "nič, Jarvis si to nájde sám", "level": 1, "waits": false, "auto": true, "waitDays": null, "maxDays": null },
+    { "id": "netflix", "name": "Netflix", "mono": "NF", "group": "zabava", "gives": "Čo si kedy pozeral.", "where": "web", "devices": ["web"], "time": "2 minúty, hneď hotové", "level": 1, "waits": false, "waitDays": null, "maxDays": null },
+
+    { "id": "google", "name": "Google Takeout", "mono": "G", "group": "zivot", "gives": "História z YouTube, vyhľadávanie, kontakty, kalendár a poznámky.", "where": "počítač, história polohy z telefónu", "devices": ["computer", "phone"], "time": "10 minút a potom čakanie do pár dní", "level": 3, "waits": true, "waitDays": 1, "maxDays": null, "also": [{ "group": "zabava", "name": "YouTube cez Google", "mono": "YT", "gives": "Čo pozeráš a hľadáš na YouTube." }] },
+    { "id": "apple", "name": "Apple", "mono": "AP", "group": "zivot", "gives": "Kontakty, kalendár, poznámky a história z Apple Music.", "where": "web", "devices": ["web"], "time": "5 minút a potom čakanie do 7 dní", "level": 2, "waits": true, "waitDays": null, "maxDays": 7, "also": [{ "group": "zabava", "name": "Apple Music", "mono": "AM", "gives": "Čo si kedy počúval v Apple Music." }] },
+    { "id": "health", "name": "Apple Zdravie", "mono": "ZD", "group": "zivot", "gives": "Kroky, spánok, tréningy a srdce za celé roky.", "where": "telefón (iPhone)", "devices": ["phone"], "time": "5 minút, hneď hotové", "level": 1, "waits": false, "waitDays": null, "maxDays": null },
+    { "id": "strava", "name": "Strava", "mono": "SV", "group": "zivot", "gives": "Všetky tvoje behy, jazdy a trasy.", "where": "počítač", "devices": ["computer"], "time": "3 minúty a potom čakanie pár hodín", "level": 1, "waits": true, "waitDays": 0, "maxDays": null },
+    { "id": "garmin", "name": "Garmin", "mono": "GA", "group": "zivot", "gives": "Tréningy, spánok a stres z hodiniek.", "where": "web", "devices": ["web"], "time": "3 minúty a potom čakanie asi 2 dni", "level": 1, "waits": true, "waitDays": 2, "maxDays": 30 },
+
+    { "id": "notion", "name": "Notion", "mono": "NO", "group": "citanie", "gives": "Tvoje poznámky, plány a databázy.", "where": "počítač", "devices": ["computer"], "time": "3 minúty a potom čakanie na mail", "level": 1, "waits": true, "waitDays": 0, "maxDays": null },
+    { "id": "kindle", "name": "Kindle", "mono": "KI", "group": "citanie", "gives": "Vety, ktoré si si v knihách zvýraznil.", "where": "čítačka a počítač", "devices": ["computer"], "time": "5 minút, hneď hotové", "level": 2, "waits": false, "waitDays": null, "maxDays": null },
+    { "id": "goodreads", "name": "Goodreads", "mono": "GR", "group": "citanie", "gives": "Knihy, ktoré si čítal, a ako si ich hodnotil.", "where": "počítač", "devices": ["computer"], "time": "2 minúty, hneď hotové", "level": 1, "waits": false, "waitDays": null, "maxDays": null },
+    { "id": "letterboxd", "name": "Letterboxd", "mono": "LB", "group": "citanie", "gives": "Filmy, ktoré si videl, a tvoje hodnotenia.", "where": "web", "devices": ["web"], "time": "1 minúta, hneď hotové", "level": 1, "waits": false, "waitDays": null, "maxDays": null },
+
+    { "id": "x", "name": "X", "mono": "X", "group": "ostatne", "gives": "Tvoje príspevky, lajky a súkromné správy.", "where": "web alebo telefón", "devices": ["web", "phone"], "time": "3 minúty a potom čakanie asi deň", "level": 1, "waits": true, "waitDays": 1, "maxDays": null },
+    { "id": "linkedin", "name": "LinkedIn", "mono": "LI", "group": "ostatne", "gives": "Kontakty, správy a pracovná história.", "where": "web", "devices": ["web"], "time": "3 minúty a potom čakanie do dňa", "level": 1, "waits": true, "waitDays": 1, "maxDays": 2 },
+    { "id": "tiktok", "name": "TikTok", "mono": "TT", "group": "ostatne", "gives": "Čo pozeráš, čo sa ti páči a správy.", "where": "telefón alebo web", "devices": ["phone", "web"], "time": "3 minúty a potom čakanie pár dní", "level": 1, "waits": true, "waitDays": null, "waitHint": "pár dní", "maxDays": null },
+    { "id": "snapchat", "name": "Snapchat", "mono": "SN", "group": "ostatne", "gives": "Uložené chaty, spomienky a priatelia.", "where": "web alebo telefón", "devices": ["web", "phone"], "time": "5 minút a potom čakanie do 7 dní", "level": 2, "waits": true, "waitDays": null, "waitHint": "pár hodín až dní", "maxDays": 7 }
+  ]
+}

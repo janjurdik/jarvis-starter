@@ -496,6 +496,9 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  /* Cards may carry art that sticks out to the right. Without this the view also scrolls sideways
+     (mouse wheel with Shift, text selection), which cuts the left edge of every message. */
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;

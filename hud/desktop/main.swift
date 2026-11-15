@@ -75,7 +75,19 @@ final class HUDWindow: NSWindow {
 
 /// Prvý klik na plochu hneď funguje (klik na uzol, scroll panela), nielen aktivuje appku.
 final class HUDWebView: WKWebView {
+  /// Called when a drag carrying files enters the view, with where those files are.
+  var onDragFiles: (([URL]) -> Void)?
+
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+  /// Files dragged from Finder. The drop itself stays WebKit's own (the page gets its usual drop
+  /// event with the files); this only lets the page know the paths before it happens.
+  override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+    let found = sender.draggingPasteboard.readObjects(
+      forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+    if let urls = found as? [URL], !urls.isEmpty { onDragFiles?(urls) }
+    return super.draggingEntered(sender)
+  }
 }
 
 // MARK: - Appka
@@ -190,6 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     web.underPageBackgroundColor = window.backgroundColor
     web.isInspectable = true
     web.alphaValue = 0
+    web.onDragFiles = { [weak self] urls in self?.dragFiles(urls) }
     root.addSubview(web)
 
     window.contentView = root
@@ -248,6 +261,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
   func js(_ code: String) {
     web.evaluateJavaScript(code, completionHandler: nil)
+  }
+
+  /// A drag from Finder entered the window: the page learns where the files are. A folder or a
+  /// very big export is then read by the HUD server in place (POST /api/upload/local) instead of
+  /// being copied through the page. Smaller files and anything the server cannot reach go the
+  /// ordinary way, as an upload from the page.
+  func dragFiles(_ urls: [URL]) {
+    let items: [[String: Any]] = urls.map { url in
+      var isDir: ObjCBool = false
+      FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+      return ["name": url.lastPathComponent, "path": url.path, "dir": isDir.boolValue]
+    }
+    guard let data = try? JSONSerialization.data(withJSONObject: items),
+      let json = String(data: data, encoding: .utf8)
+    else { return }
+    js("window.__jarvisDrag && window.__jarvisDrag(\(json))")
   }
 
   // MARK: Okraje (menu lišta hore, Dock dole) pre rozloženie HUD

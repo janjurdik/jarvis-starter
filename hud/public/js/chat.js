@@ -52,11 +52,29 @@ function toolHtml(tool) {
 
 const thinkingHtml = '<span class="thinking" aria-label="Jarvis premýšľa"><i></i><i></i><i></i></span>'
 
+const ATT_ICON = { pdf: 'note', doc: 'note', table: 'chart', audio: 'music', video: 'film', archive: 'archive' }
+/** Where the page gets a private file from (main.js passes api.fileUrl, which adds the token when needed). */
+let fileUrl = (url) => url
+
+/** Attachments sent with a message: thumbnails of images, a named chip for anything else. */
+function attachmentsHtml(items) {
+  if (!Array.isArray(items) || !items.length) return ''
+  return `<div class="msg-att">${items
+    .map((a) =>
+      a.type === 'image'
+        ? `<img class="ma-img" src="${esc(fileUrl(`/api/attachment?path=${encodeURIComponent(a.rel)}`))}" alt="${esc(a.name ?? '')}" title="${esc(a.name ?? '')}" loading="lazy" decoding="async">`
+        : `<span class="ma-file" title="${esc(a.name ?? '')}">${icon(ATT_ICON[a.type] ?? 'note')}<span>${esc(a.name ?? '')}</span></span>`,
+    )
+    .join('')}</div>`
+}
+
 /** Veta používateľa (alebo prázdny string). */
 function userHtml(turn) {
   if (!turn.user) return ''
   const via = turn.via === 'voice' ? `<span class="via">${icon('mic')}</span>` : ''
-  return `<div class="msg-user">${via}${esc(turn.user)}</div>`
+  const att = attachmentsHtml(turn.attachments)
+  const bubble = `<div class="msg-user">${via}${esc(turn.user)}</div>`
+  return att ? `<div class="msg-u">${att}${bubble}</div>` : bubble
 }
 
 /**
@@ -124,7 +142,8 @@ function patchTurn(row, turn) {
   row._j.hidden = blocks.length === 0
 }
 
-export function createChat({ onSend, capture = false }) {
+export function createChat({ onSend, capture = false, fileUrl: toFileUrl = null }) {
+  if (toFileUrl) fileUrl = toFileUrl
   const list = document.getElementById('chat')
   const view = document.getElementById('chat-view')
   const empty = document.getElementById('chat-empty')
@@ -147,7 +166,23 @@ export function createChat({ onSend, capture = false }) {
     const b = e.target.closest('.sugg')
     if (b) onSend?.(b.dataset.text, 'text')
   })
+  // An attachment the browser cannot draw (HEIC outside Safari, a damaged file) turns into a named chip.
+  list.addEventListener(
+    'error',
+    (e) => {
+      const img = e.target
+      if (img?.tagName !== 'IMG' || !img.classList.contains('ma-img')) return
+      const chip = document.createElement('span')
+      chip.className = 'ma-file'
+      chip.title = img.alt
+      chip.innerHTML = `${icon('fotky')}<span>${esc(img.alt)}</span>`
+      img.replaceWith(chip)
+    },
+    true,
+  )
   view.addEventListener('scroll', () => {
+    // Selecting text can still push a hidden-overflow box sideways: keep it pinned to the left edge.
+    if (view.scrollLeft !== 0) view.scrollLeft = 0
     stick = view.scrollHeight - view.scrollTop - view.clientHeight < 48
     view.classList.toggle('is-scrolled', view.scrollTop > 4)
   })
@@ -177,6 +212,7 @@ export function createChat({ onSend, capture = false }) {
       case 'user':
         t.user = ev.text ?? ''
         t.via = ev.via ?? 'text'
+        if (Array.isArray(ev.attachments)) t.attachments = ev.attachments
         stick = true
         break
       case 'start':
@@ -260,7 +296,7 @@ export function createChat({ onSend, capture = false }) {
       if (Array.isArray(h.tools) && h.tools.length) parts.push({ kind: 'tools', items: h.tools.map((x) => ({ ...x, status: x.status === 'error' ? 'error' : 'ok' })) })
       if (h.jarvis) parts.push({ kind: 'text', text: h.jarvis, target: h.jarvis })
       for (const card of h.cards ?? []) parts.push({ kind: 'card', card })
-      const t = ensure(String(h.turn), { user: h.user ?? null, via: h.via ?? 'text', parts, state: 'done', at: h.at ? Date.parse(h.at) : Date.now(), history: true })
+      const t = ensure(String(h.turn), { user: h.user ?? null, via: h.via ?? 'text', attachments: h.attachments ?? [], parts, state: 'done', at: h.at ? Date.parse(h.at) : Date.now(), history: true })
       t.shown = Infinity
     }
     // Poradie podľa času.

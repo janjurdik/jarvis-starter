@@ -12,6 +12,7 @@
   <link rel="preload" href="/fonts/inter-tight-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/vendor/fonts/jetbrains-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/css/hud.css">
+  <link rel="stylesheet" href="/css/import.css">
   <script type="importmap">
     { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
   </script>
@@ -75,6 +76,10 @@
           <div class="chat-view" id="chat-view"><ol class="chat" id="chat"></ol></div>
           <div class="chat-empty" id="chat-empty" hidden></div>
         </section>
+        <section class="mod mod-imports" id="mod-imports" hidden>
+          <h2 class="mh">Importy</h2>
+          <ol class="jobs" id="imports"></ol>
+        </section>
         <section class="mod mod-jobs" id="mod-jobs" hidden>
           <h2 class="mh">Úlohy</h2>
           <ol class="jobs" id="jobs"></ol>
@@ -86,6 +91,7 @@
           <div class="mem-hero"><span class="mem-big" id="mem-total">–</span><span class="mem-unit" id="mem-unit">poznámok</span></div>
           <ul class="mem-src" id="mem-src"></ul>
           <div class="mem-more" id="mem-more"></div>
+          <button type="button" class="mem-import" id="mem-import" hidden></button>
         </section>
         <section class="mod mod-log" id="mod-log">
           <h2 class="mh">Log</h2>
@@ -99,6 +105,7 @@
   <footer class="voice" id="voice">
     <p class="subtitle" id="subtitle"></p>
     <canvas class="wave" id="wave" aria-hidden="true"></canvas>
+    <div class="tray" id="tray" hidden></div>
     <form class="cmd" id="cmd" autocomplete="off">
       <button type="button" class="orb" id="orb" aria-label="Hovoriť s Jarvisom">
         <svg class="orb-seg" viewBox="0 0 48 48" aria-hidden="true"><path class="o-seg" d="M33.75 7.11A19.5 19.5 0 0 1 33.75 40.89M14.25 40.89A19.5 19.5 0 0 1 14.25 7.11"/></svg>
@@ -112,13 +119,18 @@
       </button>
       <div class="cmd-field">
         <input class="cmd-input" id="cmd-input" type="text" placeholder="Povedz Jarvisovi…" spellcheck="false" enterkeyhint="send" aria-label="Správa pre Jarvisa">
+        <div class="cmd-hint" id="cmd-hint" aria-hidden="true"></div>
         <canvas class="cmd-wave" id="cmd-wave" aria-hidden="true"></canvas>
         <div class="cmd-live" id="cmd-live"></div>
       </div>
+      <button type="button" class="cmd-clip" id="cmd-clip" aria-label="Pridať fotku alebo súbor" title="Pridať fotku alebo súbor"></button>
+      <input type="file" id="file-input" multiple hidden>
       <div class="keys" id="keys"></div>
     </form>
   </footer>
 
+  <div class="pv" id="people" role="dialog" aria-label="Ľudia z importu" hidden></div>
+  <div class="drop" id="dropzone" aria-hidden="true" hidden></div>
   <div class="toast" id="toast" role="status" hidden></div>
   <div class="grain" aria-hidden="true"></div>
 

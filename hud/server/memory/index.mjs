@@ -140,6 +140,8 @@ async function walk(dir, out) {
   for (const e of entries) {
     if (out.length >= MAX_FILES) return
     if (e.name.startsWith('.') || SKIP_DIRS.has(e.name)) continue
+    // top-level archiv (imported conversations) and prilohy (attachments) are data, not notes
+    if (dir === MEMORY_DIR && (e.name === 'archiv' || e.name === 'prilohy')) continue
     const full = join(dir, e.name)
     if (e.isDirectory()) await walk(full, out)
     else if (e.isFile() && extname(e.name).toLowerCase() === '.md') out.push(full)
