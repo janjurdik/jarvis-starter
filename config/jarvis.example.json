@@ -3,9 +3,12 @@
   "address": "pane",
   "formal": true,
   "city": "Bratislava",
+  "quiet": "22:30-07:00",
+  "pulse": { "enabled": true, "every": 5, "eventLead": 15, "dueAt": "17:00" },
   "routines": [
     { "id": "ranny-brief", "title": "Ranný brief", "time": "07:30", "days": "daily", "enabled": true },
     { "id": "vecerne-zhrnutie", "title": "Večerné zhrnutie", "time": "21:30", "days": "daily", "enabled": true },
-    { "id": "tyzdenny-prehlad", "title": "Týždenný prehľad", "time": "18:00", "days": "ne", "enabled": false }
+    { "id": "tyzdenny-prehlad", "title": "Týždenný prehľad", "time": "18:00", "days": "ne", "enabled": false },
+    { "id": "straz-posty", "title": "Stráž pošty", "every": 60, "between": "08:00-21:00", "model": "haiku", "enabled": false }
   ]
 }

@@ -21,6 +21,11 @@ const action = rest[0] ?? 'status'
 const dry = flags.has('dry-run')
 const NODE = process.execPath
 const SCRIPT = join(REPO, 'scripts', 'routine.mjs')
+const PULSE = join(REPO, 'scripts', 'pulse.mjs')
+/** What the scheduler starts: a routine goes through routine.mjs, the pulse is its own script. */
+const command = (job) => (job.script ? [job.script] : [SCRIPT, job.id])
+/** "07:30 (daily)" or "každých 5 min". */
+const when = (job) => (job.every ? `každých ${job.every} min` : `${job.time} (${job.days})`)
 const AGENTS_DIR = join(homedir(), 'Library', 'LaunchAgents')
 const PREFIX = `${LABEL}.routine.`
 
@@ -40,7 +45,7 @@ const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 // ── macOS: launchd ─────────────────────────────────────────────────────
 
 function plist(routine) {
-  const [hour, minute] = routine.time.split(':').map(Number)
+  const [hour, minute] = String(routine.time ?? '08:00').split(':').map(Number)
   const wd = weekdays(routine.days)
   const slot = (day) => `    <dict>${day === null ? '' : `<key>Weekday</key><integer>${day}</integer>`}<key>Hour</key><integer>${hour}</integer><key>Minute</key><integer>${minute}</integer></dict>`
   const path = [dirname(NODE), join(homedir(), '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(delimiter)
@@ -52,14 +57,13 @@ function plist(routine) {
   <key>ProgramArguments</key>
   <array>
     <string>${xml(NODE)}</string>
-    <string>${xml(SCRIPT)}</string>
-    <string>${xml(routine.id)}</string>
+${command(routine).map((a) => `    <string>${xml(a)}</string>`).join('\n')}
   </array>
   <key>WorkingDirectory</key><string>${xml(REPO)}</string>
-  <key>StartCalendarInterval</key>
+${routine.every ? `  <key>StartInterval</key><integer>${routine.every * 60}</integer>` : `  <key>StartCalendarInterval</key>
   <array>
 ${(wd ?? [null]).map(slot).join('\n')}
-  </array>
+  </array>`}
   <key>EnvironmentVariables</key>
   <dict><key>PATH</key><string>${xml(path)}</string></dict>
   <key>ProcessType</key><string>Background</string>
@@ -94,7 +98,7 @@ async function macInstall(routines) {
     await sh('/bin/launchctl', ['bootout', `${domain()}/${label}`])
     writeFileSync(file, plist(r))
     const res = await sh('/bin/launchctl', ['bootstrap', domain(), file])
-    console.log(res.code === 0 ? `  ✓ ${r.title}: ${r.time} (${r.days})` : `  ✗ ${r.title}: ${res.out}`)
+    console.log(res.code === 0 ? `  ✓ ${r.title}: ${when(r)}` : `  ✗ ${r.title}: ${res.out}`)
   }
 }
 
@@ -105,9 +109,11 @@ const psq = (s) => `'${String(s).replace(/'/g, "''")}'`
 
 function winScript(routine) {
   const wd = weekdays(routine.days)
-  const trigger = wd ? `New-ScheduledTaskTrigger -Weekly -DaysOfWeek ${wd.map((d) => PS_DAYS[d]).join(',')} -At ${psq(routine.time)}` : `New-ScheduledTaskTrigger -Daily -At ${psq(routine.time)}`
+  const trigger = routine.every
+    ? `New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes ${routine.every}) -RepetitionDuration (New-TimeSpan -Days 3650)`
+    : wd ? `New-ScheduledTaskTrigger -Weekly -DaysOfWeek ${wd.map((d) => PS_DAYS[d]).join(',')} -At ${psq(routine.time)}` : `New-ScheduledTaskTrigger -Daily -At ${psq(routine.time)}`
   // wscript + run-hidden.vbs: no console window pops up when the routine starts.
-  const argument = `"${join(REPO, 'scripts', 'run-hidden.vbs')}" "${NODE}" "${SCRIPT}" ${routine.id}`
+  const argument = `"${join(REPO, 'scripts', 'run-hidden.vbs')}" "${NODE}" ${command(routine).map((a) => `"${a}"`).join(' ')}`
   return [
     `$action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ${psq(argument)} -WorkingDirectory ${psq(REPO)}`,
     `$trigger = ${trigger}`,
@@ -127,7 +133,7 @@ async function winInstall(routines) {
   for (const name of await winInstalled()) if (!routines.some((r) => r.id === name)) await ps(`Unregister-ScheduledTask -TaskName ${psq(name)} -TaskPath ${psq(`\\${TASK_FOLDER}\\`)} -Confirm:$false`)
   for (const r of routines) {
     const res = await ps(winScript(r))
-    console.log(res.code === 0 ? `  ✓ ${r.title}: ${r.time} (${r.days})` : `  ✗ ${r.title}: ${res.out}`)
+    console.log(res.code === 0 ? `  ✓ ${r.title}: ${when(r)}` : `  ✗ ${r.title}: ${res.out}`)
   }
 }
 
@@ -139,10 +145,16 @@ if (!IS_MAC && !IS_WIN) {
 }
 
 const cfg = getConfig()
-const routines = cfg.routines.filter((r) => r.enabled)
+/**
+ * The pulse is always part of the schedule (unless turned off in the config): every few minutes a
+ * tiny script without Claude checks reminders, the calendar and deadlines and speaks up when due.
+ */
+const pulse = cfg.pulse?.enabled === false ? [] : [{ id: 'pulz', title: 'Pulz (pripomienky, kalendár, termíny)', every: cfg.pulse.every, script: PULSE, enabled: true }]
+const all = [...cfg.routines, ...pulse]
+const routines = all.filter((r) => r.enabled)
 
 if (action === 'install') {
-  const missing = routines.filter((r) => !has(join(REPO, 'routines', `${r.id}.md`)))
+  const missing = routines.filter((r) => !r.script && !has(join(REPO, 'routines', `${r.id}.md`)))
   for (const r of missing) console.log(`  · ${r.title}: chýba routines/${r.id}.md, preskakujem`)
   const ready = routines.filter((r) => !missing.includes(r))
   if (!ready.length) {
@@ -171,7 +183,7 @@ if (action === 'install') {
 } else {
   const list = IS_MAC ? macInstalled().map((l) => l.slice(PREFIX.length)) : await winInstalled()
   console.log('Rutiny v config/jarvis.json:')
-  for (const r of cfg.routines) console.log(`  ${r.enabled ? '●' : '○'} ${r.id.padEnd(20)} ${r.time}  ${String(r.days).padEnd(9)} ${list.includes(r.id) ? 'v systéme' : 'nezaregistrovaná'}`)
-  const stray = list.filter((n) => !cfg.routines.some((r) => r.id === n))
+  for (const r of all) console.log(`  ${r.enabled ? '●' : '○'} ${r.id.padEnd(20)} ${when(r).padEnd(18)} ${list.includes(r.id) ? 'v systéme' : 'nezaregistrovaná'}`)
+  const stray = list.filter((n) => !all.some((r) => r.id === n))
   if (stray.length) console.log(`\nV systéme navyše: ${stray.join(', ')} (odstráni ich: npm run schedule -- install)`)
 }

@@ -116,6 +116,16 @@ serveMcp({
       },
     },
     {
+      name: 'call_user',
+      description:
+        'Zavolá používateľovi na mobil a povie mu text (skutočný telefonát). Len keď o to sám požiada („zavolaj mi", „povedz mi to do telefónu") alebo keď ide o niečo súrne a pri počítači nie je. text sú jedna až tri vety, ako by si ich povedal nahlas.',
+      inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+      handler: async ({ text }) => {
+        const r = await hud('call', { text })
+        return r.isError ? r : 'Volám. Povedz jednu vetu a skonči.'
+      },
+    },
+    {
       name: 'agent_jobs',
       description: 'Zoznam úloh na pozadí so stavom (queued, running, needs_ok, done, error, stopped), aktuálnym krokom a zhrnutím.',
       inputSchema: { type: 'object', properties: {} },

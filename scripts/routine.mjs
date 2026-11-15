@@ -12,7 +12,6 @@
  * The system scheduler (launchd on macOS, Task Scheduler on Windows) calls this script,
  * see scripts/schedule.mjs.
  */
-import { spawn } from 'node:child_process'
 import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CLAUDE_BIN, MEMORY_EXTERNAL, cleanEnv, modelArgs, permissionArgs } from '../hud/server/agent.mjs'
@@ -20,7 +19,8 @@ import { readDay } from '../hud/server/chatlog.mjs'
 import { getConfig } from '../hud/server/config.mjs'
 import { FOLDERS, MEMORY_DIR, parseFrontmatter } from '../hud/server/memory/index.mjs'
 import { DOW_LONG, isoDay } from '../hud/server/util.mjs'
-import { DATA_DIR, IS_MAC, IS_WIN, LOG_DIR, REPO, hudAlive, parseArgs, postHud, spawnBin } from './lib.mjs'
+import { callReady } from '../hud/server/call.mjs'
+import { DATA_DIR, LOG_DIR, REPO, callOut, hudAlive, inWindow, notify, parseArgs, postHud, spawnBin } from './lib.mjs'
 
 const { flags, rest } = parseArgs()
 const cfg = getConfig()
@@ -70,7 +70,10 @@ const unlock = () => rmSync(lockFile, { force: true })
 process.on('exit', unlock)
 
 const { fm, body } = parseFrontmatter(source)
-const title = fm.title || cfg.routines.find((r) => r.id === id)?.title || id
+const entry = cfg.routines.find((r) => r.id === id)
+const title = fm.title || entry?.title || id
+// A watch routine (every N minutes) stays inside its window; started by hand it always runs.
+if (entry?.every && entry.between && !process.stdout.isTTY && !inWindow(entry.between)) process.exit(0)
 const now = new Date()
 const today = isoDay(now)
 
@@ -91,13 +94,16 @@ const context = [
   MEMORY_EXTERNAL ? `Pamäť nie je v priečinku memory/, ale tu: ${MEMORY_DIR}. Všade, kde zadanie hovorí memory/, použi túto cestu.` : '',
   'Tvoja posledná správa je výsledok rutiny v tomto tvare: najprv celý text (markdown, stručne), potom samostatný riadok `---` a riadok `HLAS: …` s jednou až tromi vetami, ktoré Jarvis prečíta nahlas (bez markdownu, prirodzene, ako komorník).',
   'Nič neposielaj von za používateľa (maily, správy). Návrhy priprav a napíš, že čakajú na schválenie.',
+  callReady() ? 'Vieš používateľovi zavolať na mobil. Použi to len vtedy, keď niečo naozaj nepočká (niekto čaká na odpoveď do hodiny, termín padá dnes, niečo sa pokazilo): na samostatný riadok na konci napíš `VOLAJ: …` s jednou až tromi vetami, ktoré mu povieš do telefónu.' : '',
+  entry?.every ? `Toto je strážna rutina, beží každých ${entry.every} minút. Ozvi sa len vtedy, keď je naozaj čo povedať. Keď nie je, tvoja celá odpoveď je jediné slovo: NIČ. To isté, čo si už ohlásil, neopakuj: čo si ohlásil, si zapíš do data/pulse/${id}.md a pred ohlásením sa tam pozri.` : '',
 ].filter(Boolean).join('\n')
 
 async function runClaude(prompt) {
   if (!CLAUDE_BIN) throw new Error('Claude Code CLI sa nenašiel')
   const ctxFile = join(DATA_DIR, `routine-${id}.context.md`)
   writeFileSync(ctxFile, context, { mode: 0o600 })
-  const args = ['-p', '--output-format', 'json', ...modelArgs(), ...permissionArgs(), '--append-system-prompt-file', ctxFile]
+  const model = entry?.model || fm.model
+  const args = ['-p', '--output-format', 'json', ...(model ? ['--model', String(model)] : modelArgs()), ...permissionArgs(), '--append-system-prompt-file', ctxFile]
   return new Promise((resolve, reject) => {
     const child = spawnBin(CLAUDE_BIN, args, { cwd: REPO, env: cleanEnv(), stdio: ['pipe', 'pipe', 'pipe'] })
     let out = ''
@@ -126,33 +132,24 @@ async function runClaude(prompt) {
 
 const MOCK_TEXT = `# ${title} (skúška)\n\nToto je skúšobný beh rutiny bez Claude. Overuje, že výsledok sa uloží do pamäte, ukáže v HUD a príde ako oznámenie.\n\n---\nHLAS: Skúška rutiny prebehla v poriadku. Všetko funguje.`
 
-async function notify(heading, text) {
-  const env = { ...process.env, J_TITLE: heading.slice(0, 80), J_TEXT: text.replace(/\s+/g, ' ').slice(0, 220) }
-  if (IS_MAC) {
-    await new Promise((resolve) => spawn('/usr/bin/osascript', ['-e', 'display notification (system attribute "J_TEXT") with title (system attribute "J_TITLE")'], { env, stdio: 'ignore' }).on('exit', resolve).on('error', resolve))
-  } else if (IS_WIN) {
-    const ps = [
-      '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null',
-      '$t = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)',
-      "$x = $t.GetElementsByTagName('text')",
-      '$x.Item(0).AppendChild($t.CreateTextNode($env:J_TITLE)) | Out-Null',
-      '$x.Item(1).AppendChild($t.CreateTextNode($env:J_TEXT)) | Out-Null',
-      "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe').Show([Windows.UI.Notifications.ToastNotification]::new($t))",
-    ].join('; ')
-    await new Promise((resolve) => spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { env, stdio: 'ignore', windowsHide: true }).on('exit', resolve).on('error', resolve))
-  }
-}
-
 try {
   log(`štart rutiny ${id}${flags.has('mock') ? ' (mock)' : ''}`)
   let prompt = body.trim()
   if (prompt.includes('{{rozhovor}}')) prompt = prompt.replace('{{rozhovor}}', (await chatOfDay()) || '(dnes sme sa v HUD nerozprávali)')
   prompt = prompt.replaceAll('{{dnes}}', today)
   const t0 = Date.now()
-  const result = flags.has('mock') ? MOCK_TEXT : await runClaude(prompt)
+  let result = flags.has('mock') ? MOCK_TEXT : await runClaude(prompt)
+  // "VOLAJ: …" on its own line asks for a phone call. It is not part of the written result.
+  const callLine = /^[ \t]*VOLAJ:[ \t]*(.+)$/im.exec(result)?.[1]?.trim() ?? ''
+  result = result.replace(/^[ \t]*VOLAJ:.*$\n?/gim, '').trim()
   const [textPart, voicePart = ''] = result.split(/\n-{3,}\s*\n(?=\s*HLAS:)/)
   const text = textPart.trim()
   const say = voicePart.replace(/^\s*HLAS:\s*/i, '').trim().replace(/\s+/g, ' ')
+  // A watch routine that found nothing answers with the single word NIČ: no file, no card, no voice.
+  if (/^ni[cč]\.?$/i.test(text) || (!text && !say)) {
+    log(`nič na ohlásenie (${Math.round((Date.now() - t0) / 1000)} s)`)
+    process.exit(0)
+  }
 
   const outRel = `${FOLDERS.inbox}/${today}-${id}.md`
   const outFile = join(MEMORY_DIR, outRel)
@@ -162,9 +159,17 @@ try {
 
   if (!flags.has('silent')) {
     const plainText = text.replace(/^#+\s*/gm, '').replace(/[*_`>]/g, '').trim()
-    const delivered = (await hudAlive()) ? await postHud('/api/announce', { title, text: plainText, say: say || plainText.slice(0, 300), node: 'rutiny' }) : false
+    // In quiet hours the result still shows up, it just is not read aloud.
+    const hush = inWindow(cfg.quiet)
+    const delivered = (await hudAlive()) ? await postHud('/api/announce', { title, text: plainText, say: say || plainText.slice(0, 300), node: 'rutiny', silent: hush }) : false
     log(delivered ? 'ukázané v HUD' : 'HUD nebeží, posielam len oznámenie')
     await notify(`Jarvis: ${title}`, say || plainText)
+    // A phone call: when the routine asked for one, or when the routine is set to arrive by phone (`"call": true`).
+    const phone = callLine || (entry?.call ? say || plainText.slice(0, 600) : '')
+    if (phone && !hush && callReady()) {
+      callOut(phone, id)
+      log('volám na mobil')
+    }
   }
   process.exit(0)
 } catch (err) {

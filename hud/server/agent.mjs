@@ -2,9 +2,9 @@
  * How full Claude Code runs are started on Jarvis's behalf (background jobs from the HUD and
  * scheduled routines). One place decides what such a run may do without asking:
  *
- *   JARVIS_AGENT_MODE=safe   (default) files in the Jarvis folder, web search and the user's
- *                            connectors (mail, calendar, …). Shell commands that change things
- *                            are refused.
+ *   JARVIS_AGENT_MODE=safe   (default) files in the Jarvis folder, web search, the user's
+ *                            connectors (mail, calendar, …) and Jarvis's own scripts in scripts/.
+ *                            Any other shell command is refused.
  *   JARVIS_AGENT_MODE=full   everything Claude Code can do, including any shell command.
  *
  * Connector names are not known in advance, so in safe mode a small PreToolUse hook
@@ -19,6 +19,8 @@ export const CLAUDE_BIN = findBin('claude', { override: process.env.JARVIS_CLAUD
 export const AGENT_MODE = (process.env.JARVIS_AGENT_MODE || 'safe').toLowerCase() === 'full' ? 'full' : 'safe'
 
 const SAFE_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'TodoWrite', 'Task', 'Agent', 'Skill']
+/** Jarvis's own scripts are part of the safe set: importing an export, searching messages or updating must work without full mode. */
+const SAFE_SCRIPTS = ['doctor', 'scan', 'import', 'pulse', 'routine', 'schedule', 'update', 'hud', 'call'].map((n) => `Bash(node scripts/${n}.mjs:*)`)
 const SETTINGS_FILE = join(BRAIN_DIR, 'agent-settings.json')
 
 /** Environment for Claude child processes: the parent's, minus anything that would switch Claude to an API key. */
@@ -44,7 +46,7 @@ export function permissionArgs() {
   const hook = `"${fwd(process.execPath)}" "${fwd(join(ROOT, 'server', 'allow-connectors.mjs'))}"`
   mkdirSync(BRAIN_DIR, { recursive: true })
   writeFileSync(SETTINGS_FILE, JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'mcp__.*', hooks: [{ type: 'command', command: hook }] }] } }, null, 2), { mode: 0o600 })
-  return ['--permission-mode', 'dontAsk', '--allowedTools', SAFE_TOOLS.join(','), '--settings', SETTINGS_FILE, ...dirArgs()]
+  return ['--permission-mode', 'dontAsk', '--allowedTools', [...SAFE_TOOLS, ...SAFE_SCRIPTS, 'Bash(npm install)', 'Bash(npm.cmd install)'].join(','), '--settings', SETTINGS_FILE, ...dirArgs()]
 }
 
 /**
