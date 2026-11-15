@@ -15,7 +15,13 @@
       "Bash(claude auth status:*)",
       "Edit(memory/**)",
       "Edit(config/**)",
-      "Edit(routines/**)"
+      "Edit(routines/**)",
+      "Bash(node scripts/scan.mjs:*)",
+      "Bash(node scripts/import.mjs:*)",
+      "Bash(node scripts/pulse.mjs:*)",
+      "Bash(node scripts/call.mjs:*)",
+      "Bash(node scripts/update.mjs:*)",
+      "Edit(data/setup.json)"
     ]
   }
 }

@@ -4,7 +4,8 @@ Tento priečinok je všetko, čo o tebe Jarvis vie. Sú to obyčajné textové s
 Môžeš ich čítať, upravovať aj mazať v ľubovoľnom editore, napríklad v Obsidiane. Nič z toho neodchádza na žiadny server,
 a do gitu sa tento priečinok neukladá.
 
-Pamäť sa napĺňa tromi spôsobmi: pri úvodnom nastavení (`štart`), počas rozhovorov (Jarvis si zapisuje, čo sa dozvie)
+Pamäť sa napĺňa štyrmi spôsobmi: pri úvodnom nastavení (`štart`, Jarvis si prejde tvoj počítač), z exportov tvojich
+dát z aplikácií (sprievodca je v HUD na adrese `/guide/`), počas rozhovorov (Jarvis si zapisuje, čo sa dozvie)
 a večernou rutinou, ktorá zapíše deň do denníka.
 
 ## Čo kde je
@@ -20,6 +21,10 @@ a večernou rutinou, ktorá zapíše deň do denníka.
 | `ulohy.md` | Zoznam úloh. |
 | `kalendar.md` | Udalosti. |
 | `schranka/` | Výstupy rutín: ranné briefy, večerné zhrnutia. |
+| `pripomienky.md` | Pripomienky s časom. Jarvis ich v danú minútu povie sám. |
+| `prilohy/` | Súbory, ktoré si Jarvisovi pretiahol do okna (fotky, dokumenty). |
+| `archiv/` | Naimportované rozhovory z tvojich exportov (Instagram, WhatsApp, ChatGPT…). Jarvis v nich vie hľadať. |
+| `ludia/_fotky/` | Fotky ľudí, vybrané z tvojich exportov. |
 
 Ďalšie priečinky si môžeš pridať sám. Priečinky `knihy`, `filmy`, `miesta`, `hudba`, `skola`, `zdroje` a `content`
 dostanú v 3D svete HUD vlastný mesiac.
@@ -105,6 +110,23 @@ Termín je voliteľný, píše sa ako `(do RRRR-MM-DD)`.
 
 Riadok začína dátumom alebo dňom v týždni (`po ut st št pi so ne`, opakuje sa každý týždeň). Čas a miesto za `@` sú voliteľné.
 Kalendár z Googlu alebo iCloudu sa dá pripojiť aj priamo cez tajnú adresu iCal v súbore `.env` (`CALENDAR_ICS_URL`).
+
+**Pripomienky** (`pripomienky.md`)
+
+```markdown
+# Pripomienky
+
+- [ ] 2026-02-03 15:00 Zavolať mame
+- [x] 2026-02-01 09:00 Zaplatiť nájom
+```
+
+Riadok má dátum, čas a text. Keď čas nastane, Jarvis to povie nahlas a riadok odškrtne. Výkričník pred textom
+(`!Lekár`) znamená, že ti v ten čas aj zavolá na mobil, ak máš nastavené hovory (`docs/HOVORY.md`).
+Stačí mu povedať „pripomeň mi zajtra o tretej zavolať mame".
+
+**Človek s rozhovormi.** Po importe exportov pribudne ľuďom v hlavičke `zdroje` (odkiaľ sú ich rozhovory)
+a `fotka`, a v poznámke odsek „Kto to je" a sekcia `## Konverzácie`. Samotné správy sú v `archiv/`
+a do poznámok sa neprepisujú.
 
 ## Prepojenia
 
