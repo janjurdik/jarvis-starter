@@ -206,7 +206,8 @@ export async function openZip(path) {
       if (!entry.compressedSize) return Buffer.alloc(0)
       if (entry.compressedSize <= SYNC_LIMIT) {
         const raw = await readAt(await dataStart(entry), entry.compressedSize)
-        return entry.method === 8 ? inflateRawSync(raw) : raw
+        // Never more than the entry says it holds: a lying header cannot blow up the memory.
+        return entry.method === 8 ? inflateRawSync(raw, { maxOutputLength: Math.min(maxBytes, entry.size + 1024) }) : raw
       }
       const chunks = []
       for await (const chunk of stream(entry)) chunks.push(chunk)

@@ -4,6 +4,11 @@
  *
  *   open_app(name)   opens (or brings forward) an application
  *   open_url(url)    opens a web page in the default browser
+ *   media(action)    play, pause, next and previous track in the running player
+ *   volume(…)        the computer's volume
+ *
+ * Everything bigger (clicking through an app, filling a web form) is a background job with a
+ * shell, app scripting and the browser: docs/OVLADANIE.md.
  */
 import { spawn } from 'node:child_process'
 import { serveMcp } from './stdio.mjs'
@@ -30,7 +35,7 @@ async function openApp(name) {
   if (IS_MAC) return run('/usr/bin/open', ['-a', app])
   if (IS_WIN) {
     // Start-Process finds Store apps and anything on PATH or in App Paths (spotify, chrome, notepad, …).
-    return run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${app.replace(/'/g, "''")}'`])
+    return run(POWERSHELL, ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${app.replace(/'/g, "''")}'`])
   }
   return run('xdg-open', [app])
 }
@@ -44,8 +49,66 @@ async function openUrl(url) {
   }
   if (!['http:', 'https:'].includes(parsed.protocol)) return { ok: false, error: 'len http a https adresy' }
   if (IS_MAC) return run('/usr/bin/open', [parsed.href])
-  if (IS_WIN) return run('rundll32.exe', ['url.dll,FileProtocolHandler', parsed.href])
+  if (IS_WIN) return run(`${SYS32}\\rundll32.exe`, ['url.dll,FileProtocolHandler', parsed.href])
   return run('xdg-open', [parsed.href])
+}
+
+/** Runs a program and returns what it printed (for reading the current volume). */
+function read(cmd, args) {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
+    let out = ''
+    child.stdout.on('data', (d) => (out = `${out}${d}`.slice(-400)))
+    child.on('error', () => resolve(''))
+    child.on('exit', () => resolve(out.trim()))
+  })
+}
+
+const SYS32 = IS_WIN ? `${process.env.SystemRoot || 'C:\\Windows'}\\System32` : ''
+const POWERSHELL = IS_WIN ? `${SYS32}\\WindowsPowerShell\\v1.0\\powershell.exe` : ''
+/** Windows media and volume keys (virtual key codes), sent the way a keyboard would. The script is static, the key is a number. */
+const WIN_KEYS = { play_pause: 179, next: 176, previous: 177, up: 175, down: 174, mute: 173 }
+const winKey = (code, times = 1) =>
+  run(POWERSHELL, ['-NoProfile', '-NonInteractive', '-Command', `$s = Add-Type -PassThru -Name K -Namespace J -MemberDefinition '[DllImport("user32.dll")] public static extern void keybd_event(byte v, byte s, uint f, System.UIntPtr e);'; 1..${Math.max(1, Math.min(50, Math.round(times)))} | ForEach-Object { $s::keybd_event(${Number(code)}, 0, 0, [UIntPtr]::Zero); $s::keybd_event(${Number(code)}, 0, 2, [UIntPtr]::Zero) }`])
+
+/** Music and video players the Mac can be asked by name. The first one that is running gets the command. */
+const MAC_PLAYERS = ['Spotify', 'Music']
+const MAC_VERB = { play_pause: 'playpause', play: 'play', pause: 'pause', next: 'next track', previous: 'previous track' }
+
+async function media(action) {
+  if (!MAC_VERB[action]) return { ok: false, error: 'neznáma akcia' }
+  if (IS_WIN) return winKey(WIN_KEYS[action === 'play' || action === 'pause' ? 'play_pause' : action])
+  if (!IS_MAC) return { ok: false, error: 'na tomto systéme to zatiaľ neviem' }
+  // Static AppleScript: the player name comes from a fixed list, the verb from a fixed table.
+  const running = await read('/usr/bin/osascript', ['-e', 'tell application "System Events" to get name of (processes where background only is false)'])
+  const player = MAC_PLAYERS.find((p) => running.split(', ').includes(p))
+  if (!player) return { ok: false, error: 'nebeží Spotify ani Hudba. Povedz, čo mám pustiť, a otvorím to.' }
+  return run('/usr/bin/osascript', ['-e', `tell application "${player}" to ${MAC_VERB[action]}`])
+}
+
+async function volume({ level, change, mute }) {
+  if (IS_MAC) {
+    if (typeof mute === 'boolean') return run('/usr/bin/osascript', ['-e', `set volume output muted ${mute ? 'true' : 'false'}`])
+    let target = Number(level)
+    if (!Number.isFinite(target)) {
+      const now = Number(await read('/usr/bin/osascript', ['-e', 'output volume of (get volume settings)']))
+      target = (Number.isFinite(now) ? now : 50) + (change === 'down' ? -12 : 12)
+    }
+    target = Math.max(0, Math.min(100, Math.round(target)))
+    const r = await run('/usr/bin/osascript', ['-e', `set volume output volume ${target}`])
+    return r.ok ? { ok: true, level: target } : r
+  }
+  if (IS_WIN) {
+    if (typeof mute === 'boolean') return winKey(WIN_KEYS.mute)
+    if (Number.isFinite(Number(level))) {
+      // Windows has no "set to N" key: all the way down, then up in steps of two percent.
+      await winKey(WIN_KEYS.down, 50)
+      const steps = Math.round(Math.max(0, Math.min(100, Number(level))) / 2)
+      return steps ? winKey(WIN_KEYS.up, steps) : { ok: true }
+    }
+    return winKey(WIN_KEYS[change === 'down' ? 'down' : 'up'], 6)
+  }
+  return { ok: false, error: 'na tomto systéme to zatiaľ neviem' }
 }
 
 serveMcp({
@@ -59,6 +122,24 @@ serveMcp({
       handler: async ({ name }) => {
         const r = await openApp(name)
         return r.ok ? `Otvorené: ${safeName(name)}` : { text: `Nepodarilo sa otvoriť ${safeName(name)}: ${r.error}`, isError: true }
+      },
+    },
+    {
+      name: 'media',
+      description: 'Ovláda prehrávanie hudby alebo videa na počítači: play_pause, play, pause, next, previous. Na „pusti hudbu", „zastav to", „ďalšia pesnička".',
+      inputSchema: { type: 'object', properties: { action: { type: 'string', enum: ['play_pause', 'play', 'pause', 'next', 'previous'] } }, required: ['action'] },
+      handler: async ({ action }) => {
+        const r = await media(String(action))
+        return r.ok ? 'Hotovo.' : { text: `Nepodarilo sa: ${r.error}`, isError: true }
+      },
+    },
+    {
+      name: 'volume',
+      description: 'Hlasitosť počítača. level 0 až 100 nastaví presne, change up alebo down pridá alebo uberie, mute true alebo false stíši alebo vráti zvuk.',
+      inputSchema: { type: 'object', properties: { level: { type: 'number', minimum: 0, maximum: 100 }, change: { type: 'string', enum: ['up', 'down'] }, mute: { type: 'boolean' } } },
+      handler: async (args) => {
+        const r = await volume(args ?? {})
+        return r.ok ? (r.level !== undefined ? `Hlasitosť je na ${r.level} percentách.` : 'Hotovo.') : { text: `Nepodarilo sa: ${r.error}`, isError: true }
       },
     },
     {

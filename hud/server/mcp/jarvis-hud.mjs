@@ -9,11 +9,15 @@
  *   weather(place?, days?)      weather (Open-Meteo through the HUD server)
  *   agent_task / agent_jobs / agent_reply / agent_stop   background jobs (full Claude Code)
  *   set_alarm(time?, days?, call?, off?)   the alarm clock (scripts/alarm.mjs)
+ *   settings(set?)              voice, assistant's name and gender, how the user is addressed (server/settings.mjs)
+ *   video_open / video_seek / video_transcript / video_info / video_control / video_close, set_alarm_sound   (video-tools.mjs)
  */
 import { execFile } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { serveMcp } from './stdio.mjs'
+import { videoTools } from './video-tools.mjs'
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 
@@ -31,8 +35,17 @@ function alarmScript(args) {
 }
 
 const HUD = (process.env.HUD_URL || 'http://127.0.0.1:4545').replace(/\/$/, '')
-const TOKEN = process.env.HUD_BRAIN_TOKEN || ''
-const NODES = ['ludia', 'projekty', 'questy', 'kalendar', 'rutiny', 'udalosti', 'spravy', 'fotky', 'spanok']
+// The token comes in the environment (Claude) or in a file only this user can read (Codex: its MCP settings are process arguments).
+function brainToken() {
+  if (process.env.HUD_BRAIN_TOKEN) return process.env.HUD_BRAIN_TOKEN
+  try {
+    return process.env.HUD_BRAIN_TOKEN_FILE ? readFileSync(process.env.HUD_BRAIN_TOKEN_FILE, 'utf8').trim() : ''
+  } catch {
+    return ''
+  }
+}
+const TOKEN = brainToken()
+const NODES = ['ludia', 'projekty', 'questy', 'kalendar', 'rutiny', 'udalosti', 'spravy', 'fotky', 'spanok', 'ulohy', 'posta', 'appky']
 const ICONS = ['calendar', 'moon', 'heart', 'message', 'photo', 'check', 'quest', 'search', 'book', 'globe', 'bolt', 'music', 'volume', 'chart', 'memory', 'eye', 'info', 'alarm', 'gift', 'routine', 'cloud', 'sun', 'code', 'wave', 'shield']
 
 async function hud(action, body) {
@@ -58,7 +71,7 @@ serveMcp({
       inputSchema: {
         type: 'object',
         properties: {
-          node: { type: ['string', 'null'], enum: [...NODES, null], description: 'ludia, projekty, questy (ciele), kalendar, rutiny, udalosti (denník), spravy (rozhovory), fotky (poznámky), spanok' },
+          node: { type: ['string', 'null'], enum: [...NODES, null], description: 'ludia, projekty, questy (ciele), kalendar, rutiny, udalosti (denník), spravy (rozhovory), fotky (poznámky), spanok, ulohy, posta, appky (Tvoje appky)' },
           caption: { type: 'string', description: 'Krátky popis pri uzle, max 60 znakov, bez mien ľudí v režime natáčania.' },
         },
         required: ['node'],
@@ -175,6 +188,51 @@ serveMcp({
       },
     },
     {
+      name: 'setup_note',
+      description:
+        'Zapíše, kde je úvodné nastavenie. Volaj hneď, keď je krok hotový alebo niečo čaká na používateľa. done: hotové kroky (sken, oslovenie, ciel, appky, posta, kalendar, ulohy, budik, samostatnost, prva-vec). waiting: veci, ktoré musí spraviť on (napr. "pripojiť Gmail v Claude"). resolved: čo z čakajúcich už vybavil. goal: jeho odpoveď na otázku, čo máš robiť ako prvé. finished: true, keď je základ hotový. Bez parametrov vráti stav.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          done: { type: 'array', items: { type: 'string' } },
+          waiting: { type: 'array', items: { type: 'string' } },
+          resolved: { type: 'array', items: { type: 'string' } },
+          goal: { type: 'string' },
+          finished: { type: 'boolean' },
+        },
+      },
+      handler: async (note) => {
+        const r = await hud('setup', { note })
+        if (r.isError) return r
+        const s = r.setup
+        return s.done ? 'Nastavenie je uzavreté.' : `Hotové: ${s.hotove.join(', ') || 'nič'}. Ďalší krok: ${s.next ?? 'ukončiť nastavenie (finished: true)'}.${s.caka.length ? ` Čaká na neho: ${s.caka.join('; ')}.` : ''}`
+      },
+    },
+    {
+      name: 'hud_orb',
+      description:
+        'Mení orby 3D sveta, teda tvoje vlastné rozhranie. Keď používateľ chce sledovať niečo nové (financie, návyky, tréning, čítanie, objednávky), pridaj mu na to orb a naplň ho. action: add (nový orb: id, label, voliteľne icon, color, shape, kind, folder), content (čo orb ukazuje: content je objekt { value, sub, items, panel }), hide a show (skryť alebo vrátiť ktorýkoľvek orb, aj vstavaný: posta, kalendar, ulohy, rutiny, questy, spanok, ludia, udalosti, fotky, projekty, spravy), remove (zmazať vlastný orb), clear (zmazať obsah). panel je zoznam hotových komponentov: { type: "stat", label, value, unit?, caption? }, { type: "ring", label, value 0-100 }, { type: "bars", title?, items: [{ label, value }] }, { type: "spark", title?, series: [{ label, value }] }, { type: "list", title?, items: [{ label, sub?, value?, say? }] }, { type: "steps", title?, items: [{ text, done }] }, { type: "text", title?, text }, { type: "actions", items: [{ label, say }] }. say je veta, ktorú klik pošle tebe. accent: ice, amber, red, green. Celý slovník je v docs/ORBY.md.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['add', 'update', 'content', 'hide', 'show', 'remove', 'clear'] },
+          id: { type: 'string', description: 'Krátke id bez diakritiky, malé písmená a pomlčky, napr. "financie".' },
+          label: { type: 'string', description: 'Názov pri orbe, najviac 24 znakov.' },
+          icon: { type: 'string', description: 'info, mail, todo, kalendar, people, heart, chart, book, music, film, globe, code, note, folder, bell, flag, sparkle, bolt, shield, search, phone, card, coffee, cap, pin, news, gift, play, app, laptop, route, hourglass, check, alarm, sun, cloud, memory, eye, target, link, archive' },
+          color: { type: 'string', description: 'Farba ako #rrggbb. Bez zadania ľadová modrá.' },
+          shape: { type: 'string', description: 'Hologram orbu: orb, posta, ludia, skola, knihy, filmy, miesta, hudba, satnik, zdroje, hry, ulohy, content, kalendar, rutiny, projekty, questy, spravy, fotky, udalosti, spanok.' },
+          kind: { type: 'string', enum: ['planet', 'moon'], description: 'planet = veľký orb na vonkajšom kruhu (predvolené), moon = malý pri jadre.' },
+          folder: { type: 'string', description: 'Priečinok v pamäti (memory/<folder>/), ktorého poznámky sa ukážu vnútri orbu.' },
+          content: { type: 'object', description: '{ value?, sub?, alert?, items?: [{ t, s?, g?, imp? }], groups?, panel?: [komponenty] }' },
+        },
+        required: ['action', 'id'],
+      },
+      handler: async (orb) => {
+        const r = await hud('orb', { orb })
+        return r.isError ? r : `${r.summary} Povedz to jednou vetou.`
+      },
+    },
+    {
       name: 'set_alarm',
       description:
         'Budík: ráno v daný čas Jarvis zazvoní a povie nahlas ranný brief (spánok, ak je známy, počasie, kalendár, termíny, čo spravil cez noc), aj keď je HUD zatvorený. Na „zobuď ma o…", „budík na…", „zruš budík". Bez parametrov povie, ako je nastavený.',
@@ -196,6 +254,54 @@ serveMcp({
       },
     },
     {
+      name: 'settings',
+      description:
+        'Nastavenia Jarvisa. Bez set vráti, čo je nastavené, a zoznam hlasov. So set zmení len to, čo pošleš, a platí to hneď. Na „hovor ženským hlasom" pošli assistant.gender female (hlas sa prepne sám), na „hovor mužským hlasom" male. Na „oslovuj ma pani" alebo „volaj ma šéfe" user.address, na „tykaj mi" user.formal false, na „vykaj mi" true. Na „volaj sa Friday" assistant.name. Konkrétny hlas podľa mena cez voice.id zo zoznamu voices. Po zmene hlasu odpovedz jednou krátkou vetou, zaznie už novým hlasom.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          set: {
+            type: 'object',
+            description: 'Len kľúče, ktoré sa majú zmeniť.',
+            properties: {
+              assistant: {
+                type: 'object',
+                properties: { name: { type: 'string', description: 'Meno asistenta, najviac 24 znakov.' }, gender: { type: 'string', enum: ['male', 'female'], description: 'Či Jarvis hovorí ako muž alebo žena.' } },
+              },
+              voice: {
+                type: 'object',
+                properties: {
+                  id: { type: ['string', 'null'], description: 'Id hlasu zo zoznamu voices. null = predvolený hlas podľa jazyka a rodu.' },
+                  rate: { type: ['string', 'null'], description: 'Rýchlosť reči, napríklad "+10%" (rýchlejšie) alebo "-10%".' },
+                  pitch: { type: ['string', 'null'], description: 'Výška hlasu, napríklad "-5Hz" (hlbší) alebo "+5Hz".' },
+                },
+              },
+              user: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  address: { type: 'string', description: 'Oslovenie: "pane", "pani", "šéfe", alebo prázdny text bez oslovenia.' },
+                  formal: { type: 'boolean', description: 'true = vykať, false = tykať.' },
+                  gender: { type: ['string', 'null'], enum: ['male', 'female', null], description: 'Rod používateľa pre tvary slov (pripravený, pripravená).' },
+                  city: { type: 'string' },
+                },
+              },
+              quiet: { type: 'string', description: 'Tiché hodiny "22:30-07:00", prázdny text ich vypne.' },
+              language: { type: 'string', enum: ['sk', 'cs'] },
+              stt: { type: 'string', enum: ['auto', 'browser', 'whisper'], description: 'Rozpoznávanie reči: auto, v prehliadači, alebo lokálny Whisper.' },
+              wake: { type: 'boolean', description: 'Počúvanie na slová „Hey Jarvis". Ide len s lokálnym Whisperom.' },
+            },
+          },
+        },
+      },
+      handler: async ({ set }) => {
+        const r = await hud('settings', set && Object.keys(set).length ? { set } : {})
+        if (r.isError) return r
+        const now = { assistant: r.assistant, voice: r.voice, user: r.user, quiet: r.quiet, language: r.language, stt: r.stt, wake: r.wake }
+        return r.changed.length ? { zmenene: r.changed, teraz: now } : { teraz: now, hlasy: r.voices }
+      },
+    },
+    {
       name: 'weather',
       description: 'Počasie teraz, dnes a na pár dní (Open-Meteo). Bez place = mesto používateľa z nastavení. Kartu ukáže samo.',
       inputSchema: {
@@ -213,5 +319,6 @@ serveMcp({
         return json
       },
     },
+    ...videoTools({ hudUrl: HUD, repo: REPO }),
   ],
 })

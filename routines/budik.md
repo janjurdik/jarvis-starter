@@ -3,7 +3,7 @@ title: Dobré ráno
 noc: true
 hlas: 4 až 7 krátkych viet, spolu najviac 90 slov, ktoré Jarvis povie hneď po budíku. Bez pozdravu a bez času, tie povie sám
 ---
-Priprav ranné budenie na dnešok ({{dnes}}). Jarvis ho povie nahlas, keď o chvíľu zazvoní budík. Pracuj s pamäťou v priečinku `memory/` podľa CLAUDE.md.
+Priprav ranné budenie na dnešok ({{dnes}}). Jarvis ho povie nahlas, keď o chvíľu zazvoní budík. Pracuj s pamäťou v priečinku `memory/` podľa AGENTS.md.
 
 Najprv si prečítaj `config/jarvis.json`, pole `alarm.rano`. Je to zoznam tém, ktoré si používateľ vybral, v poradí, v akom ich chce počuť
 (`spanok`, `pocasie`, `den`, `ulohy`, `posta`, `skola`, `trening`, `ludia`, `noc`, `svet`, `peniaze`, `citat`; popis má `node scripts/alarm.mjs topics`).
@@ -13,7 +13,7 @@ Keď je prázdny, drž sa bodov nižšie. `svet`: tri najdôležitejšie správy
 `citat`: jedna krátka myšlienka, ktorá sedí k jeho cieľom, s autorom.
 
 Čo zisti:
-1. Spánok: pole `spanok` v dnešnom alebo včerajšom zázname v `memory/dennik/`. Ak máš pripojený konektor s dátami o spánku (hodinky, zdravie), pozri aj ten. Keď spánok nikde nie je, vôbec ho nespomínaj a nič neodhaduj.
+1. Spánok: ak je pripojený Garmin, najprv spusti `node scripts/garmin.mjs sync --days 2 --json` (keď vráti `not_connected` alebo inú chybu, pokračuj bez neho a nespomínaj to). Z výsledku použi `lastNight`: dĺžku spánku, skóre, kedy zaspal a vstal, HRV, pokojový tep, body battery ráno a pripravenosť na tréning. Keď je `lastNightKnown` false, hodinky dnešnú noc ešte neposlali (posielajú ju až po zobudení): spánok vtedy vôbec nespomínaj a včerajšiu noc nevydávaj za dnešnú. Bez Garminu: pole `spanok` v dnešnom zázname v `memory/dennik/` (včerajší záznam len vtedy, keď nemá riadok `spanok_zdroj: garmin`). Keď spánok nikde nie je, nič neodhaduj.
 2. Počasie v meste používateľa na dnes (vyhľadaj na webe).
 3. Kalendár na dnes: `memory/kalendar.md` a kalendárový konektor, ak ho máš. Nové udalosti na najbližších 7 dní dopíš do `memory/kalendar.md` (bez duplikátov, formát je v `memory/README.md`).
 4. Úlohy: `memory/ulohy.md`. Čo má termín dnes alebo je po termíne, a jedna vec, ktorá ho dnes najviac posunie (aj podľa cieľov v `memory/ciele/`).

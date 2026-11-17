@@ -2,6 +2,44 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.4.0 (2026-11-18)
+
+Jarvis už nie je hotový systém, ale základ, ktorý si každý dostavia po svojom. Základ je pošta, úlohy, kalendár, pamäť,
+hlas a budík. Všetko ostatné mu povieš a on si to pripojí alebo doprogramuje.
+
+- **Nastavenie vedie Jarvis.** Napíšeš `štart`, počítač sa pripraví a Jarvis sa objaví na ploche. Odvtedy hovoríš s ním:
+  predstaví sa, poobzerá sa po počítači, spýta sa len na to, čo nenájde, a spolu dotiahnete zvyšok. Žiadny dotazník.
+- **Funguje aj s ChatGPT.** Jarvis beží na Claude (Claude Code) alebo na ChatGPT (Codex), podľa toho, čo máš. Iný alebo
+  lokálny model si vie doprogramovať (`docs/MODELY.md`).
+- **Orby pribúdajú a miznú.** Na ploche je len to, čo naozaj používaš. Povieš „chcem sledovať financie" a pribudne orb
+  s číslom a s panelom vnútri (počty, stĺpce, graf, zoznam, tlačidlá). Povieš „školu nepotrebujem" a zmizne. Pribudli orby
+  Pošta a Úlohy. Slovník komponentov je v `docs/ORBY.md`.
+- **Nové menu Tvoje appky.** Namiesto okna s dlaždicami je to mapa vo vnútri orbu: appky plávajú v priestore po skupinách,
+  klik ju pridá do Jarvisa a svetelná niť ju spojí s jadrom. Zmestí sa do každého okna. Appku, ktorá v mape nie je,
+  stačí napísať a Jarvis si k nej nájde cestu.
+- **Whisper je predvolený.** Reč rozpoznáva model priamo v tvojom počítači, vybraný podľa jeho výkonu a voľného miesta
+  na disku, a stiahne sa pred prvým spustením. Slabý alebo plný počítač ostane pri prehliadači. `ffmpeg` už netreba.
+- **Nastavenia na ploche.** Hlas s ukážkou, či je Jarvis muž alebo žena, jeho meno, ako ťa oslovuje, tykanie, tiché hodiny,
+  jazyk a rozpoznávanie reči. To isté stačí povedať: „hovor ženským hlasom", „oslovuj ma pani".
+- **Filmový Jarvis.** Hovorí ako z filmu od prvej vety, oslovuje ťa „pane" alebo „pani" a menom, a z nepresného prepisu
+  hlasu si domyslí, čo si mal na mysli, namiesto toho, aby sa pýtal.
+- **Budík so skladbou.** Budí ťa Highway to Hell. Vlastnú skladbu mu stačí pretiahnuť alebo poslať odkaz.
+- **Video z odkazu.** Pošleš odkaz a video sa otvorí v kine na ploche s prepisom a kapitolami. Jarvis v ňom vie skákať
+  na čas, hľadať a zhrnúť ho (`docs/VIDEO.md`).
+- **Denník z toho, čo si naozaj robil.** Raz za minútu si Jarvis zapíše, ktorá appka je v popredí (nič viac), a večer z toho
+  píše denník. Vie odpovedať na „čo som dnes robil" a „koľko som hral". Vypneš to jednou vetou (`docs/AKTIVITA.md`).
+- **Hry z každého launchera.** Steam, Epic, GOG, Battle.net, Riot, EA, Ubisoft, Xbox, Minecraft a ďalšie.
+- **Garmin naživo.** Spánok, tep, body battery a tréningy z hodiniek. Prihlásiš sa raz v termináli, heslo Jarvis nevidí
+  (`docs/GARMIN.md`).
+- **Import čohokoľvek.** Kópiu dát z appky, ktorú Jarvis nepozná, si prečíta sám: zistí formát a načíta ju.
+- **Ovláda počítač.** Hudba a hlasitosť na jednu vetu, všetko väčšie ako úloha na pozadí, prehliadač cez Claude in Chrome
+  (`docs/OVLADANIE.md`).
+- **Užšie okná.** V malom okne sa bočné panely zložia a svet dostane celú šírku.
+- **Bezpečnosť.** Opravená chyba, cez ktorú mohla pozvánka do kalendára spustiť kód na ploche. Aktualizácie sú podpísané
+  autorom, pribudli ochranné hlavičky, tajné údaje sa nedostanú k pomocným programom, pamäť a dáta číta len tvoj účet
+  a Jarvis vie, že text v mailoch, na weboch a v exportoch nie sú príkazy.
+- **Banner AI Superčlovek** v mape appiek: kurz od autorov Jarvisa.
+
 ## 1.3.0 (2026-11-17)
 
 - **Budík.** Povieš „zobuď ma o 6:30" a ráno Jarvis zazvoní a nahlas ti povie, ako si spal (keď to vie), aké je počasie,

@@ -1,4 +1,4 @@
-// Planéta „Tvoje appky": ikony appiek, ktoré si používateľ vybral na stránke /apps/, plávajú ako
+// Planéta „Tvoje appky": ikony appiek, ktoré si používateľ vybral vo vnútri orbu (apps-world.js), plávajú ako
 // sklenené bubliny okolo jemného jadra. Pri hoveri sa rozvlnia ako tekutina (vlna ide od ikony
 // k ikone), pri focuse sa roztiahnu. Kým nič nevybral, plávajú tu matne najčastejšie appky
 // ako pozvánka.

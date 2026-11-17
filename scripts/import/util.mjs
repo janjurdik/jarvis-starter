@@ -4,6 +4,7 @@
  */
 import '../../hud/server/env.mjs'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { MEMORY_DIR } from '../../hud/server/memory/index.mjs'
@@ -32,6 +33,17 @@ export const SOURCE_NAME = {
 }
 /** Sources that produce message threads in the archive. */
 export const CHAT_SOURCES = ['instagram', 'facebook', 'whatsapp', 'discord', 'telegram', 'chatgpt', 'claude']
+
+// Sources the agent mapped on his own (import.mjs ingest) are known by the name the user's app has.
+try {
+  for (const [id, label] of Object.entries(JSON.parse(readFileSync(join(ARCHIVE_DIR, 'sources.json'), 'utf8')))) {
+    if (!/^[a-z][a-z0-9-]{1,23}$/.test(id) || typeof label !== 'string') continue
+    SOURCE_NAME[id] ??= label.slice(0, 40)
+    if (!CHAT_SOURCES.includes(id)) CHAT_SOURCES.push(id)
+  }
+} catch {
+  // nothing imported this way yet
+}
 
 /** Error with a message meant for the user (Slovak, no stack trace needed). */
 export class UserError extends Error {}

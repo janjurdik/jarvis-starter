@@ -6,7 +6,7 @@
  *     ludia/<Name>.md        people        frontmatter: vztah, narodeniny
  *     projekty/<Name>.md     projects      frontmatter: stav
  *     ciele/<Name>.md        goals         frontmatter: stav, body with "- [ ]" steps
- *     dennik/YYYY-MM-DD.md   daily log     frontmatter: spanok (hours), nalada (1-5)
+ *     dennik/YYYY-MM-DD.md   daily log     frontmatter: spanok (hours), nalada (1-5), body numbers from a watch (server/garmin)
  *     poznamky/**            anything else
  *     ulohy.md               to-do list ("- [ ] text (do 2026-12-01)")
  *     kalendar.md            events ("- 2026-12-01 14:00-15:00 Title @ Place")
@@ -318,7 +318,11 @@ export function dayStats(ix, { since = null } = {}) {
     .map((n) => {
       const sleepMin = parseSleepMinutes(n.fm.spanok ?? n.fm['spánok'] ?? n.fm.sleep)
       const mood = Number(String(n.fm.nalada ?? n.fm['nálada'] ?? n.fm.mood ?? '').replace(',', '.'))
-      return { day: n.name, sleepMin, mood: Number.isFinite(mood) && mood > 0 ? mood : null, words: n.words }
+      // Body numbers, written by the Garmin sync (server/garmin/index.mjs) or by hand. Missing = null.
+      const num = (v) => (v === undefined || v === null || String(v).trim() === '' || !Number.isFinite(Number(String(v).replace(',', '.'))) ? null : Number(String(v).replace(',', '.')))
+      const body = { score: num(n.fm.spanok_skore), hrv: num(n.fm.hrv), rhr: num(n.fm.tep_pokoj), bb: num(n.fm.bateria), bbWake: num(n.fm.bateria_rano), steps: num(n.fm.kroky), stress: num(n.fm.stres), readiness: num(n.fm.pripravenost) }
+      const text = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+      return { day: n.name, sleepMin, mood: Number.isFinite(mood) && mood > 0 ? mood : null, words: n.words, ...body, bed: text(n.fm.zaspal), wake: text(n.fm.vstal), phases: text(n.fm.spanok_fazy), sleepSource: text(n.fm.spanok_zdroj) }
     })
     .sort((a, b) => a.day.localeCompare(b.day))
 }
@@ -467,7 +471,11 @@ export async function logDay({ day = isoDay(), text = '', sleepHours = null, moo
     raw = ''
   }
   const { fm, body } = parseFrontmatter(raw)
-  if (sleepHours !== null && Number.isFinite(Number(sleepHours))) fm.spanok = String(sleepHours)
+  if (sleepHours !== null && Number.isFinite(Number(sleepHours))) {
+    fm.spanok = String(sleepHours)
+    // The user's own word: from now on the Garmin sync leaves this night's sleep alone.
+    delete fm.spanok_zdroj
+  }
   if (mood !== null && Number.isFinite(Number(mood))) fm.nalada = String(mood)
   const head = Object.keys(fm).length ? `---\n${Object.entries(fm).map(([k, v]) => `${k}: ${Array.isArray(v) ? `[${v.join(', ')}]` : v}`).join('\n')}\n---\n` : ''
   const nextBody = `${body.replace(/\s+$/, '')}${text.trim() ? `${body.trim() ? '\n' : ''}- ${text.trim()}` : ''}`

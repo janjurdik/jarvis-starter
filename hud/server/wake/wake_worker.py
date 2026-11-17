@@ -1,6 +1,9 @@
 # /// script
-# requires-python = ">=3.10,<3.13"
-# dependencies = ["openwakeword==0.6.0", "onnxruntime", "numpy<2.4"]
+# requires-python = ">=3.11,<3.13"
+# dependencies = ["openwakeword==0.6.0", "numpy==2.3.5", "onnxruntime>=1.20,<1.32"]
+#
+# [tool.uv]
+# exclude-newer = "2026-11-01T00:00:00Z"
 # ///
 """
 "Hey Jarvis" from the browser microphone stream. openWakeWord hey_jarvis on 80 ms frames and

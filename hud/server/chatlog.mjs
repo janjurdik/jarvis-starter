@@ -20,6 +20,8 @@ export async function logTurn({ user, jarvis, via, tools = [], at = new Date() }
 }
 
 export async function readDay(day) {
+  // The day comes from a URL (inner worlds): only a real date may become a file name.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day))) return []
   try {
     const text = await readFile(join(CHAT_DIR, `${day}.jsonl`), 'utf8')
     return text.split('\n').filter(Boolean).map((l) => JSON.parse(l))

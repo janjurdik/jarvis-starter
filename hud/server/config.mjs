@@ -6,9 +6,10 @@ import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseAlarm } from './alarm.mjs'
 import { REPO } from './util.mjs'
+import { isPitch, isRate, isVoiceId, langOf } from './voices.mjs'
 
 export const CONFIG_FILE = process.env.JARVIS_CONFIG || join(REPO, 'config', 'jarvis.json')
-const EXAMPLE_FILE = join(REPO, 'config', 'jarvis.example.json')
+export const EXAMPLE_FILE = join(REPO, 'config', 'jarvis.example.json')
 
 const DEFAULTS = {
   name: '',
@@ -19,9 +20,34 @@ const DEFAULTS = {
   routines: [],
   /** Hours when Jarvis does not speak on his own, "22:30-07:00". Empty string turns it off. */
   quiet: '22:30-07:00',
+  /** The activity log: which app was in front, once a minute. hud/server/activity.mjs normalises this block; docs/AKTIVITA.md */
+  activity: { enabled: true, titles: false, retentionDays: 90, idleMinutes: 5, ignore: [] },
   /** The pulse: a check every few minutes that needs no Claude. */
   pulse: { enabled: true, every: 5, eventLead: 15, dueAt: '17:00' },
+  /** Who the assistant is: the name it answers to and whether it speaks as a man or a woman. */
+  assistant: { name: 'Jarvis', gender: 'male' },
+  /** The voice: an Edge voice id (null = the default for the language and the assistant's gender), optional rate and pitch. */
+  voice: { id: null, rate: null, pitch: null },
+  /** How to address the user in gendered words ("pripravený" or "pripravená"): male, female or null when unknown. */
+  userGender: null,
+  /** Speech recognition: auto (local Whisper when the computer can run it), browser or whisper. */
+  stt: 'auto',
 }
+
+const GENDERS = ['male', 'female']
+/** A short name on one line: letters, digits, spaces and a few signs, at most `max` characters. */
+const shortName = (value, max) => (typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f<>"`]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max) : '')
+const obj = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {})
+
+/**
+ * JARVIS_LANG as the user set it in .env (or the shell). It wins over `language` in the config.
+ * A value that getConfig() put there itself (see below) does not count: it travels to child
+ * processes, and there the config must stay in charge.
+ */
+const ENV_LANG = process.env.JARVIS_LANG_FROM_CONFIG === '1' ? '' : process.env.JARVIS_LANG || ''
+export const LANG_FROM_ENV = Boolean(ENV_LANG)
+/** Language of the voice and of speech recognition: sk or cs. */
+export const effectiveLang = (cfg = getConfig()) => langOf(ENV_LANG || cfg.language)
 
 let cache = { mtime: -1, value: null }
 
@@ -67,6 +93,19 @@ export function getConfig() {
     dueAt: /^\d{1,2}:\d{2}$/.test(p.dueAt ?? '') ? p.dueAt.padStart(5, '0') : DEFAULTS.pulse.dueAt,
   }
   value.quiet = typeof raw.quiet === 'string' ? raw.quiet : DEFAULTS.quiet
+  value.language = langOf(raw.language)
+  // Everything else in Jarvis (and every worker it starts) reads the language from JARVIS_LANG.
+  // Without the variable in .env, the config's language stands in for it.
+  if (!ENV_LANG) {
+    process.env.JARVIS_LANG = value.language
+    process.env.JARVIS_LANG_FROM_CONFIG = '1'
+  }
+  const a = obj(raw.assistant)
+  value.assistant = { name: shortName(a.name, 24) || DEFAULTS.assistant.name, gender: GENDERS.includes(a.gender) ? a.gender : DEFAULTS.assistant.gender }
+  const v = obj(raw.voice)
+  value.voice = { id: isVoiceId(v.id) ? v.id : null, rate: isRate(v.rate) ? v.rate : null, pitch: isPitch(v.pitch) ? v.pitch : null }
+  value.userGender = GENDERS.includes(raw.userGender) ? raw.userGender : null
+  value.stt = ['auto', 'browser', 'whisper'].includes(raw.stt) ? raw.stt : DEFAULTS.stt
   // The alarm clock (scripts/alarm.mjs). Like routines, only from the user's own config.
   value.alarm = mtime ? parseAlarm(raw.alarm) : null
   cache = { mtime, value }

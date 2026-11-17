@@ -225,7 +225,7 @@ function identityLines(result) {
 export function markdown(result, { deep }) {
   const when = new Date(result.at).toLocaleString('sk-SK', { dateStyle: 'long', timeStyle: 'short' })
   const md = ['# Čo som o tebe našiel', '']
-  md.push(`${deep ? 'Hĺbkový sken' : 'Rýchly sken'} počítača, ${when}, trval ${Math.round(result.ms / 1000)} s. Nič z toho neodišlo z počítača. Úplné dáta sú v \`data/scan/scan.json\`.`, '')
+  md.push(`${deep ? 'Hĺbkový sken' : 'Rýchly sken'} počítača, ${when}, trval ${Math.round(result.ms / 1000)} s. Sken sám nikam nič neposiela, výsledok je v tomto priečinku. Prečíta si ho AI, na ktorej Jarvis beží, aby ťa spoznal. Úplné dáta sú v \`data/scan/scan.json\`.`, '')
   md.push('## Kto si', '', ...(identityLines(result).length ? identityLines(result) : ['- Meno som nezistil.']), '')
   const h = result.host
   md.push('## Počítač', '', `- ${[h.model, h.os, h.name].filter(Boolean).join(', ')}`, `- ${h.laptop ? 'Notebook' : 'Stolný počítač'}${h.screens ? `, ${sk(h.screens, 'obrazovka', 'obrazovky', 'obrazoviek')}` : ''}${h.diskFreeGB != null ? `, voľných ${h.diskFreeGB} GB` : ''}`)

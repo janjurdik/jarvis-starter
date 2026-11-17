@@ -15,7 +15,7 @@ import { createInterface } from 'node:readline'
 import { cleanEnv } from './agent.mjs'
 import { MEMORY_DIR } from './memory/index.mjs'
 import { WARMUP_TEXT, buildPersona, contextLine } from './persona.mjs'
-import { BRAIN_DIR, DATA_DIR, ROOT, errMsg, findBin, log, spawnBin, writeFileAtomic } from './util.mjs'
+import { BRAIN_DIR, DATA_DIR, REPO, ROOT, errMsg, findBin, log, spawnBin, writeFileAtomic } from './util.mjs'
 
 export const CLAUDE = findBin('claude', { override: process.env.JARVIS_CLAUDE_BIN })
 export const MODEL = process.env.JARVIS_MODEL || 'sonnet'
@@ -25,7 +25,7 @@ const MAX_TURNS_PER_SESSION = Number(process.env.JARVIS_MAX_TURNS || 30)
 const MCP_FILE = join(BRAIN_DIR, 'mcp.json')
 const PERSONA_FILE = join(BRAIN_DIR, 'persona.md')
 
-const MEMORY_TOOLS = ['calendar_list', 'get_health', 'view_todo', 'list_goals', 'upcoming_celebrations', 'memory_stats', 'read_note', 'search_notes', 'remember', 'add_todo', 'complete_todo', 'add_event', 'log_day', 'write_note', 'remind', 'search_messages', 'read_thread']
+const MEMORY_TOOLS = ['calendar_list', 'get_health', 'garmin_sync', 'view_todo', 'list_goals', 'upcoming_celebrations', 'memory_stats', 'read_note', 'search_notes', 'remember', 'add_todo', 'complete_todo', 'add_event', 'log_day', 'write_note', 'remind', 'search_messages', 'read_thread', 'activity_today', 'activity_set']
 
 /**
  * Permission rule for the built-in Read tool on one folder. Claude Code writes absolute paths in
@@ -49,6 +49,8 @@ export function allowedTools() {
     ...MEMORY_TOOLS.map((t) => `mcp__memory__${t}`),
     'mcp__computer__open_app',
     'mcp__computer__open_url',
+    'mcp__computer__media',
+    'mcp__computer__volume',
     'mcp__jarvis-hud__hud_focus',
     'mcp__jarvis-hud__hud_card',
     'mcp__jarvis-hud__hud_log',
@@ -59,6 +61,16 @@ export function allowedTools() {
     'mcp__jarvis-hud__agent_reply',
     'mcp__jarvis-hud__agent_stop',
     'mcp__jarvis-hud__set_alarm',
+    'mcp__jarvis-hud__hud_orb',
+    'mcp__jarvis-hud__setup_note',
+    'mcp__jarvis-hud__settings',
+    'mcp__jarvis-hud__set_alarm_sound',
+    'mcp__jarvis-hud__video_open',
+    'mcp__jarvis-hud__video_seek',
+    'mcp__jarvis-hud__video_transcript',
+    'mcp__jarvis-hud__video_info',
+    'mcp__jarvis-hud__video_control',
+    'mcp__jarvis-hud__video_close',
     'WebSearch',
     'WebFetch',
     'Read',
@@ -67,7 +79,10 @@ export function allowedTools() {
 
 /** The one thing that stays closed: the HUD's own access token in data/brain. It is of no use to the user and would open the HUD to another device. */
 export function deniedTools() {
-  return [readRule(BRAIN_DIR)].filter(Boolean)
+  // And the secrets of the installation: Twilio keys, the iCal address.
+  const env = resolve(REPO, '.env').replace(/\\/g, '/')
+  const win = /^([A-Za-z]):\/(.*)$/.exec(env)
+  return [readRule(BRAIN_DIR), /[()]/.test(env) ? null : `Read(/${win ? `/${win[1].toLowerCase()}/${win[2]}` : env})`].filter(Boolean)
 }
 
 /** MCP server config for the CLI. File is 0600 in data/brain (never committed), tokens never go to the log. */

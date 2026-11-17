@@ -3,6 +3,8 @@
  * Importer of data exports into Jarvis's memory. Everything stays on this computer.
  *
  *   node scripts/import.mjs detect <path> [--json]
+ *   node scripts/import.mjs inspect <path> [--json]        a map of an export nobody wrote a parser for
+ *   node scripts/import.mjs ingest <file.jsonl> --source <id> [--name "App"] [--json]
  *   node scripts/import.mjs run <path> [<more parts>] [--source x] [--me "Full Name"] [--progress] [--json]
  *   node scripts/import.mjs people [--all] [--json]
  *   node scripts/import.mjs apply <decisions.json> [--json]
@@ -12,20 +14,22 @@
  *   node scripts/import.mjs steam [--dir <Steam folder>] [--json]
  *   node scripts/import.mjs file <path> [--json]
  *
- * Understands exports of Instagram, Facebook / Messenger, WhatsApp, Discord, Telegram, ChatGPT,
- * Claude, Spotify, Apple Music and Google Takeout (YouTube history), as a zip, an unzipped
- * folder or a single file. The original export is only read, never changed.
+ * A few common exports are read directly (Instagram, Facebook / Messenger, WhatsApp, Discord,
+ * Telegram, ChatGPT, Claude, Spotify, Apple Music, Google Takeout). Anything else, and any of
+ * those whose format changed, goes the general way: `inspect` shows the agent what the export
+ * looks like, he maps it and loads it with `ingest`. The original is only read, never changed.
  */
 import './lib.mjs'
 import { readFile } from 'node:fs/promises'
 import { openAndDetect } from './import/detect.mjs'
+import { ingestMessages, inspectExport } from './import/generic.mjs'
 import { applyDecisions, buildCandidates } from './import/people.mjs'
 import { importFile, listImports, runImport } from './import/run.mjs'
 import { formatHits, search, thread } from './import/search.mjs'
 import { importSteam } from './import/steam.mjs'
 import { SOURCE_NAME, UserError, day, fmtInt, localStamp, oneLine, plural } from './import/util.mjs'
 
-const VALUE_FLAGS = new Set(['source', 'me', 'person', 'from', 'to', 'limit', 'around', 'dir'])
+const VALUE_FLAGS = new Set(['source', 'me', 'person', 'from', 'to', 'limit', 'around', 'dir', 'name'])
 
 function parse(argv) {
   const flags = {}
@@ -54,6 +58,8 @@ const HELP = `Import údajov do pamäte Jarvisa
 
   node scripts/import.mjs detect <cesta>          zistí, čo je to za export
   node scripts/import.mjs run <cesta>             načíta export do archívu (voľby: --source, --me "Meno", --progress)
+  node scripts/import.mjs inspect <cesta>         ukáže, čo v exporte je a ako vyzerajú jeho súbory (pre neznámy formát)
+  node scripts/import.mjs ingest <súbor.jsonl> --source <id> [--name "Appka"]   načíta správy v jednotnom tvare
   node scripts/import.mjs people                  ľudia z konverzácií, ktorí čakajú na potvrdenie (--all aj tí s pár správami)
   node scripts/import.mjs apply <rozhodnutia.json> zapíše potvrdených ľudí do pamäte
   node scripts/import.mjs list                    čo je už načítané
@@ -76,6 +82,14 @@ async function main() {
       if (!args[0]) throw new UserError('Chýba cesta k exportu.')
       const emit = flags.progress ? print : null
       return runImport(args.length > 1 ? args : args[0], { source: typeof flags.source === 'string' ? flags.source.toLowerCase() : null, me: typeof flags.me === 'string' ? flags.me : null, emit })
+    }
+    case 'inspect': {
+      if (!args[0]) throw new UserError('Chýba cesta k exportu.')
+      return inspectExport(args.length > 1 ? args : args[0])
+    }
+    case 'ingest': {
+      if (!args[0]) throw new UserError('Chýba súbor so správami (.jsonl).')
+      return ingestMessages(args[0], { source: typeof flags.source === 'string' ? flags.source : null, name: typeof flags.name === 'string' ? flags.name : null })
     }
     case 'people':
       return buildCandidates({ all: Boolean(flags.all) })
@@ -120,6 +134,16 @@ function human(res) {
   switch (command) {
     case 'detect':
       out.push(res.label, `Zdroj: ${SOURCE_NAME[res.source] ?? res.source} · istota ${Math.round(res.confidence * 100)} %`)
+      break
+    case 'inspect':
+      out.push(`${res.files} súborov, ${Math.round(res.bytes / 1e6)} MB`)
+      for (const f of res.folders.slice(0, 12)) out.push(`  ${f.dir}: ${f.files} súborov (${Object.entries(f.types).map(([k, v]) => `${v}× ${k}`).join(', ')})`)
+      for (const x of res.samples) out.push(`\n── ${x.file} (${Math.round(x.bytes / 1024)} kB)\n${x.head.slice(0, 600)}`)
+      out.push(`\n${res.next}`)
+      break
+    case 'ingest':
+      out.push(res.summary)
+      if (res.candidates) out.push('Ďalší krok: node scripts/import.mjs people')
       break
     case 'run':
       out.push(res.summary)

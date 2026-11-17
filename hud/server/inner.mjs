@@ -13,6 +13,7 @@ import { chatStats, readDay } from './chatlog.mjs'
 import { getConfig } from './config.mjs'
 import { calendarRange } from './memory/calendar.mjs'
 import { FOLDERS, STATUS_LABEL, checkboxes, dayStats, firstParagraph, getIndex, inFolder, ofKind, plain, section, slugify, statusOf, todos } from './memory/index.mjs'
+import { customOrb, getOrbState, orbContent } from './orbs.mjs'
 import { addDays, errMsg, isoDay, sendJson } from './util.mjs'
 
 /** Planets with fixed art in the 3D world. Extra memory folders reuse the art of a known moon when the name matches. */
@@ -27,6 +28,7 @@ export const PLANETS = {
   fotky: { title: 'Poznámky', color: '#9fd8ff', layout: 'cluster' },
   spanok: { title: 'Spánok', color: '#7fb8ff', layout: 'years' },
   ulohy: { title: 'Úlohy', color: '#ffb25c', layout: 'cluster' },
+  posta: { title: 'Pošta', color: '#7ff3ff', layout: 'cluster' },
 }
 /** Optional collections: a folder with this name in memory/ shows up as a small moon. */
 export const EXTRA = {
@@ -37,6 +39,7 @@ export const EXTRA = {
   skola: { title: 'Škola', color: '#8fb8ff' },
   zdroje: { title: 'Zdroje', color: '#c8f0ff' },
   content: { title: 'Obsah', color: '#ff7ab8' },
+  hry: { title: 'Hry', color: '#8cff8c' },
 }
 
 const nf = (n) => new Intl.NumberFormat('sk-SK').format(n)
@@ -131,16 +134,20 @@ const WORLDS = {
     return { items, groups: [...new Set(items.map((i) => i.g))].sort().map((key) => ({ key, label: key })) }
   },
   spanok: (ix) => {
-    const days = dayStats(ix).filter((d) => d.sleepMin || d.mood)
+    // Sleep and mood the user said, plus the body numbers a watch adds (Garmin sync): HRV, resting heart rate, body battery, steps.
+    const days = dayStats(ix).filter((d) => d.sleepMin || d.mood || d.hrv || d.rhr || d.bb || d.steps)
     const items = days.map((d) => ({
       id: `s:${d.day}`,
       t: shortDay(d.day),
-      s: [d.sleepMin ? `spánok ${fmtMin(d.sleepMin)}` : null, d.mood ? `nálada ${d.mood}/5` : null].filter(Boolean).join(' · '),
+      s: [d.sleepMin ? `spánok ${fmtMin(d.sleepMin)}` : null, d.score ? `skóre ${d.score}` : null, d.hrv ? `HRV ${d.hrv}` : null, d.rhr ? `tep ${d.rhr}` : null, d.bb ? `body battery ${d.bb}` : null, d.steps ? `${nf(d.steps)} krokov` : null, d.mood ? `nálada ${d.mood}/5` : null].filter(Boolean).join(' · '),
       img: null,
       imp: d.sleepMin ? Math.min(1, d.sleepMin / 540) : 0.3,
       g: d.day.slice(0, 4),
       y: yearFrac(d.day),
       k: 'sleep',
+      // The numbers the body landscape of the 3D world draws (public/js/world/inner.js, METRICS).
+      day: d.day,
+      m: { sleep: d.sleepMin, hrv: d.hrv, rhr: d.rhr, bb: d.bb, steps: d.steps },
     }))
     return { items, groups: [...new Set(items.map((i) => i.g))].sort().map((key) => ({ key, label: key })) }
   },
@@ -185,14 +192,26 @@ const WORLDS = {
 
 const extraWorld = (folder) => (ix) => notesWorld(ix, inFolder(ix, folder), { group: (n) => String(n.fm.stav ?? n.fm.zaner ?? n.fm['žáner'] ?? n.fm.typ ?? folder), sub: (n) => cut(firstParagraph(n.body, 80), 80) || null })
 
+/** An orb Jarvis made (or Pošta): the notes of its memory folder, if it has one. Its own items are added in world(). */
+const customWorld = (custom) => (ix) => (custom?.folder ? notesWorld(ix, inFolder(ix, custom.folder), { group: (n) => String(n.fm.stav ?? n.fm.typ ?? custom.label), sub: (n) => cut(firstParagraph(n.body, 80), 80) || null }) : { items: [], groups: [] })
+
 async function world(node) {
   const ix = await getIndex()
-  const build = WORLDS[node] ?? (EXTRA[node] ? extraWorld(node) : null)
+  const custom = customOrb(node)
+  const build = WORLDS[node] ?? (EXTRA[node] ? extraWorld(node) : custom || node === 'posta' ? customWorld(custom) : null)
   if (!build) return null
-  const meta = PLANETS[node] ?? { ...EXTRA[node], layout: 'cluster' }
+  const meta = PLANETS[node] ?? (EXTRA[node] ? { ...EXTRA[node], layout: 'cluster' } : { title: custom.label, color: custom.color, layout: 'cluster' })
   const w = await build(ix)
-  // `ev` and `full` are server-side helpers for details, not part of the wire format.
-  return { title: meta.title, color: meta.color, layout: meta.layout, groups: w.groups, items: w.items.map(({ ev, full, ...it }) => it), _raw: w.items }
+  // What Jarvis wrote for this orb (data/orbs/<id>.json): its own items and the component panel.
+  const content = orbContent(node)
+  if (content?.items) {
+    w.items.push(...content.items.map((it) => ({ id: it.id, t: it.t, s: it.s ?? null, img: null, imp: it.imp, g: it.g, k: 'orb', text: it.text ?? null })))
+    const keys = new Set(w.groups.map((g) => g.key))
+    for (const g of content.groups ?? []) if (!keys.has(g.key)) w.groups.push(g), keys.add(g.key)
+    for (const it of content.items) if (!keys.has(it.g)) w.groups.push({ key: it.g, label: it.g }), keys.add(it.g)
+  }
+  // `ev`, `full` and `text` are server-side helpers for details, not part of the wire format.
+  return { title: meta.title, color: meta.color, layout: meta.layout, groups: w.groups, items: w.items.map(({ ev, full, text, ...it }) => it), panel: content?.panel ?? null, updatedAt: content?.updatedAt ?? null, _raw: w.items }
 }
 
 // ── item detail ────────────────────────────────────────────────────────
@@ -246,7 +265,15 @@ async function itemDetail(node, id) {
       kind: 'day',
       title: shortDay(n.name),
       sub: 'Denník',
-      stats: [stat?.sleepMin ? { value: fmtMin(stat.sleepMin), label: 'spánok' } : null, stat?.mood ? { value: `${stat.mood}/5`, label: 'nálada' } : null].filter(Boolean),
+      stats: [
+        stat?.sleepMin ? { value: fmtMin(stat.sleepMin), label: 'spánok' } : null,
+        stat?.score ? { value: String(stat.score), label: 'skóre spánku' } : null,
+        stat?.mood ? { value: `${stat.mood}/5`, label: 'nálada' } : null,
+        stat?.hrv ? { value: String(stat.hrv), label: 'HRV' } : null,
+        stat?.rhr ? { value: String(stat.rhr), label: 'tep v pokoji' } : null,
+        stat?.bb ? { value: String(stat.bb), label: 'body battery' } : null,
+        stat?.steps ? { value: nf(stat.steps), label: 'krokov' } : null,
+      ].filter(Boolean).slice(0, 5),
       sections: lines.length ? [{ title: 'Čo sa dialo', lines }] : [],
       people: n.links.map((l) => ix.byTitle.get(slugify(l))).filter((x) => x?.kind === 'person').slice(0, 8).map((p) => ({ id: idOf(p), name: p.title, node: 'ludia', img: null })),
     }
@@ -267,6 +294,7 @@ async function itemDetail(node, id) {
   if (!it) return null
   if (it.k === 'event') return { kind: 'event', title: it.t, sub: it.s, chips: [it.ev.kind === 'birthday' ? 'narodeniny' : it.ev.kind === 'nameday' ? 'meniny' : it.ev.allDay ? 'celý deň' : `${it.ev.time}${it.ev.end ? ` až ${it.ev.end}` : ''}`] }
   if (it.k === 'todo') return { kind: 'todo', title: it.full, sub: it.s }
+  if (it.k === 'orb') return { kind: 'orb', title: it.t, sub: it.s, text: it.text }
   if (it.k === 'routine') {
     const r = getConfig().routines.find((x) => `r:${x.id}` === id)
     return { kind: 'routine', title: it.t, sub: it.s, text: r ? `Rutina beží sama v čase ${r.time}. Zadanie je v súbore routines/${r.id}.md, výsledok nájdeš v pamäti v priečinku schranka.` : null }
@@ -286,6 +314,8 @@ export async function innerCounts() {
     fotky: ix.list.filter((n) => n.kind === 'note' && !(n.folder in EXTRA)).length,
   }
   for (const folder of Object.keys(EXTRA)) counts[folder] = inFolder(ix, folder).length
+  for (const c of getOrbState().custom) counts[c.id] = (c.folder ? inFolder(ix, c.folder).length : 0) + (orbContent(c.id)?.items?.length ?? 0)
+  counts.posta = orbContent('posta')?.items?.length ?? 0
   return counts
 }
 
@@ -303,7 +333,7 @@ export async function routeInner(req, res, url, { film }) {
     }
     const [node, ...rest] = path.slice('/api/inner/'.length).split('/').map(decodeURIComponent)
     const id = rest.join('/')
-    if (!PLANETS[node] && !EXTRA[node]) {
+    if (!PLANETS[node] && !EXTRA[node] && !customOrb(node)) {
       sendJson(res, 404, { ok: false, error: `neznámy svet ${node}` })
       return true
     }

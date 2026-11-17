@@ -8,6 +8,14 @@ import { esc } from './format.js'
 
 const STAY_MS = 16000
 
+const sameOrigin = (url) => {
+  try {
+    return new URL(url, location.href).origin === location.origin
+  } catch {
+    return true
+  }
+}
+
 export function createReveal({ onOpen, fileUrl = (u) => u }) {
   const root = document.createElement('div')
   root.className = 'rv'
@@ -43,7 +51,8 @@ export function createReveal({ onOpen, fileUrl = (u) => u }) {
       media =
         `<div class="rv-media rv-web"><div class="rv-bar"><i></i><i></i><i></i><span>${esc(web.name)}</span></div>` +
         `<div class="rv-site"><div class="rv-fallback"><b>${host}</b></div>` +
-        `<iframe src="${esc(web.url)}" title="${host}" loading="eager" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" tabindex="-1"></iframe></div></div>`
+        // A page of this very origin would run with Jarvis's own rights inside the frame: it is shown as a link only.
+        `${sameOrigin(web.url) ? '' : `<iframe src="${esc(web.url)}" title="${host}" loading="eager" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" tabindex="-1"></iframe>`}</div></div>`
     }
     const links = web ? `<a class="rv-btn" href="${esc(web.url)}" target="_blank" rel="noopener">${icon('web')}<span>Otvoriť web</span></a>` : ''
     return {

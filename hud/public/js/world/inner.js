@@ -46,11 +46,14 @@ void main(){
   // Karta s obrázkom: zblízka žiara len okolo nej, zďaleka jej miesto drží bod.
   float card = aInfo.z * smoothstep(9.0, 18.0, px);
   float size = mix(max(px * 0.9, 2.2 + 3.5 * aInfo.y), px * 1.9, card);
-  gl_PointSize = min(size * uPR, 220.0 * uPR) * (1.0 + aInfo.w * 0.8);
+  // aInfo.w: 1 zvýraznená (vybraná, označená), 0.6 pod kurzorom, 0 bežná, záporná = stlmená (mimo hľadania).
+  float hot = max(aInfo.w, 0.0);
+  float dim = step(aInfo.w, -0.5);
+  gl_PointSize = min(size * uPR, 220.0 * uPR) * (1.0 + hot * 0.8);
   float fog = exp(-pow(dist / 520.0, 2.0));
   float tw = 0.85 + 0.15 * sin(uTime * (0.7 + aInfo.y) + position.x);
-  vColor = aColor * (0.35 + 0.9 * aInfo.y + aInfo.w * 1.2);
-  vAlpha = mix(1.0, uCardGlow, card) * fog * tw * uOpen;
+  vColor = aColor * (0.35 + 0.9 * aInfo.y + hot * 1.2);
+  vAlpha = mix(1.0, uCardGlow, card) * fog * tw * uOpen * mix(1.0, 0.12, dim);
   vCore = card;
 }`
 
@@ -67,7 +70,7 @@ void main(){
 }`
 
 const CARD_VERT = /* glsl */ `
-uniform float uProj; uniform float uOpen;
+uniform float uProj; uniform float uOpen; uniform float uGhost;
 attribute vec3 aPos; attribute vec4 aInfo; attribute vec4 aTile; attribute vec3 aColor; attribute float aRound;
 varying vec2 vUv; varying vec4 vTile; varying vec3 vColor; varying float vRound; varying float vFade; varying float vHot;
 void main(){
@@ -75,14 +78,16 @@ void main(){
   float dist = max(0.1, -mv.z);
   float px = aInfo.x * uProj / dist;
   float show = aInfo.z * step(9.0, px) * step(0.0, aTile.x);
-  vFade = smoothstep(9.0, 18.0, px) * exp(-pow(dist / 520.0, 2.0)) * uOpen;
-  mv.xy += position.xy * aInfo.x * (1.0 + aInfo.w * 0.12) * show;
+  float hot = max(aInfo.w, 0.0);
+  // Stlmené položky takmer zhasnú, v atlase (uGhost) sú nevybrané o niečo tmavšie než vybrané.
+  vFade = smoothstep(9.0, 18.0, px) * exp(-pow(dist / 520.0, 2.0)) * uOpen * mix(1.0, 0.14, step(aInfo.w, -0.5)) * mix(1.0 - 0.42 * uGhost, 1.0, min(1.0, hot * 1.7));
+  mv.xy += position.xy * aInfo.x * (1.0 + hot * 0.12) * show;
   gl_Position = show > 0.5 ? projectionMatrix * mv : vec4(2.0, 2.0, 2.0, 1.0);
   vUv = position.xy + 0.5;
   vTile = aTile;
   vColor = aColor;
   vRound = aRound;
-  vHot = aInfo.w;
+  vHot = hot;
 }`
 
 const CARD_FRAG = /* glsl */ `
@@ -245,6 +250,105 @@ export function createInner(renderer, U) {
     return pos
   }
 
+  /**
+   * Atlas: every group is a tidy honeycomb of round cards, the groups stand in rows as one star
+   * map facing the camera, slightly bowed and layered in depth. Made for things the user picks
+   * from (Tvoje appky): everything is visible at once and nothing hides behind anything.
+   * The rows are packed for the free zone of this very window, so the map is as big as it can be
+   * on a tall zone and on a wide one. `fixed` items (the core) keep the position they bring in `p`,
+   * a group with `slot: [w, h]` and no items keeps an empty cell of that size (the banner).
+   */
+  const HIVE = { size: 5.6, step: 6.9, gapX: 9, gapY: 4, label: 6.4 }
+  function layoutAtlas(items, groups, insets) {
+    const byGroup = new Map(groups.map((g) => [g.key, []]))
+    items.forEach((it, i) => byGroup.get(it.g)?.push(i))
+    // Every group as a box: its honeycomb cells (the most used apps first, in the middle) and its size.
+    const boxes = groups
+      .map((g) => {
+        const list = byGroup.get(g.key)
+        if (!list.length) return g.slot ? { key: g.key, slot: true, w: g.slot[0], h: g.slot[1], list, cells: [] } : null
+        // A compact honeycomb: rows of a few discs, every other row shifted by half a step.
+        // The most used apps (the order of the catalog) come first, on the top row.
+        const n = list.length
+        const cols = n <= 3 ? n : n <= 6 ? Math.ceil(Math.sqrt(n)) : Math.max(3, Math.round(Math.sqrt(n * 1.2)))
+        const rows = Math.ceil(n / cols)
+        const pts = list.map((_, k) => {
+          const r = Math.floor(k / cols)
+          const inRow = r === rows - 1 ? n - r * cols : cols
+          const c = k - r * cols
+          // A short last row sits in the middle; a full odd row is shifted to interlock with its neighbours.
+          const shift = inRow < cols ? (cols - inRow) / 2 : r % 2 ? 0.5 : 0
+          return [HIVE.step * (c + shift), -HIVE.step * 0.87 * r]
+        })
+        const xs = pts.map((p) => p[0])
+        const ys = pts.map((p) => p[1])
+        const mx = (Math.min(...xs) + Math.max(...xs)) / 2
+        const my = (Math.min(...ys) + Math.max(...ys)) / 2
+        return { key: g.key, list, cells: pts.map(([x, y]) => [x - mx, y - my]), w: Math.max(...xs) - Math.min(...xs) + HIVE.size, h: Math.max(...ys) - Math.min(...ys) + HIVE.size + HIVE.label }
+      })
+      .filter(Boolean)
+    // Rows: for every possible number of rows the groups are cut into rows of even width, and the
+    // cut that shows the map biggest in this zone wins.
+    const zone = view.zone
+    const zw = Math.max(200, (zone ? zone.right - zone.left : view.w) - 56)
+    const zh = Math.max(120, (zone ? zone.bottom - zone.top : view.h) - (insets?.top ?? ATLAS_TOP) - (insets?.bottom ?? ATLAS_BOTTOM))
+    const total = boxes.reduce((a, bx) => a + bx.w + HIVE.gapX, 0)
+    let best = null
+    for (let n = 1; n <= boxes.length; n++) {
+      const rows = [[]]
+      let w = 0
+      for (const bx of boxes) {
+        const row = rows.at(-1)
+        // A row closes once it is as wide as an even share (and rows are still left to fill).
+        if (row.length && rows.length < n && w + (bx.w + HIVE.gapX) / 2 > total / n) {
+          rows.push([bx])
+          w = bx.w + HIVE.gapX
+        } else {
+          row.push(bx)
+          w += bx.w + HIVE.gapX
+        }
+      }
+      const W = Math.max(...rows.map((r) => r.reduce((a, bx) => a + bx.w, 0) + HIVE.gapX * (r.length - 1)))
+      const H = rows.reduce((a, r) => a + Math.max(...r.map((bx) => bx.h)), 0) + HIVE.gapY * (rows.length - 1)
+      const scale = Math.min(zw / W, zh / H)
+      if (!best || scale > best.scale) best = { rows, W, H, scale }
+    }
+    const pos = new Array(items.length)
+    const bow = (x, y) => (x * x + y * y) / 1100
+    yearCenters = []
+    let y = best.H / 2
+    best.rows.forEach((row, ri) => {
+      const rh = Math.max(...row.map((bx) => bx.h))
+      const rw = row.reduce((a, bx) => a + bx.w, 0) + HIVE.gapX * (row.length - 1)
+      let x = -rw / 2
+      row.forEach((bx, ci) => {
+        const cx = x + bx.w / 2
+        // Honeycombs hang from the top of their row, under their title.
+        const cy = bx.slot ? y - rh / 2 : y - HIVE.label - (bx.h - HIVE.label) / 2
+        const z = bow(cx, cy) + ((ci + ri) % 2 ? -4 : 3)
+        bx.list.forEach((i, k) => {
+          const j = rnd(hash(items[i].id))
+          pos[i] = new THREE.Vector3(cx + bx.cells[k][0], cy + bx.cells[k][1], z + (j() - 0.5) * 2)
+        })
+        yearCenters.push({ key: bx.key, c: new THREE.Vector3(cx, cy, z + (bx.slot ? 3 : 0)), R: Math.max(bx.w, bx.h - HIVE.label) / 2, w: bx.w, h: bx.h, top: y - HIVE.label + 1.4, slot: bx.slot === true })
+        x += bx.w + HIVE.gapX
+      })
+      y -= rh + HIVE.gapY
+    })
+    items.forEach((it, i) => {
+      if (pos[i]) return
+      // Fixed items sit relative to the map: p = [x in half-widths, y in half-heights, z].
+      const p = it.p ?? [0, -1.12, 12]
+      pos[i] = new THREE.Vector3((p[0] * best.W) / 2, (p[1] * best.H) / 2, p[2] ?? 0)
+    })
+    atlasBox = { w: best.W, h: best.H }
+    return pos
+  }
+  /** Room the header takes above the map and the tray below it, in CSS px. */
+  const ATLAS_TOP = 178
+  const ATLAS_BOTTOM = 152
+  let atlasBox = null
+
   // ── krajina tela ──
   const METRICS = [
     { key: 'sleep', label: 'Spánok', color: '#7fb8ff', norm: (v) => clamp((v ?? 0) / 600) },
@@ -313,7 +417,7 @@ export function createInner(renderer, U) {
       landscape = buildLandscape(items)
       pos = landscape.pos
       root.add(landscape.mesh)
-    } else pos = data.layout === 'years' ? layoutYears(items) : layoutCluster(items, groups)
+    } else pos = data.layout === 'years' ? layoutYears(items) : data.layout === 'atlas' ? layoutAtlas(items, groups, data.insets) : layoutCluster(items, groups)
 
     const n = items.length
     const P = new Float32Array(n * 3)
@@ -328,10 +432,11 @@ export function createInner(renderer, U) {
       P.set([p.x, p.y, p.z], i * 3)
       const imp = clamp(it.imp ?? 0.3)
       if (data.layout === 'landscape') col.set(it.k === 'day' ? '#7fb8ff' : it.k === 'gym' ? '#ffb25c' : '#ff8a7a')
-      else if (groupIndex.size <= 1) col.copy(accent)
+      else if (groupIndex.size <= 1 || data.layout === 'atlas') col.copy(accent)
       else col.set(PALETTE[groupIndex.get(it.g) % PALETTE.length])
       C.set([col.r, col.g, col.b], i * 3)
-      const size = data.layout === 'landscape' ? (it.k === 'day' ? 0.35 : 1.6) : data.layout === 'years' ? (it.img ? 2.6 + 3 * imp : 0.9 + 2.5 * imp) : 0.9 + 6.5 * Math.pow(imp, 1.4)
+      const size = data.layout === 'atlas' ? (it.size ?? HIVE.size) : data.layout === 'landscape' ? (it.k === 'day' ? 0.35 : 1.6) : data.layout === 'years' ? (it.img ? 2.6 + 3 * imp : 0.9 + 2.5 * imp) : 0.9 + 6.5 * Math.pow(imp, 1.4)
+      if (it.color) col.set(it.color)
       I.set([size, imp, it.img ? 1 : 0, 0], i * 4)
       round[i] = it.r ? 1 : 0
     })
@@ -358,7 +463,7 @@ export function createInner(renderer, U) {
     cGeo.instanceCount = n
     const cards = new THREE.Mesh(
       cGeo,
-      new THREE.ShaderMaterial({ uniforms: { uProj, uOpen, uSmall: { value: smallAtlas }, uNear: { value: nearAtlas } }, vertexShader: CARD_VERT, fragmentShader: CARD_FRAG, depthTest: true, depthWrite: true }),
+      new THREE.ShaderMaterial({ uniforms: { uProj, uOpen, uGhost: { value: data.layout === 'atlas' ? 1 : 0 }, uSmall: { value: smallAtlas }, uNear: { value: nearAtlas } }, vertexShader: CARD_VERT, fragmentShader: CARD_FRAG, depthTest: true, depthWrite: true }),
     )
     cards.frustumCulled = false
 
@@ -388,7 +493,8 @@ export function createInner(renderer, U) {
     const radius = Math.max(30, ds[Math.floor(ds.length * 0.85)] ?? 30)
     // Mierka pohybu: pri časovej osi podľa veľkosti jedného roka, nie celej osi.
     const scale = yearCenters.length ? Math.max(20, yearCenters.reduce((a, g) => a + g.R, 0) / yearCenters.length) * 2.2 : landscape ? landscape.width / 3 : radius
-    world = { data, items, P, I, tile, round, glow, cards, links, pairs, hot, infoAttr, tileAttr, center, radius, scale, landscape, idIndex, sel: -1, hover: -1 }
+    const colorAttr = cards.geometry.attributes.aColor
+    world = { data, items, P, I, C, C0: C.slice(), tile, round, glow, cards, links, pairs, hot, infoAttr, tileAttr, colorAttr, center, radius, scale: data.layout === 'atlas' ? 60 : scale, landscape, atlas: data.layout === 'atlas' ? atlasBox : null, idIndex, sel: -1, hover: -1, marks: new Uint8Array(n), dim: null }
     bgUniforms.uProj.value = 900
     queueImages()
     return world
@@ -583,7 +689,7 @@ export function createInner(renderer, U) {
   }
 
   // ── pohyb: let so zotrvačnosťou ──
-  const nav = { yaw: 0, pitch: 0, tYaw: 0, tPitch: 0, vel: new THREE.Vector3(), keys: new Set(), fly: null }
+  const nav = { yaw: 0, pitch: 0, tYaw: 0, tPitch: 0, vel: new THREE.Vector3(), keys: new Set(), fly: null, sx: 0, sy: 0, swayX: 0, swayY: 0 }
   const fwd = new THREE.Vector3()
   const right = new THREE.Vector3()
   const up = new THREE.Vector3(0, 1, 0)
@@ -605,6 +711,22 @@ export function createInner(renderer, U) {
       const back = Math.max(40, y0.R * 2.3)
       start.set(y0.c.x + 6, y0.c.y + 4, y0.c.z + back)
       c.copy(y0.c).add(new THREE.Vector3(0, 0, -back * 0.6))
+    }
+    if (world.atlas) {
+      // The whole wall fits the free zone, under the header and above the tray.
+      const z = view.zone
+      const zw = z ? z.right - z.left : view.w
+      const zh = z ? z.bottom - z.top : view.h
+      const top = world.data.insets?.top ?? ATLAS_TOP
+      const bottom = world.data.insets?.bottom ?? ATLAS_BOTTOM
+      const fitW = ((world.atlas.w / 2) * uProj.value) / Math.max(60, zw / 2 - 28)
+      const fitH = ((world.atlas.h / 2) * uProj.value) / Math.max(60, (zh - top - bottom) / 2)
+      const d = Math.max(fitW, fitH, 60)
+      // The usable part of the zone sits a little lower than its middle: lift the camera's aim to match.
+      const lift = (((top - bottom) / 2) * d) / uProj.value
+      start.set(0, lift, d)
+      c.set(0, lift, 0)
+      world.home = { pos: start.clone(), dist: d }
     }
     const look = c.clone().sub(start).normalize()
     nav.tYaw = nav.yaw = Math.atan2(look.x, -look.z)
@@ -672,8 +794,13 @@ export function createInner(renderer, U) {
       nav.yaw += (nav.tYaw - nav.yaw) * (1 - Math.exp(-dt * 9))
       nav.pitch += (nav.tPitch - nav.pitch) * (1 - Math.exp(-dt * 9))
     }
-    const cp = Math.cos(nav.pitch)
-    fwd.set(Math.sin(nav.yaw) * cp, Math.sin(nav.pitch), -Math.cos(nav.yaw) * cp)
+    // Sway: the camera leans a little after the pointer, so the layers of the world slide over each other.
+    nav.sx += ((nav.swayX ?? 0) - nav.sx) * (1 - Math.exp(-dt * 4))
+    nav.sy += ((nav.swayY ?? 0) - nav.sy) * (1 - Math.exp(-dt * 4))
+    const yaw = nav.yaw + nav.sx
+    const pitch = clamp(nav.pitch + nav.sy, -1.5, 1.5)
+    const cp = Math.cos(pitch)
+    fwd.set(Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp)
     camera.up.set(0, 1, 0)
     camera.lookAt(camera.position.clone().add(fwd))
     camera.updateMatrixWorld()
@@ -728,15 +855,65 @@ export function createInner(renderer, U) {
     if (prev === i) return
     if (kind === 'sel') world.sel = i
     else world.hover = i
-    for (let k = 0; k < world.items.length; k++) world.I[k * 4 + 3] = k === world.sel ? 1 : k === world.hover ? 0.6 : 0
-    world.infoAttr.needsUpdate = true
-    world.glow.geometry.attributes.aInfo.needsUpdate = true
-    const focus = world.sel >= 0 ? world.sel : world.hover
-    world.pairs.forEach(([a, b], k) => {
-      const h = a === focus || b === focus ? 1 : 0
-      world.hot[k * 2] = world.hot[k * 2 + 1] = h
+    paint()
+  }
+
+  /** Writes the look of every item from the selection, the hover, the marks and the search. */
+  function paint() {
+    const w = world
+    for (let k = 0; k < w.items.length; k++) {
+      const marked = w.marks[k] === 1
+      const dim = w.dim && !w.dim[k]
+      w.I[k * 4 + 3] = k === w.sel ? 1 : marked ? (k === w.hover ? 1.3 : 1) : k === w.hover ? 0.6 : dim ? -1 : 0
+    }
+    w.infoAttr.needsUpdate = true
+    w.glow.geometry.attributes.aInfo.needsUpdate = true
+    const focus = w.sel >= 0 ? w.sel : w.hover
+    w.pairs.forEach(([a, b], k) => {
+      const h = a === focus || b === focus ? 1 : w.marks[a] && w.marks[b] ? 0.85 : 0
+      w.hot[k * 2] = w.hot[k * 2 + 1] = h
     })
-    world.links.geometry.attributes.aHot.needsUpdate = true
+    w.links.geometry.attributes.aHot.needsUpdate = true
+  }
+
+  const MARK = new THREE.Color('#ffb25c')
+  /** Marks items as chosen (a Set of indices): they glow amber and their links light up. */
+  function setMarks(set) {
+    if (!world) return
+    for (let k = 0; k < world.items.length; k++) {
+      const on = set.has(k) ? 1 : 0
+      if (world.marks[k] === on) continue
+      world.marks[k] = on
+      if (world.items[k].fixed) continue
+      const c = on ? [MARK.r, MARK.g, MARK.b] : world.C0.slice(k * 3, k * 3 + 3)
+      world.C.set(c, k * 3)
+    }
+    world.colorAttr.needsUpdate = true
+    world.glow.geometry.attributes.aColor.needsUpdate = true
+    paint()
+  }
+
+  /** Dims everything outside the given Set of indices (search). null lights everything again. */
+  function setDim(set) {
+    if (!world) return
+    world.dim = set ? Uint8Array.from(world.items, (_, k) => (set.has(k) ? 1 : 0)) : null
+    paint()
+  }
+
+  /** A point of the inner world in CSS px: { x, y, depth, k } where k = px per world unit there. null behind the camera. */
+  function projectPoint(p) {
+    v.copy(p).applyMatrix4(camera.matrixWorldInverse)
+    const depth = -v.z
+    if (depth < 0.5) return null
+    v.applyMatrix4(camera.projectionMatrix)
+    return { x: ((v.x + 1) / 2) * view.w, y: ((1 - v.y) / 2) * view.h, depth, k: uProj.value / depth }
+  }
+
+  /** Back to the pose the world opened with (the whole atlas in view). */
+  function flyHome() {
+    if (!world?.home) return
+    nav.vel.set(0, 0, 0)
+    nav.fly = { from: camera.position.clone(), to: world.home.pos.clone(), t0: null, dur: 1.1, yaw: 0, pitch: 0, yaw0: nav.yaw, pitch0: nav.pitch }
   }
 
   /** Popisky rokov (galaxie časovej osi) v zábere. */
@@ -762,7 +939,7 @@ export function createInner(renderer, U) {
   function flyToGroup(key) {
     const g = yearCenters.find((x) => x.key === key)
     if (!g) return
-    const to = g.c.clone().add(new THREE.Vector3(0, 0, g.R * 2.1))
+    const to = g.c.clone().add(new THREE.Vector3(0, 0, world?.atlas ? Math.max(30, g.R * 3.3) : g.R * 2.1))
     const dir = g.c.clone().sub(to).normalize()
     nav.vel.set(0, 0, 0)
     nav.fly = { from: camera.position.clone(), to, t0: null, dur: 1.4, yaw: Math.atan2(dir.x, -dir.z), pitch: Math.asin(clamp(dir.y, -1, 1)), yaw0: nav.yaw, pitch0: nav.pitch }
@@ -812,6 +989,12 @@ export function createInner(renderer, U) {
     labels,
     groupLabels,
     flyToGroup,
+    flyHome,
+    setMarks,
+    setDim,
+    projectPoint,
+    groups: () => yearCenters,
+    sway: (x, y) => ((nav.swayX = x), (nav.swayY = y)),
     screenOf,
     keys: nav.keys,
     item: (i) => world?.items[i] ?? null,

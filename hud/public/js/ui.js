@@ -105,6 +105,7 @@ export function createUI({ capture }) {
     `<button type="button" class="chip chip-wake" id="chip-voice" title="Hlas a počúvanie, klik zapne Hey Jarvis">${icon('speaker')}<span>Hlas</span></button>`,
     `<span class="chip chip-life" id="chip-life" title="Pamäť">${icon('pamat')}<span>Pamäť</span></span>`,
     `<button type="button" class="chip chip-film" id="chip-film" title="Režim natáčania (N)">${icon('film')}<span>Natáčanie</span></button>`,
+    `<button type="button" class="chip chip-set" id="chip-set" title="Nastavenia: hlas, oslovenie, počúvanie" aria-label="Nastavenia">${icon('sliders')}</button>`,
     `<button type="button" class="chip chip-jobs" id="chip-jobs" hidden>${icon('projekty')}<span></span></button>`,
     `<span class="chip chip-app" id="chip-app" hidden>${icon('app')}<span></span></span>`,
   ].join('')
@@ -234,11 +235,12 @@ export function createUI({ capture }) {
         const allDay = !it.time
         const dayLabel = it.isToday ? 'dnes' : when
         if (allDay) when = 'celý deň'
-        const sub = [it.place, when ? (next ? `<b>${esc(when)}</b>` : esc(when)) : null].filter(Boolean)
+        // Everything here comes from the calendar (titles and places can be written by whoever sent an invitation): escaped, always.
+        const sub = [it.place ? esc(it.place) : null, when ? (next ? `<b>${esc(when)}</b>` : esc(when)) : null].filter(Boolean)
         return (
           `<li class="ev${next ? ' next' : ''}${it.isToday ? '' : ' other-day'}">${icon(KIND_ICON[it.kind] ?? 'kalendar')}` +
           `<span class="ev-time${allDay ? ' allday' : ''}">${esc(allDay ? dayLabel : it.time)}</span>` +
-          `<span class="ev-body"><span class="ev-title">${esc(it.title)}</span>${sub.length ? `<span class="ev-sub">${sub.map((x) => (x.startsWith('<b>') ? x : esc(x))).join(' · ')}</span>` : ''}</span></li>`
+          `<span class="ev-body"><span class="ev-title">${esc(it.title)}</span>${sub.length ? `<span class="ev-sub">${sub.join(' · ')}</span>` : ''}</span></li>`
         )
       })
       .join('')
@@ -411,7 +413,9 @@ export function createUI({ capture }) {
     const util = Number.isFinite(limit?.utilization) ? limit.utilization : null
     const blocked = limit?.status && limit.status !== 'allowed' && limit.status !== 'allowed_warning'
     const pct = util !== null && !mock ? ` <span class="pre">${Math.round(util * 100)} %</span>` : ''
-    const brainText = !connected ? 'Server nedostupný' : mock ? 'Claude <b>mock</b>' : brain === 'busy' ? 'Claude pracuje' : ok ? 'Claude online' : starting ? 'Claude štartuje' : brain === 'error' ? 'Claude chyba' : status ? 'Claude offline' : 'Claude nepripojený'
+    // The name of the agent Jarvis runs on (Claude or ChatGPT) comes from the server, never from page content.
+    const ai = status?.aiName === 'ChatGPT' ? 'ChatGPT' : 'Claude'
+    const brainText = !connected ? 'Server nedostupný' : mock ? `${ai} <b>mock</b>` : brain === 'busy' ? `${ai} pracuje` : ok ? `${ai} online` : starting ? `${ai} štartuje` : brain === 'error' ? `${ai} chyba` : status ? `${ai} offline` : `${ai} nepripojený`
     const resets = Number.isFinite(limit?.resetsAt) ? new Date(limit.resetsAt * (limit.resetsAt < 1e12 ? 1000 : 1)) : null
     setChip('brain', chip.brain, {
       cls: !(ok || mock) ? (starting ? 'is-warn' : 'is-err') : blocked || (util ?? 0) >= 0.95 ? 'is-err' : (util ?? 0) >= 0.8 ? 'is-warn' : '',
@@ -508,6 +512,8 @@ export function createUI({ capture }) {
           `<div class="nl" data-node="${n.id}" data-side="${n.side}"${n.minor ? ' data-minor="1"' : ''}><div class="nl-in" data-node="${n.id}"><div class="nl-k">${icon(NODE_ICON[n.id] ?? n.icon ?? 'info')}<span>${esc(n.label)}</span></div><div class="nl-v">${esc(n.value)}</div><div class="nl-s">${esc(n.sub)}</div><div class="nl-cap"></div></div></div>`,
       )
       .join('')
+    // Many planets on the ring: the labels keep only the name and the number, the detail line shows on hover.
+    el.labels.classList.toggle('is-dense', nodes.filter((n) => !n.minor).length > 8)
     labelEls = new Map([...el.labels.children].map((node) => [node.dataset.node, node]))
     for (const node of labelEls.values()) node._cap = node.querySelector('.nl-cap')
     cache.delete('rutinyLabel')
@@ -531,7 +537,7 @@ export function createUI({ capture }) {
       // Popisok sa otočí na druhú stranu objektu, keď by vošiel pod lištu alebo do titulku.
       let side = p.side ?? node._pref
       let shift = 0
-      if (bounds && off !== null) {
+      if (bounds && off !== null && side !== 'left' && side !== 'right') {
         node._h ??= node.firstElementChild.offsetHeight || 64
         const cur = node._side ?? side
         const roomAbove = y - off - node._h - bounds.top

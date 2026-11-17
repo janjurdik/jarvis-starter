@@ -22,7 +22,7 @@ import { homedir, userInfo } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
 import { prepareSlot } from '../hud/server/alarm.mjs'
 import { getConfig } from '../hud/server/config.mjs'
-import { DATA_DIR, IS_MAC, IS_WIN, LABEL, LOG_DIR, REPO, TASK_FOLDER, has, parseArgs, sh } from './lib.mjs'
+import { DATA_DIR, IS_MAC, IS_WIN, LABEL, LOG_DIR, REPO, TASK_FOLDER, WIN_POWERSHELL, has, parseArgs, sh } from './lib.mjs'
 
 const { flags, rest } = parseArgs()
 const action = rest[0] ?? 'status'
@@ -133,7 +133,7 @@ function winScript(routine) {
   ].join('\n')
 }
 
-const ps = (script) => sh('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '-'], { input: script, timeout: 60_000 })
+const ps = (script) => sh(WIN_POWERSHELL, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', '-'], { input: script, timeout: 60_000 })
 
 async function winInstalled() {
   const res = await ps(`Get-ScheduledTask -TaskPath ${psq(`\\${TASK_FOLDER}\\`)} -ErrorAction SilentlyContinue | ForEach-Object { $_.TaskName }`)

@@ -21,12 +21,12 @@ const nfmt = (n) => new Intl.NumberFormat('sk-SK').format(n)
 const COLOR = {
   ludia: '#7ff3ff', spravy: '#5fe6ff', projekty: '#7ff3ff', fotky: '#9fd8ff', udalosti: '#7ff3ff', spanok: '#7fb8ff',
   kalendar: '#ffb25c', rutiny: '#7ff3ff', questy: '#ffb25c', skola: '#8fb8ff', knihy: '#ffd59a', filmy: '#ff9ac8',
-  miesta: '#9affc8', hudba: '#b49aff', zdroje: '#c8f0ff', ulohy: '#ffb25c', content: '#ff7ab8',
+  miesta: '#9affc8', hudba: '#b49aff', zdroje: '#c8f0ff', ulohy: '#ffb25c', content: '#ff7ab8', posta: '#7ff3ff', hry: '#8cff8c',
 }
 const TITLE = {
   ludia: 'Ľudia', spravy: 'Rozhovory', projekty: 'Projekty', fotky: 'Poznámky', udalosti: 'Denník', spanok: 'Spánok',
   kalendar: 'Kalendár', rutiny: 'Rutiny', questy: 'Ciele', skola: 'Škola', knihy: 'Knihy', filmy: 'Filmy', miesta: 'Miesta',
-  hudba: 'Hudba', zdroje: 'Zdroje', ulohy: 'Úlohy', content: 'Obsah',
+  hudba: 'Hudba', zdroje: 'Zdroje', ulohy: 'Úlohy', content: 'Obsah', posta: 'Pošta', hry: 'Hry',
 }
 /** Item ids are global ("n:<path>"), links from the inspector need no per-node prefix. */
 const PREFIX = {}
@@ -80,7 +80,43 @@ function heroHtml(d) {
   </div>`
 }
 
-export function createDossier({ core, canvas = document.querySelector('canvas'), onClose = () => {}, onOpen = () => {} } = {}) {
+// ── kit: hotové komponenty, z ktorých si Jarvis skladá vnútro orbu (docs/ORBY.md) ──
+
+const ACCENT = { amber: 'is-amber', red: 'is-red', green: 'is-green' }
+const acc = (a) => ACCENT[a] ?? ''
+
+/** One component of an orb's panel as HTML. Everything is escaped: the content is data Jarvis wrote. */
+function kitHtml(c) {
+  const title = c.title ? `<h4>${esc(c.title)}</h4>` : ''
+  if (c.type === 'stat')
+    return `<section class="kit kit-stat ${acc(c.accent)}"><span class="kit-label">${esc(c.label)}</span><b>${esc(c.value)}${c.unit ? `<i>${esc(c.unit)}</i>` : ''}</b>${c.caption ? `<span class="kit-cap">${esc(c.caption)}</span>` : ''}</section>`
+  if (c.type === 'ring') {
+    const v = Math.max(0, Math.min(100, Number(c.value) || 0))
+    return `<section class="kit kit-ring ${acc(c.accent)}"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27"/><circle class="kit-arc" cx="32" cy="32" r="27" pathLength="100" stroke-dasharray="${v} 100"/></svg><div><b>${Math.round(v)}<i>%</i></b><span class="kit-label">${esc(c.label)}</span>${c.caption ? `<span class="kit-cap">${esc(c.caption)}</span>` : ''}</div></section>`
+  }
+  if (c.type === 'bars') {
+    const max = Math.max(1e-9, ...c.items.map((i) => Math.abs(i.value)))
+    return `<section class="kit kit-bars">${title}${c.items.map((i) => `<div class="kit-bar ${acc(i.accent)}"><span>${esc(i.label)}</span><em><u style="width:${((Math.abs(i.value) / max) * 100).toFixed(1)}%"></u></em><b>${esc(nfmt(i.value))}</b></div>`).join('')}</section>`
+  }
+  if (c.type === 'spark') {
+    const vals = c.series.map((p) => p.value)
+    const min = Math.min(...vals)
+    const max = Math.max(...vals)
+    const span = max - min || 1
+    const pts = vals.map((v, i) => `${((i / Math.max(1, vals.length - 1)) * 100).toFixed(2)},${(34 - ((v - min) / span) * 30).toFixed(2)}`)
+    return `<section class="kit kit-spark">${title}<svg viewBox="0 0 100 38" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,38 ${pts.join(' ')} 100,38"/><polyline points="${pts.join(' ')}"/></svg><div class="kit-axis"><span>${esc(c.series[0]?.label ?? '')}</span><span>${esc(c.series.at(-1)?.label ?? '')}</span></div></section>`
+  }
+  if (c.type === 'list')
+    return `<section class="kit kit-list">${title}<ul>${c.items
+      .map((i) => `<li class="${acc(i.accent)}">${i.say ? `<button type="button" class="kit-row" data-say="${esc(i.say)}">` : '<div class="kit-row">'}<span><b>${esc(i.label)}</b>${i.sub ? `<em>${esc(i.sub)}</em>` : ''}</span>${i.value ? `<i>${esc(i.value)}</i>` : ''}${i.say ? '</button>' : '</div>'}</li>`)
+      .join('')}</ul></section>`
+  if (c.type === 'steps') return `<section class="kit kit-steps">${title}<ul class="dz-steps">${c.items.map((s) => `<li class="${s.done ? 'is-done' : ''}">${esc(s.text)}</li>`).join('')}</ul></section>`
+  if (c.type === 'text') return `<section class="kit kit-text">${title}<p>${esc(c.text)}</p></section>`
+  if (c.type === 'actions') return `<section class="kit kit-actions">${c.items.map((a) => `<button type="button" data-say="${esc(a.say)}">${esc(a.label)}</button>`).join('')}</section>`
+  return ''
+}
+
+export function createDossier({ core, canvas = document.querySelector('canvas'), onClose = () => {}, onOpen = () => {}, onAsk = () => {} } = {}) {
   injectCss()
   const inner = core.inner
   const root = document.createElement('div')
@@ -88,6 +124,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
   root.className = 'dz'
   root.hidden = true
   root.innerHTML = `<header class="dz-head"><div class="dz-kicker"></div><div class="dz-headline"></div><div class="dz-comment"></div><div class="dz-legend"></div></header>
+    <aside class="dz-kit" hidden><div class="dz-kit-in"></div></aside>
     <div class="dz-tags"></div>
     <div class="dz-tip" hidden><b></b><span></span></div>
     <aside class="dz-hero" hidden><button type="button" class="dz-x" aria-label="Zavrieť detail">×</button><div class="dz-hero-in"></div></aside>
@@ -100,6 +137,8 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     comment: root.querySelector('.dz-comment'),
     legend: root.querySelector('.dz-legend'),
     tags: root.querySelector('.dz-tags'),
+    kit: root.querySelector('.dz-kit'),
+    kitIn: root.querySelector('.dz-kit-in'),
     tip: root.querySelector('.dz-tip'),
     hero: root.querySelector('.dz-hero'),
     heroIn: root.querySelector('.dz-hero-in'),
@@ -147,11 +186,28 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     return body
   }
 
+  /** Orbs Jarvis added himself (and their colours): the dossier opens them like the built-in planets. */
+  const extra = new Map()
+  function setOrbs(list) {
+    extra.clear()
+    for (const n of list ?? []) if (n.custom) extra.set(n.id, { title: n.label ?? n.id, color: n.color ?? '#7ff3ff' })
+  }
+  const titleOf = (id) => TITLE[id] ?? extra.get(id)?.title
+  const colorOf = (id) => COLOR[id] ?? extra.get(id)?.color
+
+  /** The panel of components Jarvis wrote for this orb, left of the world. */
+  function renderKit(d) {
+    const panel = d?.panel ?? []
+    el.kitIn.innerHTML = panel.map(kitHtml).join('')
+    el.kit.hidden = !panel.length
+    root.classList.toggle('has-kit', panel.length > 0)
+  }
+
   function header(d) {
     el.kicker.textContent = 'Vnútro planéty'
-    el.headline.textContent = d?.title ?? TITLE[node] ?? ''
+    el.headline.textContent = d?.title ?? titleOf(node) ?? ''
     const items = d?.items ?? []
-    el.comment.textContent = d ? `${nfmt(items.length)} ${items.length === 1 ? 'položka' : items.length < 5 && items.length > 1 ? 'položky' : 'položiek'}` : 'Vstupujem…'
+    el.comment.textContent = !d ? 'Vstupujem…' : !items.length && node === 'posta' && !d.panel ? 'Pošta ešte nie je pripojená. Povedz „pripoj mi poštu" a prevediem ťa tým.' : !items.length ? (d.panel ? '' : 'Zatiaľ je tu prázdno. Stačí povedať a začnem to sem zapisovať.') : `${nfmt(items.length)} ${items.length === 1 ? 'položka' : items.length < 5 && items.length > 1 ? 'položky' : 'položiek'}`
     // Časová os: najnovšie roky, klik preletí k ich galaxii. Inak skupiny ako legenda.
     const years = d?.layout === 'years'
     const groups = years ? [...(d?.groups ?? [])].reverse().slice(0, 12) : (d?.groups ?? []).slice(0, 8)
@@ -167,6 +223,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
       if (!open || node !== id) return
       data = d
       header(d)
+      renderKit(d)
       inner.setData(d)
       // A world that is still being computed is retried a few times.
       if (d.pending && tries++ < 8) retry = setTimeout(() => open && node === id && loadWorld(id), 5000)
@@ -267,11 +324,11 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
 
   /** Ponor do planéty. V režime natáčania nič (vráti false). */
   function openNode(id) {
-    if (film || !id || !TITLE[id]) return false
+    if (film || !id || !titleOf(id)) return false
     lastInput = performance.now()
     if (open && node === id) return true
     if (open) resetUi()
-    if (!inner.enter(id, COLOR[id])) return false
+    if (!inner.enter(id, colorOf(id))) return false
     open = true
     node = id
     data = null
@@ -290,6 +347,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     detailCtrl?.abort()
     closeLight()
     deselect()
+    renderKit(null)
     for (const t of tagPool) t.hidden = true
     for (const t of yearPool) t.hidden = true
     el.tip.hidden = true
@@ -471,6 +529,14 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     if (b) inner.flyToGroup(b.dataset.key)
   })
   el.light.addEventListener('click', () => closeLight())
+  // A row or a button of the panel that carries a sentence: the click says it to Jarvis.
+  el.kitIn.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-say]')
+    if (!b) return
+    onAsk(b.dataset.say)
+    close()
+  })
+  el.kit.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true })
   // Koliesko nad inspektorom roluje len jeho obsah.
   el.hero.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true })
 
@@ -483,5 +549,5 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     if (open && inner.keys.size === 0 && performance.now() - lastInput > IDLE_MS) close()
   }, 5000)
 
-  return { open: openNode, close, back, setFilm, frame, isOpen: () => open, node: () => node, data: () => data }
+  return { open: openNode, close, back, setFilm, setOrbs, frame, isOpen: () => open, node: () => node, data: () => data }
 }

@@ -188,7 +188,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     let cfg = WKWebViewConfiguration()
     cfg.mediaTypesRequiringUserActionForPlayback = []
     cfg.websiteDataStore = .default()
-    cfg.preferences.setValue(true, forKey: "developerExtrasEnabled")
+    // The web inspector only for people who ask for it (JARVIS_HUD_INSPECT=1): it is a door into the page.
+    let inspect = ProcessInfo.processInfo.environment["JARVIS_HUD_INSPECT"] == "1"
+    cfg.preferences.setValue(inspect, forKey: "developerExtrasEnabled")
     let ucc = WKUserContentController()
     ucc.add(self, name: "jarvis")
     ucc.addUserScript(
@@ -200,7 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     web.navigationDelegate = self
     web.uiDelegate = self
     web.underPageBackgroundColor = window.backgroundColor
-    web.isInspectable = true
+    web.isInspectable = inspect
     web.alphaValue = 0
     web.onDragFiles = { [weak self] urls in self?.dragFiles(urls) }
     root.addSubview(web)
@@ -513,6 +515,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
   // MARK: WKNavigationDelegate
 
+  /// The window shows the HUD and nothing else. The bridge to the app lives in the main frame, so
+  /// the main frame never leaves the HUD's own address: any other link opens in the user's browser.
+  func webView(
+    _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+    decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+  ) {
+    guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
+    let mainFrame = navigationAction.targetFrame?.isMainFrame ?? true
+    if !mainFrame { return decisionHandler(.allow) }
+    let home = URL(string: HUD_ORIGIN)
+    let own = url.scheme == home?.scheme && url.host == home?.host && url.port == home?.port
+    if own || url.scheme == "about" { return decisionHandler(.allow) }
+    if url.scheme == "http" || url.scheme == "https" { NSWorkspace.shared.open(url) }
+    decisionHandler(.cancel)
+  }
+
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     loading = false
     pageLoaded = true
@@ -554,8 +572,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
     decisionHandler: @escaping (WKPermissionDecision) -> Void
   ) {
-    let local = origin.host == "127.0.0.1" || origin.host == "localhost"
-    decisionHandler(local && type == .microphone ? .grant : .deny)
+    // Only the HUD itself (its exact address, its main frame) may listen. Another local port is another program.
+    let home = URL(string: HUD_ORIGIN)
+    let own = (origin.host == "127.0.0.1" || origin.host == "localhost") && origin.port == (home?.port ?? 0)
+    decisionHandler(own && frame.isMainFrame && type == .microphone ? .grant : .deny)
   }
 
   // MARK: Správy zo stránky

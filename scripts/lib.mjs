@@ -7,9 +7,9 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { inWindow, quietNow } from '../hud/server/alarm.mjs'
-import { DATA_DIR, IS_MAC, IS_WIN, REPO, findBin, spawnBin } from '../hud/server/util.mjs'
+import { DATA_DIR, IS_MAC, IS_WIN, REPO, WIN_POWERSHELL, findBin, spawnBin, winSys } from '../hud/server/util.mjs'
 
-export { DATA_DIR, IS_MAC, IS_WIN, REPO, findBin, inWindow, quietNow, spawnBin }
+export { DATA_DIR, IS_MAC, IS_WIN, REPO, WIN_POWERSHELL, findBin, inWindow, quietNow, spawnBin, winSys }
 
 export const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
 export const HUD_URL = `http://127.0.0.1:${PORT}`
@@ -119,6 +119,6 @@ export async function notify(heading, text) {
       '$x.Item(1).AppendChild($t.CreateTextNode($env:J_TEXT)) | Out-Null',
       "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe').Show([Windows.UI.Notifications.ToastNotification]::new($t))",
     ].join('; ')
-    await new Promise((resolve) => spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { env, stdio: 'ignore', windowsHide: true }).on('exit', resolve).on('error', resolve))
+    await new Promise((resolve) => spawn(WIN_POWERSHELL, ['-NoProfile', '-NonInteractive', '-Command', ps], { env, stdio: 'ignore', windowsHide: true }).on('exit', resolve).on('error', resolve))
   }
 }

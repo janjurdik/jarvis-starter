@@ -1019,8 +1019,48 @@ function buildBody(ctx) {
   }
 }
 
+/** Pošta: obálka z tenkých čiar, z ktorej stúpajú listy ako prúžky svetla. */
+function buildMail({ NU, rand }) {
+  const group = new THREE.Group()
+  const w = 0.92
+  const h = 0.62
+  const env = [
+    [[-w, -h, 0], [w, -h, 0], 1], [[w, -h, 0], [w, h, 0], 1], [[w, h, 0], [-w, h, 0], 1], [[-w, h, 0], [-w, -h, 0], 1],
+    // chlopňa a spodné záhyby
+    [[-w, h, 0], [0, -0.04, 0.12], 0.9], [[0, -0.04, 0.12], [w, h, 0], 0.9],
+    [[-w, -h, 0], [-0.22, 0.02, 0.06], 0.4], [[w, -h, 0], [0.22, 0.02, 0.06], 0.4],
+  ]
+  const body = lines(NU, env, 1, 0.2)
+  group.add(body)
+  // Listy: krátke vodorovné čiarky, ktoré stúpajú z obálky a hasnú.
+  const N = 9
+  const sheets = []
+  for (let i = 0; i < N; i++) {
+    const half = 0.16 + rand() * 0.22
+    const l = lines(NU, [[[-half, 0, 0], [half, 0, 0], 1], [[-half * 0.7, -0.07, 0], [half * 0.5, -0.07, 0], 0.55]], 1, 1)
+    l.userData = { x: (rand() - 0.5) * 1.2, z: (rand() - 0.5) * 0.5, off: rand(), speed: 0.1 + rand() * 0.08 }
+    sheets.push(l)
+    group.add(l)
+  }
+  group.add(lines(NU, loopSegments(circlePoints(1.16, 96, 0, 'xy'), 0.28)))
+  return {
+    group,
+    update(T, s) {
+      body.rotation.y = 0.18 * Math.sin(s.phase * 0.5)
+      for (const l of sheets) {
+        const d = l.userData
+        const k = (d.off + s.phase * d.speed) % 1
+        l.position.set(d.x * (1 - 0.3 * k), -0.2 + k * 1.25, d.z + 0.2)
+        l.material.uniforms.uOpacity.value = Math.sin(Math.PI * k) * (0.5 + 0.5 * s.act)
+      }
+    },
+  }
+}
+
 const BUILDERS = {
   appky: buildApps,
+  posta: buildMail,
+  hry: buildVoxel,
   spravy: buildBubbles,
   fotky: buildPhotos,
   udalosti: buildSpiral,
@@ -1047,26 +1087,50 @@ const BUILDERS = {
 /** Hĺbkový rozptyl uzlov: z z NODE_LAYOUT (±0,55) sa roztiahne na ±2 jednotky. */
 export const DEPTH_SPREAD = 3.4
 
-export function createNodes(U, { high, rand, nodes, today }) {
+/** Most orbs the world can hold at once (one flow link each, see flows.js MAX_LINKS). */
+export const MAX_NODES = 24
+
+/** Names a custom orb may use for its hologram (`shape`), besides the built-in ids. */
+export const SHAPES = Object.keys(BUILDERS)
+
+const easeOutBack = (x) => 1 + 2.4 * Math.pow(x - 1, 3) + 1.4 * Math.pow(x - 1, 2)
+
+/**
+ * The orbs of the world. The set is live: `add(def)` grows a new orb out of nothing, `remove(id)`
+ * lets one fade away, so Jarvis can extend and tidy the world while it runs.
+ * def: { id, shape?, color?, u, v, z, size, side }
+ */
+export function createNodes(U, { high, rand, nodes, today, onFree = () => {} }) {
   const root = new THREE.Group()
   root.name = 'nodes'
   const glow = glowTexture([[0, 1], [0.2, 0.7], [0.5, 0.12], [1, 0]])
   const reticleTex = ringTexture(5, true)
-  const items = nodes.slice(0, 24).map((n, index) => {
-    const NU = nodeUniforms(U, COLOR.cyan, COLOR.amber, index * 1.37 + 0.4)
-    const build = BUILDERS[n.id] ?? buildOrb
+  const items = []
+  const free = Array.from({ length: MAX_NODES }, (_, i) => MAX_NODES - 1 - i)
+
+  function make(n) {
+    const index = free.pop()
+    if (index === undefined) return null
+    let tint = COLOR.cyan
+    try {
+      if (n.color) tint = new THREE.Color(n.color)
+    } catch {
+      tint = COLOR.cyan
+    }
+    const NU = nodeUniforms(U, tint, COLOR.amber, index * 1.37 + 0.4)
+    const build = BUILDERS[n.shape] ?? BUILDERS[n.id] ?? buildOrb
     const obj = build({ NU, U, rand, high, today })
     const holder = new THREE.Group()
     const pose = new THREE.Group()
     pose.add(obj.group)
     holder.add(pose)
-    const dot = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: COLOR.cyan.clone(), transparent: true, ...ADDITIVE }))
+    const dot = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: tint.clone(), transparent: true, ...ADDITIVE }))
     dot.scale.setScalar(0.5)
-    const reticle = new THREE.Sprite(new THREE.SpriteMaterial({ map: reticleTex, color: COLOR.cyan.clone(), transparent: true, opacity: 0.2, ...ADDITIVE }))
+    const reticle = new THREE.Sprite(new THREE.SpriteMaterial({ map: reticleTex, color: tint.clone(), transparent: true, opacity: 0.2, ...ADDITIVE }))
     reticle.scale.setScalar(2.9)
     holder.add(dot, reticle)
     root.add(holder)
-    return {
+    const item = {
       ...n,
       index,
       NU,
@@ -1075,20 +1139,81 @@ export function createNodes(U, { high, rand, nodes, today }) {
       pose,
       dot,
       reticle,
+      tint,
       pos: new THREE.Vector3(),
       scale: 0.4,
+      /** 0 = not there, 1 = fully in the world. Eases toward visTo. */
+      vis: 1,
+      visTo: 1,
+      gone: false,
+      born: null,
       ramps: { tool: new Ramp(0.6, 1.4), hover: new Ramp(0.18, 0.5) },
       state: { act: 0, phase: 0, tool: 0, focus: 0, hover: 0, flare: 0 },
     }
-  })
+    items.push(item)
+    return item
+  }
+  for (const n of nodes.slice(0, MAX_NODES)) make(n)
 
+  /** A new orb grows in (or one that was leaving comes back). Returns the item, null when the world is full. */
+  function add(def) {
+    const back = items.find((n) => n.id === def.id)
+    if (back) {
+      back.gone = false
+      back.visTo = 1
+      return back
+    }
+    const item = make(def)
+    if (item) {
+      item.vis = 0
+      item.born = -1
+    }
+    return item
+  }
+
+  /** The orb fades away and is disposed once it is gone. */
+  function remove(id) {
+    const item = items.find((n) => n.id === id)
+    if (!item) return
+    item.gone = true
+    item.visTo = 0
+  }
+
+  function dispose(item) {
+    root.remove(item.holder)
+    item.holder.traverse((o) => {
+      o.geometry?.dispose?.()
+      if (o.material && o.material !== item.dot.material && o.material !== item.reticle.material) o.material.dispose?.()
+    })
+    item.dot.material.dispose()
+    item.reticle.material.dispose()
+    items.splice(items.indexOf(item), 1)
+    free.push(item.index)
+    onFree(item.index)
+  }
+
+  let lastT = null
   /**
    * s: { T, boot, flares, tools: Set|Object, focusWeights: {id: k}, hover: id|null }
    */
   function update(s) {
     const T = s.T
-    for (const n of items) {
-      const f = clamp(s.flares?.[n.id]?.f ?? 0, 0, 1.4)
+    const dt = lastT === null || T < lastT ? 0 : Math.min(0.1, T - lastT)
+    lastT = T
+    for (const n of [...items]) {
+      if (n.vis !== n.visTo) {
+        n.vis += (n.visTo - n.vis) * (1 - Math.exp(-dt * (n.visTo ? 2.6 : 4.5)))
+        if (Math.abs(n.visTo - n.vis) < 0.004) n.vis = n.visTo
+      }
+      if (n.gone && n.vis <= 0.004) {
+        dispose(n)
+        continue
+      }
+      if (n.born === -1) n.born = T
+      // A newborn orb arrives with a flare of light that settles in two seconds.
+      const birth = n.born === null ? 0 : Math.max(0, 1 - (T - n.born) / 2.2)
+      const vis = n.vis
+      const f = clamp((s.flares?.[n.id]?.f ?? 0) + birth * 1.1, 0, 1.4)
       const toolOn = s.tools.has(n.id) ? 1 : 0
       const tool = n.ramps.tool.set(T, toolOn).value(T)
       const hover = n.ramps.hover.set(T, s.hover === n.id ? 1 : 0).value(T)
@@ -1105,7 +1230,7 @@ export function createNodes(U, { high, rand, nodes, today }) {
       st.flare = f
       const NU = n.NU
       NU.uHeat.value = clamp(f * 0.9) * 0.85
-      NU.uGain.value = (0.42 + 0.22 * tool + 0.2 * hover + 0.42 * focus + 0.16 * clamp(f)) * s.boot
+      NU.uGain.value = (0.42 + 0.22 * tool + 0.2 * hover + 0.42 * focus + 0.16 * clamp(f)) * s.boot * vis
       NU.uPhase.value = phase
       NU.uAct.value = act
       // Sken: svetelný pás prechádza objektom zdola hore, kým na ňom Jarvis pracuje.
@@ -1114,16 +1239,17 @@ export function createNodes(U, { high, rand, nodes, today }) {
       n.obj.update(T, st)
       n.pose.rotation.y = 0.28 * Math.sin(T * 0.11 + n.index * 1.9) + 0.08 * Math.sin(T * 0.29 + n.index)
       n.pose.rotation.x = 0.06 * Math.sin(T * 0.13 + n.index * 2.7)
+      n.pose.scale.setScalar(vis >= 1 ? 1 : Math.max(0.001, n.gone ? vis : easeOutBack(vis)))
       const breathe = 0.5 + 0.5 * Math.sin(T * 0.9 + n.index * 1.7)
-      n.dot.scale.setScalar(0.38 + 0.05 * breathe + 0.09 * f + 0.07 * tool)
-      n.dot.material.color.copy(COLOR.cyan).lerp(COLOR.amber, clamp(f * 0.9))
-      n.dot.material.opacity = (0.42 + 0.18 * act) * s.boot * (1 - 0.85 * focus)
-      n.reticle.scale.setScalar(2.75 + 0.1 * breathe + 0.5 * f + 0.25 * hover)
-      n.reticle.material.opacity = (0.1 + 0.25 * f + 0.3 * hover + 0.15 * tool) * s.boot * (1 - focus)
-      n.reticle.material.color.copy(COLOR.cyan).lerp(COLOR.amber, clamp(f * 0.9))
+      n.dot.scale.setScalar((0.38 + 0.05 * breathe + 0.09 * f + 0.07 * tool) * (0.4 + 0.6 * vis))
+      n.dot.material.color.copy(n.tint).lerp(COLOR.amber, clamp(f * 0.9))
+      n.dot.material.opacity = (0.42 + 0.18 * act) * s.boot * (1 - 0.85 * focus) * vis
+      n.reticle.scale.setScalar((2.75 + 0.1 * breathe + 0.5 * f + 0.25 * hover) * (1.6 - 0.6 * vis))
+      n.reticle.material.opacity = (0.1 + 0.25 * f + 0.3 * hover + 0.15 * tool) * s.boot * (1 - focus) * vis
+      n.reticle.material.color.copy(n.tint).lerp(COLOR.amber, clamp(f * 0.9))
       n.reticle.material.rotation = T * 0.25 + n.index
     }
   }
 
-  return { root, items, update }
+  return { root, items, update, add, remove }
 }

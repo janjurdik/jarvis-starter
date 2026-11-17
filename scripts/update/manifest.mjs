@@ -48,7 +48,7 @@ export async function shippedFiles(root = REPO) {
     if (res.status === 0) list = res.stdout.split('\0').filter(Boolean)
   }
   list ??= walk(root)
-  return list.filter((rel) => safeRel(rel) && rel !== MANIFEST && !isProtected(rel) && !isNoise(rel) && exists(abs(rel, root))).sort()
+  return list.filter((rel) => safeRel(rel) && rel !== MANIFEST && rel !== `${MANIFEST}.sig` && !isProtected(rel) && !isNoise(rel) && exists(abs(rel, root))).sort()
 }
 
 export function packageVersion(root = REPO) {

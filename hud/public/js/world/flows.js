@@ -70,7 +70,7 @@ function flowGeometry(base, tool, rand) {
   return g
 }
 
-export function createFlows(U, { high, rand, count }) {
+export function createFlows(U, { high, rand }) {
   const uniforms = {
     uA: { value: Array.from({ length: MAX_LINKS }, () => new THREE.Vector3()) },
     uB: { value: Array.from({ length: MAX_LINKS }, () => new THREE.Vector3()) },
@@ -78,7 +78,7 @@ export function createFlows(U, { high, rand, count }) {
     uFlare: { value: new Array(MAX_LINKS).fill(0) },
     uPhase: { value: new Array(MAX_LINKS).fill(0) },
     uTool: { value: new Array(MAX_LINKS).fill(0) },
-    uOn: { value: Array.from({ length: MAX_LINKS }, (_, i) => (i < count ? 1 : 0)) },
+    uOn: { value: new Array(MAX_LINKS).fill(0) },
     uPR: U.uPR,
     uScale: U.uScale,
     uBoot: U.uBoot,
@@ -94,7 +94,7 @@ export function createFlows(U, { high, rand, count }) {
   points.frustumCulled = false
 
   // Spojnice uzol → jadro: tenké krivky, ktoré pri udalosti a práci zosilnejú.
-  const curves = Array.from({ length: count }, () => {
+  const curves = Array.from({ length: MAX_LINKS }, () => {
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(48 * 3), 3))
     const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: COLOR.cyan.clone(), transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }))
@@ -129,9 +129,15 @@ export function createFlows(U, { high, rand, count }) {
     uniforms.uTool.value[i] = tool
     const line = curves[i]
     if (!line) return
-    line.material.opacity = (0.1 + 0.42 * flare + 0.3 * tool) * boot
+    line.material.opacity = (0.1 + 0.42 * flare + 0.3 * tool) * boot * uniforms.uOn.value[i]
     line.material.color.copy(COLOR.cyan).lerp(COLOR.amber, Math.min(1, flare * 0.7)).lerp(COLOR.ice, tool * 0.4)
   }
 
-  return { points, curves, setLink, update }
+  /** How much a link is there: 0 for a free slot, 1 for a full orb, in between while it appears or leaves. */
+  function setOn(i, v) {
+    uniforms.uOn.value[i] = v
+    if (v <= 0 && curves[i]) curves[i].material.opacity = 0
+  }
+
+  return { points, curves, setLink, update, setOn }
 }

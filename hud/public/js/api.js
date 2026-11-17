@@ -52,7 +52,7 @@ export function createApi({ token = null } = {}) {
 
     // ── files, imports and the people review (drop.js, people.js) ──
     /** URL of a private file (attachment, photo from an export) usable in <img>: adds the token when there is one. */
-    fileUrl: (url) => (token && url ? `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : url),
+    fileUrl: (url) => (token && url && String(url).startsWith('/') && !String(url).startsWith('//') ? `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : url),
     uploadBegin: (name, size, folder = false) => post('/api/upload/begin', { name, size, folder }),
     uploadFinish: (id) => post('/api/upload/finish', { id }),
     uploadCancel: (id) => post('/api/upload/cancel', { id }),

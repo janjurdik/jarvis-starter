@@ -30,8 +30,9 @@ Spúšťať po prihlásení (zap/vyp), Ukončiť a vrátiť plochu.
 - **Ikony na ploche.** Aby kliky išli priamo do HUD, dajú sa skryť ikony plochy (appka prepne nastavenie Findera).
   Súbory ostávajú v priečinku Plocha, len ich nevidno na tapete. Appka to nikdy nespraví sama, len keď to zapneš v ponuke.
   Vrátenie bez appky: `defaults write com.apple.finder CreateDesktop -bool true && killall Finder`
-- **Hlas.** Appka používa jadro Safari. Ak v nej medzerník ohlási, že okno nevie rozpoznávať reč, zapni lokálny
-  Whisper podľa `docs/HLAS.md`. Bez neho Jarvis v appke hovorí a ty píšeš.
+- **Hlas.** Appka používa jadro Safari, kde rozpoznávanie reči z prehliadača nemusí fungovať. Jarvis preto počúva
+  lokálnym Whisperom, ktorý sa pripraví sám pri prvom spustení (`docs/HLAS.md`). Ak medzerník ohlási, že okno nevie
+  rozpoznávať reč, Whisper sa nepripravil: `node scripts/voice.mjs plan` povie prečo. Dovtedy Jarvis v appke hovorí a ty píšeš.
 - **Mikrofón.** Pri prvom použití sa macOS spýta na povolenie. Po každom novom builde sa môže spýtať znova
   (appka je podpísaná len lokálne).
 

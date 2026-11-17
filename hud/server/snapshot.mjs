@@ -61,6 +61,8 @@ function healthBlock(ix) {
     mood: dayStats(ix, { since: addDays(today, -1) }).at(-1)?.mood ?? null,
     week,
     avgSleepMin: week.length ? Math.round(week.reduce((s, d) => s + d.sleepMin, 0) / week.length) : null,
+    // Body numbers of that night when a watch is connected (Garmin sync writes them into the daily log).
+    body: latest ? { score: latest.score, hrv: latest.hrv, rhr: latest.rhr, battery: latest.bbWake ?? latest.bb, steps: latest.steps, stress: latest.stress, readiness: latest.readiness, bed: latest.bed, wake: latest.wake, source: latest.sleepSource } : null,
   }
 }
 

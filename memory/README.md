@@ -1,10 +1,10 @@
 # Pamäť Jarvisa
 
 Tento priečinok je všetko, čo o tebe Jarvis vie. Sú to obyčajné textové súbory (markdown) na tvojom počítači.
-Môžeš ich čítať, upravovať aj mazať v ľubovoľnom editore, napríklad v Obsidiane. Nič z toho neodchádza na žiadny server,
-a do gitu sa tento priečinok neukladá.
+Môžeš ich čítať, upravovať aj mazať v ľubovoľnom editore, napríklad v Obsidiane. Súbory ostávajú u teba a do gitu sa
+tento priečinok neukladá. To, s čím Jarvis práve pracuje, číta AI, na ktorej beží (Claude alebo ChatGPT), rovnako ako keď jej píšeš sám.
 
-Pamäť sa napĺňa štyrmi spôsobmi: pri úvodnom nastavení (`štart`, Jarvis si prejde tvoj počítač), z exportov tvojich
+Pamäť sa napĺňa štyrmi spôsobmi: pri úvodnom nastavení (Jarvis si prejde tvoj počítač), z kópií tvojich
 dát z aplikácií (sprievodca je v HUD na adrese `/guide/`), počas rozhovorov (Jarvis si zapisuje, čo sa dozvie)
 a večernou rutinou, ktorá zapíše deň do denníka.
 
@@ -83,6 +83,7 @@ Ráno som mal hovor s klientom, popoludní som pracoval na webe.
 ```
 
 `spanok` sú hodiny (7.5 alebo 7:30), `nalada` je číslo 1 až 5. Stačí Jarvisovi povedať „spal som sedem hodín" a zapíše to.
+S pripojenými hodinkami Garmin (`docs/GARMIN.md`) pribudnú v hlavičke dňa polia `spanok_zdroj: garmin`, `spanok_skore`, `spanok_fazy`, `zaspal`, `vstal`, `hrv`, `tep_pokoj`, `bateria`, `bateria_rano`, `kroky`, `stres`, `pripravenost` a tréningy pod nadpisom `## Tréning`. Spánok, ktorý povieš alebo prepíšeš sám, Garmin neprepíše.
 
 **Úlohy** (`ulohy.md`)
 

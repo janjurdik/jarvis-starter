@@ -125,9 +125,12 @@ function occurrences(ev, from, to) {
   const firstMs = dayStartMs(first)
   const weekOf = (day) => Math.floor((dayStartMs(day) - firstMs + ((dowOf(first) + 6) % 7) * 86_400_000) / (7 * 86_400_000))
   let n = 0
+  let steps = 0
   // COUNT needs the whole series from the first occurrence, otherwise start at the window.
   const startScan = COUNT ? first : first > from ? first : from
   for (let day = startScan; day <= last; day = addDays(day, 1)) {
+    // An event that "started" centuries ago with a COUNT would walk day by day forever.
+    if (++steps > 4000) break
     if (day < first) continue
     let hit = false
     if (FREQ === 'DAILY') hit = Math.round((dayStartMs(day) - firstMs) / 86_400_000) % interval === 0
@@ -152,7 +155,10 @@ async function icsEvents(from, to) {
       try {
         const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        hit = { at: Date.now(), events: parseIcs(await res.text()) }
+        // A calendar feed of more than a few megabytes is not a calendar.
+        const body = await res.text()
+        if (body.length > 6_000_000) throw new Error('kalendár je príliš veľký')
+        hit = { at: Date.now(), events: parseIcs(body) }
         icsCache.set(url, hit)
       } catch (err) {
         // never log the URL itself: the address is the secret
@@ -165,7 +171,8 @@ async function icsEvents(from, to) {
       for (const day of occurrences(ev, from, to)) {
         if (!ev.override && ev.rrule && overridden.has(`${ev.summary}|${day}`)) continue
         const end = ev.end && ev.start.time && ev.end.time ? ev.end.time : null
-        out.push(makeEvent({ day, time: ev.start.time, end, title: ev.summary, place: ev.location || null }))
+        // `src: 'ics'`: written by whoever sent the invitation, so it never counts as the user's own urgent mark.
+        out.push({ ...makeEvent({ day, time: ev.start.time, end, title: ev.summary, place: ev.location || null }), src: 'ics' })
       }
     }
   }

@@ -9,7 +9,7 @@ na celú obrazovku. Všetko ostatné (pamäť, hlas, rutiny) funguje rovnako.
 - Node.js 20 alebo novší: `winget install OpenJS.NodeJS.LTS`
 - Claude Code: v PowerShelli `irm https://claude.ai/install.ps1 | iex`, potom `claude` a prihlásenie. Ak si vypýta Git for Windows, nainštaluj ho cez `winget install Git.Git`.
 - Microsoft Edge (je vo Windows) alebo Google Chrome
-- voliteľne `uv` pre pekný hlas: `irm https://astral.sh/uv/install.ps1 | iex`
+- `uv` pre pekný hlas a lokálne rozpoznávanie reči: `irm https://astral.sh/uv/install.ps1 | iex`. Bez neho Jarvis hovorí aj počúva cez prehliadač.
 
 Po inštalácii nových programov zavri a znova otvor Claude aj PowerShell, aby ich videli.
 
@@ -20,6 +20,9 @@ node scripts\hud.mjs
 ```
 
 Spustí server a otvorí HUD v samostatnom okne Edge (alebo Chrome) bez panelov, na celú obrazovku.
+Pri prvom spustení sa pred otvorením okna pripraví hlas: podľa pamäte, procesora, grafickej karty a voľného
+miesta na disku sa stiahne model na rozpoznávanie reči (0,5 až 1,6 GB) a príkaz ukazuje priebeh. Slabší počítač
+nič nesťahuje a počúva cez prehliadač. Podrobnosti sú v `docs\HLAS.md`.
 
 - **F11** prepína celú obrazovku, **Alt+F4** okno zavrie.
 - Okno si pripni na panel úloh (pravý klik na ikonu → Pripnúť).

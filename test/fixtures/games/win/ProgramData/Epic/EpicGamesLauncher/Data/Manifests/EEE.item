@@ -1,0 +1,1 @@
+{ "AppCategories": ["public", "games"], "DisplayName": "Counter-Strike 2", "InstallLocation": "{{ROOT}}/Epic Games/CS2", "AppName": "cs2epic", "MainGameAppName": "cs2epic", "InstallSize": 1 }

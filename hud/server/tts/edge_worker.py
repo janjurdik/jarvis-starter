@@ -1,9 +1,13 @@
 # /// script
-# requires-python = ">=3.10"
-# dependencies = ["edge-tts>=7.0,<8", "certifi"]
+# requires-python = ">=3.11,<3.13"
+# dependencies = ["edge-tts==7.3.1", "certifi==2026.10.23"]
+#
+# [tool.uv]
+# exclude-newer = "2026-11-01T00:00:00Z"
 # ///
 """
-Persistent Edge TTS worker for the HUD (default voice sk-SK-LukasNeural).
+Persistent Edge TTS worker for the HUD. The voice arrives with every request (server/voices.mjs).
+Package versions are pinned and `exclude-newer` freezes everything they pull in.
 
 Why a custom websocket instead of `edge_tts.Communicate`: Communicate opens a new connection for
 every sentence (TLS + DRM token), which costs about 0.6 s. Here three connections stay open and

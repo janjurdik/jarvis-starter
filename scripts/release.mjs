@@ -24,6 +24,10 @@
 import { spawnSync } from 'node:child_process'
 import { MANIFEST, REPO, abs, exists, fileHash, git, isNoise, isProtected, parseArgs, parseVersion, readBuf, readJson, safeRel, writeFile } from './update/core.mjs'
 import { hashFiles, manifestText, packageVersion, readManifest, shippedFiles } from './update/manifest.mjs'
+import { SIGNATURE, signManifest, verifyRelease } from './update/signature.mjs'
+import { existsSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 
 const argv = process.argv.slice(2)
 const values = {}
@@ -44,6 +48,20 @@ const write = (rel, text) => {
   else writeFile(abs(rel), text)
 }
 
+/** The author's signing key: a PEM file outside the repository (JARVIS_RELEASE_KEY, default ~/.config/jarvis-release/ed25519.pem). */
+const KEY_FILE = process.env.JARVIS_RELEASE_KEY || join(homedir(), '.config', 'jarvis-release', 'ed25519.pem')
+
+/** Signs the manifest text and writes the signature next to it. Without the key it says so: an unsigned release is refused by every installation. */
+function signAndWrite(text) {
+  if (!existsSync(KEY_FILE)) {
+    console.error(`✗ No signing key at ${KEY_FILE}. The manifest is NOT signed and installations will refuse this release.`)
+    return false
+  }
+  write(SIGNATURE, `${signManifest(Buffer.from(text, 'utf8'), readFileSync(KEY_FILE, 'utf8'))}\n`)
+  console.log(`✓ ${SIGNATURE}: signed`)
+  return true
+}
+
 async function manifestFor(version) {
   const files = hashFiles(REPO, await shippedFiles(REPO))
   return { name: readJson(abs('package.json'))?.name ?? 'jarvis-starter', version, released: new Date().toISOString(), files }
@@ -60,6 +78,10 @@ if (flags.has('check')) {
   for (const rel of wrong.slice(0, 40)) console.error(`✗ ${!(rel in now.files) ? 'listed but gone' : !(rel in saved.files) ? 'not listed' : 'changed'}: ${rel}`)
   if (wrong.length || pkg !== saved.version) fail('The manifest does not match the files. Run: node scripts/release.mjs --manifest-only')
   console.log(`✓ ${MANIFEST} matches ${Object.keys(now.files).length} files of version ${saved.version}`)
+  const signed = verifyRelease(REPO)
+  // The working folder holds the user's own files too, so only the signature itself is checked here.
+  if (signed.reason === 'unsigned' || signed.reason === 'bad-signature') fail(`The manifest is not signed with the release key (${signed.detail}). Run: node scripts/release.mjs --manifest-only`)
+  console.log(`✓ ${SIGNATURE} is valid`)
   process.exit(0)
 }
 
@@ -94,6 +116,7 @@ if (flags.has('manifest-only')) {
   const manifest = await manifestFor(version)
   write(MANIFEST, manifestText(manifest))
   console.log(`✓ ${MANIFEST}: version ${version}, ${Object.keys(manifest.files).length} files`)
+  if (!dry) signAndWrite(manifestText(manifest))
   if (packageVersion() !== version) console.log(`  Note: package.json still says ${packageVersion()}. Set it to ${version} and run this again, the manifest covers package.json too.`)
   process.exit(0)
 }
@@ -146,6 +169,7 @@ if (exists(abs(noteFile))) {
 if (!dry) {
   const manifest = await manifestFor(next)
   writeFile(abs(MANIFEST), manifestText(manifest))
+  signAndWrite(manifestText(manifest))
   console.log(`  ✓ ${MANIFEST}: ${Object.keys(manifest.files).length} files`)
 } else {
   console.log(`  (dry run) would regenerate ${MANIFEST}`)

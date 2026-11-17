@@ -116,8 +116,10 @@ const SHIPPED_IN_PROTECTED = ['memory/README.md']
  * Paths an update never reads, writes or deletes: the user's memory, setup, secrets and runtime data.
  * Checked for every path that comes from upstream, whatever the manifest says.
  */
-export function isProtected(rel) {
-  if (SHIPPED_IN_PROTECTED.includes(rel)) return false
+export function isProtected(path) {
+  if (SHIPPED_IN_PROTECTED.includes(path)) return false
+  // `.ENV` and `Memory/x` are the same files as `.env` and `memory/x` on macOS and Windows.
+  const rel = String(path).toLowerCase()
   const base = rel.slice(rel.lastIndexOf('/') + 1)
   if (/^\.env(\..*)?$/.test(base) && base !== '.env.example') return true
   if (rel === 'config/jarvis.json') return true

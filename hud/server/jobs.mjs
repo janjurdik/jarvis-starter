@@ -4,7 +4,7 @@
  * agent_task / agent_reply / agent_stop.
  *
  *   claude -p --output-format stream-json --verbose <permission args> --append-system-prompt-file …
- *   cwd = the Jarvis folder (its CLAUDE.md and memory), the task goes in over stdin.
+ *   cwd = the Jarvis folder (its AGENTS.md and memory), the task goes in over stdin.
  *
  * At most 3 at once, the rest wait. State in data/brain/jobs.json, a raw log per job in
  * data/jobs/<id>.jsonl and a readable feed in data/jobs/<id>.feed.jsonl (both 0600). The feed
@@ -18,9 +18,10 @@ import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import { homedir } from 'node:os'
 import { createInterface } from 'node:readline'
-import { CLAUDE_BIN as CLAUDE, MEMORY_EXTERNAL, cleanEnv, modelArgs, permissionArgs } from './agent.mjs'
+import { CLAUDE_BIN as CLAUDE, MEMORY_EXTERNAL } from './agent.mjs'
+import { STRANGERS_NOTE, aiProvider, spawnAgent } from './provider.mjs'
 import { MEMORY_DIR } from './memory/index.mjs'
-import { BRAIN_DIR, DATA_DIR, REPO, clean, errMsg, log, spawnBin, writeFileAtomic } from './util.mjs'
+import { BRAIN_DIR, clean, DATA_DIR, errMsg, log, REPO, spawnBin, winSys, writeFileAtomic } from './util.mjs'
 import { speakable } from './tts.mjs'
 
 const CWD = process.env.JARVIS_JOB_CWD || REPO
@@ -37,7 +38,8 @@ const contextPrompt = (film) =>
   [
     'Túto úlohu ti zadal používateľ cez Jarvis HUD (hlasom alebo textom; pri hlase môže mať prepis chyby, domysli rozumný význam).',
     'Pracuješ samostatne až do konca, používateľ pri tom nesedí. Nepýtaj sa na veci, ktoré vieš zistiť alebo rozhodnúť sám.',
-    `Si Jarvis: pamäť používateľa je v priečinku ${MEMORY_EXTERNAL ? MEMORY_DIR : 'memory/'} (pozri CLAUDE.md). Čo sa o ňom dozvieš nové a trvalé, zapíš tam.`,
+    STRANGERS_NOTE,
+    `Si Jarvis: pamäť používateľa je v priečinku ${MEMORY_EXTERNAL ? MEMORY_DIR : 'memory/'} (pozri AGENTS.md). Čo sa o ňom dozvieš nové a trvalé, zapíš tam.`,
     'Keď treba niečo poslať alebo zverejniť za používateľa (mail, správa, príspevok, objednávka), priprav presné znenie, napíš komu a kam, a odpoveď ukonči samostatným riadkom `NEEDS_OK: <čo a komu>`. Odošli až po schválení.',
     'Keď bez používateľa nevieš pokračovať (chýba informácia), ukonči riadkom `NEEDS_OK: <otázka>`.',
     'Tvoja úplne posledná správa má presne tento tvar. Najprv výsledok: najviac päť krátkych riadkov obyčajného textu, čo je hotové a kde. Žiadny markdown: žiadne hviezdičky, mriežky, tabuľky, odrážky, kód ani emoji. Dlhý výstup (rešerš, zoznam, návrh textu) ulož do súboru a napíš len, kde je. Potom samostatný posledný riadok `HLAS: …` s jednou až dvoma krátkymi vetami, ktoré Jarvis povie nahlas (zdvorilo, vecne, pokojne so suchým humorom).',
@@ -338,28 +340,26 @@ function run(j) {
   addFeed(j, 'state', j.step, j.step)
   emit(j)
   if (j.mock) return runMock(j, reply ?? '')
-  if (!CLAUDE) return finish(j, 'error', { error: 'Claude Code CLI sa nenašiel' })
+  if (!aiProvider().bin()) return finish(j, 'error', { error: `${aiProvider().product} CLI sa nenašiel` })
   mkdirSync(BRAIN_DIR, { recursive: true })
   startProcess(j).catch((err) => finish(j, 'error', { error: errMsg(err) }))
 }
 
 async function startProcess(j) {
-  const perms = permissionArgs()
   if (j.stopping) return finish(j, 'stopped')
   if (j.status !== 'running') return
   const prompt = j.resume ?? j.task
-  // The task goes in over stdin and the context through a file: no quoting problems on Windows.
-  const args = ['-p', '--output-format', 'stream-json', '--verbose', ...modelArgs(), ...perms, '--append-system-prompt-file', CONTEXT_FILE]
-  if (j.sessionId && j.resume) args.push('--resume', j.sessionId)
+  const sessionId = j.sessionId && j.resume ? j.sessionId : null
   j.resume = null
+  let proc
+  let provider
   try {
+    // The task goes in over stdin and the context through a file: no quoting problems on Windows.
     writeFileSync(CONTEXT_FILE, contextPrompt(j.film), { mode: 0o600 })
+    ;({ proc, provider } = await spawnAgent({ prompt, contextFile: CONTEXT_FILE, sessionId, cwd: CWD }))
   } catch (err) {
     return finish(j, 'error', { error: errMsg(err) })
   }
-  const proc = spawnBin(CLAUDE, args, { cwd: CWD, env: cleanEnv(), stdio: ['pipe', 'pipe', 'pipe'] })
-  proc.stdin.on('error', () => {})
-  proc.stdin.end(prompt)
   j.proc = proc
   const logFile = join(LOG_DIR, `${j.id}.jsonl`)
   let lastText = ''
@@ -367,33 +367,26 @@ async function startProcess(j) {
   let resultSeen = false
   createInterface({ input: proc.stdout }).on('line', (line) => {
     appendFile(logFile, line + '\n', { mode: 0o600 }).catch(() => {})
-    let m
-    try {
-      m = JSON.parse(line)
-    } catch {
-      return
-    }
-    if (m.type === 'system' && m.subtype === 'init') {
-      j.sessionId = m.session_id ?? j.sessionId
-      if (m.apiKeySource && m.apiKeySource !== 'none') log('jobs', `POZOR: ${j.id} apiKeySource=${m.apiKeySource}`)
-      scheduleSave()
-    } else if (m.type === 'assistant') {
-      for (const b of m.message?.content ?? []) {
-        if (b.type === 'tool_use') {
-          // Text followed by a tool call is commentary along the way. The last text of a run is its result and is shown as such.
-          if (said) addFeed(j, 'say', plain(said))
-          said = ''
-          addStep(j, stepLabel(b.name, b.input ?? {}, opts.isFilm()), stepLabel(b.name, b.input ?? {}, true))
-        } else if (b.type === 'text' && b.text?.trim()) {
-          lastText = b.text
-          said = b.text
-        }
+    for (const ev of provider.parse(line)) {
+      if (ev.type === 'init') {
+        j.sessionId = ev.sessionId ?? j.sessionId
+        if (ev.apiKey) log('jobs', `POZOR: ${j.id} apiKeySource=${ev.apiKey}`)
+        scheduleSave()
+      } else if (ev.type === 'tool') {
+        // Text followed by a tool call is commentary along the way. The last text of a run is its result and is shown as such.
+        if (said) addFeed(j, 'say', plain(said))
+        said = ''
+        j.cost.turns = (j.cost.turns ?? 0) + (provider.id === 'claude' ? 0 : 1)
+        addStep(j, stepLabel(ev.name, ev.input ?? {}, opts.isFilm()), stepLabel(ev.name, ev.input ?? {}, true))
+      } else if (ev.type === 'text') {
+        lastText = ev.text
+        said = ev.text
+      } else if (ev.type === 'result' && !resultSeen) {
+        resultSeen = true
+        j.cost = { turns: (j.cost.turns ?? 0) + (provider.id === 'claude' ? ev.turns ?? 0 : 0), ms: (j.cost.ms ?? 0) + (ev.ms ?? Date.now() - j.runT0) }
+        if (ev.ok) finish(j, 'done', { summary: ev.text || lastText })
+        else finish(j, 'error', { error: ev.error || 'úloha skončila chybou' })
       }
-    } else if (m.type === 'result') {
-      resultSeen = true
-      j.cost = { turns: (j.cost.turns ?? 0) + (m.num_turns ?? 0), ms: (j.cost.ms ?? 0) + (m.duration_ms ?? Date.now() - j.runT0) }
-      if (m.subtype === 'success' && !m.is_error) finish(j, 'done', { summary: m.result || lastText })
-      else finish(j, 'error', { error: m.result || (Array.isArray(m.errors) ? m.errors.join('; ') : '') || `úloha skončila chybou (${m.subtype})` })
     }
   })
   let stderr = ''
@@ -403,13 +396,13 @@ async function startProcess(j) {
   proc.on('exit', (code, signal) => {
     if (j.proc !== proc) return
     if (j.stopping) return finish(j, 'stopped')
-    if (!resultSeen) finish(j, 'error', { error: `claude skončil (${signal ?? code}) ${stderr.trim().split('\n').pop() ?? ''}` })
+    if (!resultSeen) finish(j, 'error', { error: `${provider.product} skončil (${signal ?? code}) ${stderr.trim().split('\n').pop() ?? ''}` })
   })
   proc.on('error', (err) => finish(j, 'error', { error: errMsg(err) }))
 }
 
 function runMock(j, said = '') {
-  const steps = ['Čítam CLAUDE.md', 'Hľadám: podklady', 'Čítam web', 'Píšem zhrnutie.md']
+  const steps = ['Čítam AGENTS.md', 'Hľadám: podklady', 'Čítam web', 'Píšem zhrnutie.md']
   let i = 0
   const tick = () => {
     if (j.status !== 'running') return
@@ -510,7 +503,7 @@ function killTree(proc) {
   if (!proc?.pid) return
   if (process.platform === 'win32') {
     try {
-      spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).on('error', () => proc.kill())
+      spawn(winSys('taskkill.exe'), ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).on('error', () => proc.kill())
       return
     } catch {
       // falls through to a plain kill

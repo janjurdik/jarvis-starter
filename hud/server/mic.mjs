@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { WebSocketServer } from 'ws'
 import { sttLocal, transcribeFile } from './stt.mjs'
-import { BRAIN_DIR, ROOT, errMsg, findBin, log, spawnBin } from './util.mjs'
+import { BRAIN_DIR, errMsg, findBin, log, ROOT, spawnBin, workerEnv } from './util.mjs'
 
 const UV = findBin('uv', { override: process.env.UV_BIN })
 
@@ -83,7 +83,7 @@ function startWorker() {
     log('mic', 'spúšťam wake worker (openWakeWord + Silero VAD)')
     const proc = spawnBin(UV, ['run', '--quiet', join(ROOT, 'server/wake/wake_worker.py')], {
       cwd: ROOT,
-      env: { ...process.env, PYTHONUNBUFFERED: '1', WAKE_REC_DIR: REC_DIR, WAKE_THRESHOLD: thresh },
+      env: workerEnv({ PYTHONUNBUFFERED: '1', WAKE_REC_DIR: REC_DIR, WAKE_THRESHOLD: thresh }),
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     worker = proc

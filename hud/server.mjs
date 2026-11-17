@@ -13,15 +13,17 @@
  * Settings come from .env (see .env.example) and config/jarvis.json.
  */
 import './server/env.mjs'
-import { randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { createReadStream, readFileSync, statSync } from 'node:fs'
+import { chmodSync, createReadStream, readFileSync, statSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { networkInterfaces } from 'node:os'
 import { extname, join, normalize, sep } from 'node:path'
 import { quietNow } from './server/alarm.mjs'
-import { Brain, CLAUDE, EFFORT, MODEL } from './server/brain.mjs'
+import { Brain, EFFORT, MODEL } from './server/brain.mjs'
+import { CodexBrain } from './server/brain-codex.mjs'
+import { aiProvider } from './server/provider.mjs'
 import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onVoiceChange, sayText, sendChat, setVoice, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
 import { CONFIG_FILE, getConfig } from './server/config.mjs'
 import { createJob, initJobs, jobDetail, jobFile, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob } from './server/jobs.mjs'
@@ -32,7 +34,7 @@ import { currentSnapshot, filmNameList, forFilm, memoryStatus, refreshSnapshot, 
 import { openStream, send, sendHud, setGreeting, clientCount, desktopCount, setOnRolesChange } from './server/sse.mjs'
 import { saveState, setPersist, state } from './server/state.mjs'
 import { pruneTtsCache, stopTts, ttsFileExists, ttsInfo, warmCommonPhrases } from './server/tts.mjs'
-import { BRAIN_DIR, REPO, clean, errMsg, isLoopback, log, readJson, readRaw, sendJson, slug, writeFileAtomic } from './server/util.mjs'
+import { BRAIN_DIR, DATA_DIR, REPO, clean, errMsg, isLoopback, log, readJson, readRaw, sendJson, slug, writeFileAtomic } from './server/util.mjs'
 import { STT_ENGINE, sttLocal, sttState, stopStt, transcribeAudio, warmStt } from './server/stt.mjs'
 import { getWeather } from './server/weather.mjs'
 import { routeInner } from './server/inner.mjs'
@@ -40,6 +42,11 @@ import { initImports, loadImports, resolveAttachments, routeImportGet, routeImpo
 import { startUpdateWatch, updateInfo } from './server/updates.mjs'
 import { callProblems } from './server/call.mjs'
 import { getApps, saveApps } from './server/apps.mjs'
+import { applySettings, brainSettings, initSettings, previewVoice, settingsBody } from './server/settings.mjs'
+import { routeVideoGet, routeVideoPost, stopVideo } from './server/video.mjs'
+import { changeOrbs, getOrbs } from './server/orbs.mjs'
+import { getSetup, noteSetup, setupContextNote } from './server/setup.mjs'
+import { FIRST_RUN_TEXT } from './server/persona.mjs'
 
 const ROOT = import.meta.dirname
 const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
@@ -98,6 +105,33 @@ const MOUNTS = [
   { prefix: '/vendor/fontsource/', dir: join(MODULES_DIR, '@fontsource'), allow: /^[a-z0-9-]+\/files\/[^/]+\.woff2$/, cache: true },
   { prefix: '/', dir: PUBLIC_DIR, allow: /./, cache: false },
 ]
+
+/** The only inline script of the app is the import map of index.html: its hash is allowed, nothing else inline runs. */
+function importMapHash() {
+  try {
+    const html = readFileSync(join(PUBLIC_DIR, 'index.html'), 'utf8')
+    const body = /<script type="importmap">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? ''
+    return body ? `'sha256-${createHash('sha256').update(body).digest('base64')}'` : ''
+  } catch {
+    return ''
+  }
+}
+const CSP = [
+  "default-src 'self'",
+  `script-src 'self' ${importMapHash()}`.trim(),
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
+  "font-src 'self' data:",
+  "worker-src 'self' blob:",
+  "connect-src 'self' ws://localhost:* ws://127.0.0.1:* wss://localhost:* wss://127.0.0.1:*",
+  // Finished jobs show a preview of the web page they made.
+  'frame-src http: https:',
+  "frame-ancestors 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+].join('; ')
 
 // ── pomocné ────────────────────────────────────────────────────────────────
 
@@ -172,7 +206,7 @@ function allowRead(req, url) {
   if (isLocal(req)) return true
   return remoteTokenOk(req, url)
 }
-const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|inner|setup|attachment|import|update)|tts\/)/
+const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|settings|orbs|inner|setup|attachment|import|update|video)|tts\/)/
 
 async function serveFile(req, res, file, { cache, immutable = false }) {
   let info
@@ -185,6 +219,11 @@ async function serveFile(req, res, file, { cache, immutable = false }) {
   const type = MIME[extname(file).toLowerCase()] ?? 'application/octet-stream'
   const headers = {
     'content-type': type,
+    'x-content-type-options': 'nosniff',
+    'cross-origin-resource-policy': 'same-origin',
+    // The page may load only what this server gives it and may not be framed by another site:
+    // a second wall behind the escaping in the page (the brain behind this page controls a computer).
+    ...(type.startsWith('text/html') ? { 'content-security-policy': CSP, 'referrer-policy': 'no-referrer', 'x-frame-options': 'SAMEORIGIN' } : {}),
     'cache-control': immutable ? 'public, max-age=31536000, immutable' : cache ? 'public, max-age=86400' : 'no-cache',
     'accept-ranges': 'bytes',
     'last-modified': info.mtime.toUTCString(),
@@ -221,8 +260,13 @@ function statusChanged() {
 }
 
 setOnRolesChange(statusChanged)
+initSettings({ statusChanged, primary: PRIMARY })
 
-const brain = MOCK_ALL ? null : new Brain({ hudUrl: `http://127.0.0.1:${PORT}`, token: BRAIN_TOKEN, onStatus: statusChanged, warmup: PRIMARY })
+/** The agent Jarvis runs on: Claude Code or Codex (server/provider.mjs). */
+const AI = aiProvider()
+const CLAUDE = AI.bin()
+const brainOpts = { hudUrl: `http://127.0.0.1:${PORT}`, token: BRAIN_TOKEN, onStatus: statusChanged, warmup: PRIMARY }
+const brain = MOCK_ALL ? null : AI.id === 'codex' ? new CodexBrain(brainOpts) : new Brain(brainOpts)
 
 function statusBody() {
   const b = brain?.status()
@@ -231,6 +275,8 @@ function statusBody() {
     ok: true,
     brain: MOCK_ALL ? 'mock' : b.state,
     model: MOCK_ALL ? 'mock' : b.model,
+    ai: AI.id,
+    aiName: AI.name,
     effort: EFFORT,
     tts: tts.provider,
     voice: tts.voice,
@@ -258,12 +304,40 @@ function statusBody() {
 
 const snapshotFor = () => currentSnapshot({ film: state.film })
 
-initChat({ brain, getSnapshot: () => snapshotFor() ?? {}, getNames: filmNameList, getExtraContext: () => jobsContextNote(), mockAll: MOCK_ALL })
+initChat({ brain, getSnapshot: () => snapshotFor() ?? {}, getNames: filmNameList, getExtraContext: () => [jobsContextNote(), setupContextNote()].filter(Boolean).join('\n'), mockAll: MOCK_ALL })
 setGreeting(() => {
   // An open HUD means push-to-talk should be ready (a cold local Whisper takes a while).
   if (PRIMARY) warmStt()
+  if (PRIMARY) firstRun()
   return greeting()
 })
+
+/**
+ * The very first start: nobody has to type anything, Jarvis speaks first and leads the setup from
+ * there (persona.mjs, section Úvodné nastavenie). Once per installation: after the greeting the
+ * setup file exists and later starts stay quiet.
+ */
+let firstRunStarted = false
+function firstRun() {
+  if (firstRunStarted || MOCK_ALL || !brain) return
+  const setup = getSetup()
+  // `startedAt` is written with the first greeting: the preparation alone (scripts/setup.mjs) does not count.
+  if (setup.done || setup.startedAt) return
+  firstRunStarted = true
+  const t0 = Date.now()
+  const tick = async () => {
+    // The brain needs a few seconds after a cold start. Nobody at the screen any more: next time.
+    if (clientCount() === 0 || Date.now() - t0 > 90_000) return (firstRunStarted = false)
+    if (brain.status().state !== 'ready' || currentTurnId() || voiceState() !== 'idle') return setTimeout(tick, 700)
+    try {
+      await noteSetup({})
+      sendChat({ text: FIRST_RUN_TEXT, via: 'text', hidden: true })
+    } catch (err) {
+      log('setup', errMsg(err))
+    }
+  }
+  setTimeout(tick, 2500)
+}
 const greeting = () => [
   ['status', statusBody()],
   ['mode', { film: state.film }],
@@ -391,6 +465,20 @@ async function postStt(req, res) {
   }
 }
 
+/** One change to the orbs of the 3D world (hud/server/orbs.mjs): the page redraws the ring at once. */
+function orbAction(body) {
+  // `reload` only tells the open pages that the files changed (scripts/orb.mjs wrote them itself).
+  const result = body.action === 'reload' ? { summary: 'Načítané.' } : changeOrbs(body)
+  const orbs = getOrbs()
+  send('orbs', orbs)
+  if (body.action !== 'reload') {
+    log('orbs', `${body.action} ${body.id ?? ''}`)
+    // A new or changed orb flares up so the eye finds it.
+    if (['add', 'update', 'show', 'pin', 'content'].includes(body.action)) send('world', { focus: null, flare: String(body.id ?? '') })
+  }
+  return { ok: true, ...result, ...orbs }
+}
+
 /** What the onboarding and the page need to know about this installation. */
 async function setupBody() {
   const cfg = getConfig()
@@ -400,6 +488,8 @@ async function setupBody() {
     configured: cfg.configured,
     name: cfg.name || null,
     claude: Boolean(CLAUDE),
+    ai: AI.id,
+    setup: getSetup(),
     brain: MOCK_ALL ? 'mock' : brain.status().state,
     brainError: brain?.status().lastError ?? null,
     memoryDir: MEMORY_DIR,
@@ -442,6 +532,20 @@ async function routePost(req, res, path) {
       sendHud({ type: 'action', text: 'Volám na mobil', icon: 'alarm', say: null, heard: null, node: null, source: 'jarvis' })
       return sendJson(res, 200, { ok: true })
     }
+    if (body.action === 'setup') {
+      const setup = await noteSetup(body.note ?? {})
+      send('setup', setup)
+      return sendJson(res, 200, { ok: true, setup })
+    }
+    if (body.action === 'orb') {
+      try {
+        return sendJson(res, 200, orbAction(body.orb ?? {}))
+      } catch (err) {
+        return sendJson(res, err.status ?? 500, { ok: false, error: err.message })
+      }
+    }
+    // The brain's `settings` tool: the same change POST /api/settings makes (server/settings.mjs).
+    if (body.action === 'settings') return sendJson(res, 200, await brainSettings(body))
     const result = String(body.action ?? '').startsWith('job_') ? await jobAction(body) : hudAction(body)
     return sendJson(res, result.ok ? 200 : 400, result)
   }
@@ -449,7 +553,11 @@ async function routePost(req, res, path) {
   if (path === '/api/stt') return postStt(req, res)
   // Uploads (streamed bodies), imports and the people review: server/imports.mjs.
   if (await routeImportPost(req, res, new URL(req.url ?? '/', 'http://hud.local'), { local: isLocal(req), film: state.film })) return
+  // The video theater: open a link, seek, play and pause (server/video.mjs).
+  if (await routeVideoPost(req, res, path)) return
   const body = await readJson(req, 32_000)
+  if (path === '/api/settings') return sendJson(res, 200, await applySettings(body))
+  if (path === '/api/settings/preview') return sendJson(res, 200, await previewVoice(body))
   const jobPath = /^\/api\/jobs\/(j\d+)\/(stop|reply)$/.exec(path)
   if (jobPath) {
     try {
@@ -471,6 +579,7 @@ async function routePost(req, res, path) {
     log('apps', `${apps.picked.length} appiek, ${apps.wants.length} prianí`)
     return sendJson(res, 200, { ok: true, ...apps })
   }
+  if (path === '/api/orbs') return sendJson(res, 200, orbAction(body))
   if (path === '/api/jobs') {
     const job = await createJob({ task: body.task, title: body.title, mock: body.mock === true, silent: body.silent === true })
     return sendJson(res, 202, { ok: true, job })
@@ -551,6 +660,9 @@ async function route(req, res) {
   if (req.method === 'POST') return routePost(req, res, path)
   if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { ok: false, error: 'len GET, HEAD a POST' })
   if (PRIVATE_GET.test(path) && !allowRead(req, url)) return sendJson(res, 403, { ok: false, error: 'zo siete len s tokenom (x-hud-token alebo ?token=)' })
+  // Another web page open in the same browser may not even poke the API (some GETs start work or call out).
+  const site = req.headers['sec-fetch-site']
+  if (path.startsWith('/api/') && site !== undefined && site !== 'same-origin' && site !== 'none') return sendJson(res, 403, { ok: false, error: 'cudzia stránka' })
 
   if (path === '/api/update') return sendJson(res, 200, { ok: true, ...(await updateInfo()) })
   if (path === '/api/events') return openStream(req, res, { role: url.searchParams.get('client') === 'desktop' ? 'desktop' : 'browser' })
@@ -559,6 +671,8 @@ async function route(req, res) {
   if (path === '/api/mode') return sendJson(res, 200, { film: state.film })
   if (path === '/api/jobs') return sendJson(res, 200, listJobs())
   if (path === '/api/apps') return sendJson(res, 200, getApps())
+  if (path === '/api/settings') return sendJson(res, 200, settingsBody())
+  if (path === '/api/orbs') return sendJson(res, 200, { ok: true, ...getOrbs() })
   // An image a finished job named in its result, shown in the middle of the desktop. Only those exact files.
   const jobImg = /^\/api\/jobs\/(j\d+)\/file\/(\d{1,2})$/.exec(path)
   if (jobImg) {
@@ -582,6 +696,8 @@ async function route(req, res) {
   if (await routeInner(req, res, url, { film: state.film })) return
   // Attachments, import status and the people review (server/imports.mjs).
   if (await routeImportGet(req, res, url, { film: state.film })) return
+  // Analysed videos: state, transcript and the file itself with range requests (server/video.mjs).
+  if (await routeVideoGet(req, res, url)) return
   if (path === '/api/weather') {
     try {
       const days = Math.min(7, Math.max(1, Number(url.searchParams.get('days')) || 3))
@@ -607,10 +723,22 @@ async function route(req, res) {
   sendJson(res, 404, { ok: false, error: `nenájdené: ${path}` })
 }
 
+/** The memory, the runtime data and the secrets belong to this user only (a shared family computer has other accounts). */
+function lockDown() {
+  if (process.platform === 'win32') return
+  for (const [path, mode] of [[DATA_DIR, 0o700], [MEMORY_DIR, 0o700], [join(REPO, '.env'), 0o600]]) {
+    try {
+      chmodSync(path, mode)
+    } catch {
+      // not there yet, or not ours to change
+    }
+  }
+}
+
 const server = createServer((req, res) => {
   route(req, res).catch((err) => {
     const status = err.status ?? 500
-    if (status >= 500) console.error(`✗ ${req.method} ${req.url}: ${err.message}`)
+    if (status >= 500) console.error(`✗ ${req.method} ${String(req.url ?? '').split('?')[0]}: ${err.message}`)
     if (!res.headersSent) sendJson(res, status, { ok: false, error: err.message })
     else res.end()
   })
@@ -708,6 +836,8 @@ initImports({
   },
 })
 if (PRIMARY) loadImports().catch(() => {})
+// The activity log (what was in front, every minute): the source of the evening diary. docs/AKTIVITA.md
+import('./server/activity.mjs').then((m) => m.startActivity({ primary: PRIMARY })).catch((err) => log('activity', errMsg(err)))
 
 attachMic(server, {
   allow: (req, url) => hostAllowed(req) && originOk(req) && (isLocal(req) || remoteTokenOk(req, url)),
@@ -740,6 +870,7 @@ function shutdown(signal) {
   brain?.stop()
   stopAllJobs()
   stopImports()
+  stopVideo()
   stopMic()
   stopTts()
   stopStt()
@@ -757,9 +888,11 @@ server.listen(PORT, HOST, async () => {
   }
   const cfg = getConfig()
   console.log(`\n  J.A.R.V.I.S. HUD${PRIMARY ? '' : ' (vedľajšia inštancia)'}\n`)
+  if (!['127.0.0.1', 'localhost', '::1'].includes(HOST)) console.log('  POZOR: Jarvis je otvorený do siete (HUD_HOST). Kto pozná token z data/brain/token, ovláda tento počítač, a po bežnej sieti ide token nešifrovane. Otvor ho radšej len cez šifrovaný tunel (napríklad tailscale serve).\n')
+  lockDown()
   for (const u of urls) console.log(`  ${u}`)
-  console.log(`\n  mozog: ${MOCK_ALL ? 'MOCK (JARVIS_MOCK=1)' : CLAUDE ? `${MODEL}, effort ${EFFORT}` : 'Claude Code CLI sa nenašiel'} · hlas: ${ttsInfo().provider} · reč: ${STT_ENGINE}`)
-  console.log(`  pamäť: ${MEMORY_DIR}${cfg.configured ? '' : '\n  nastavenie ešte neprebehlo: otvor tento priečinok v Claude a napíš „štart"'}\n`)
+  console.log(`\n  mozog: ${MOCK_ALL ? 'MOCK (JARVIS_MOCK=1)' : CLAUDE ? `${AI.name} (${AI.id === 'codex' ? brain.status().model : `${MODEL}, effort ${EFFORT}`})` : `${AI.product} CLI sa nenašiel`} · hlas: ${ttsInfo().provider} · reč: ${STT_ENGINE}`)
+  console.log(`  pamäť: ${MEMORY_DIR}${cfg.configured ? '' : '\n  nastavenie ešte neprebehlo: Jarvis ťa ním prevedie na ploche'}\n`)
   await startSnapshots(() => state.film).catch((err) => log('snapshot', errMsg(err)))
   if (PRIMARY) {
     pruneTtsCache()

@@ -3,7 +3,7 @@
  * of the 3D world. Names are without the mcp__server__ prefix. HUD tools are not shown as chips,
  * their effect arrives as a card, a focus or a LOG line.
  */
-export const NODES = ['ludia', 'projekty', 'questy', 'kalendar', 'rutiny', 'udalosti', 'spravy', 'fotky', 'spanok']
+export const NODES = ['ludia', 'projekty', 'questy', 'kalendar', 'rutiny', 'udalosti', 'spravy', 'fotky', 'spanok', 'ulohy', 'posta', 'appky']
 
 export const ICONS = [
   'calendar', 'moon', 'heart', 'message', 'photo', 'check', 'quest', 'search', 'book', 'globe', 'bolt', 'music',
@@ -14,6 +14,7 @@ const META = {
   calendar_list: { label: 'Pozerám kalendár', icon: 'calendar', node: 'kalendar' },
   upcoming_celebrations: { label: 'Pozerám meniny a narodeniny', icon: 'gift', node: 'kalendar' },
   get_health: { label: 'Pozerám spánok', icon: 'moon', node: 'spanok' },
+  garmin_sync: { label: 'Sťahujem dáta z hodiniek', icon: 'heart', node: 'spanok' },
   view_todo: { label: 'Pozerám úlohy', icon: 'check', node: 'projekty' },
   list_goals: { label: 'Pozerám ciele', icon: 'quest', node: 'questy' },
   read_note: { label: 'Čítam poznámku', icon: 'book', node: 'fotky' },
@@ -24,6 +25,14 @@ const META = {
   call_user: { label: 'Volám na mobil', icon: 'alarm', node: null },
   remind: { label: 'Nastavujem pripomienku', icon: 'alarm', node: 'kalendar' },
   set_alarm: { label: 'Nastavujem budík', icon: 'alarm', node: 'rutiny' },
+  settings: { label: 'Mením nastavenia', icon: 'volume', node: null },
+  set_alarm_sound: { label: 'Mením zvuk budíka', icon: 'music', node: 'rutiny' },
+  video_open: { label: 'Otváram video', icon: 'eye', node: null },
+  video_seek: { label: 'Preskakujem vo videu', icon: 'eye', node: null },
+  video_transcript: { label: 'Čítam prepis videa', icon: 'book', node: null },
+  video_info: { label: 'Pozerám údaje o videu', icon: 'info', node: null },
+  video_control: { label: 'Ovládam video', icon: 'eye', node: null },
+  video_close: { label: 'Zatváram video', icon: 'eye', node: null },
   search_messages: { label: 'Hľadám v rozhovoroch', icon: 'search', node: 'spravy' },
   read_thread: { label: 'Čítam rozhovor', icon: 'search', node: 'spravy' },
   complete_todo: { label: 'Odškrtávam úlohu', icon: 'check', node: 'projekty' },

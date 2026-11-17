@@ -1,0 +1,1 @@
+{ "Sugar": { "app_name": "Sugar", "title": "Rocket League", "install_path": "{{ROOT}}/Heroic/RocketLeague", "install_size": 25000000000, "executable": "Binaries/Win64/RocketLeague.exe", "is_dlc": false }, "SugarDLC": { "title": "Rocket League DLC", "is_dlc": true }, "bad": null }

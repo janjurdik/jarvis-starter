@@ -17,7 +17,8 @@
 import '../hud/server/env.mjs'
 import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { CLAUDE_BIN, MEMORY_EXTERNAL, cleanEnv, modelArgs, permissionArgs } from '../hud/server/agent.mjs'
+import { MEMORY_EXTERNAL } from '../hud/server/agent.mjs'
+import { STRANGERS_NOTE, runAgent } from '../hud/server/provider.mjs'
 import { readDay } from '../hud/server/chatlog.mjs'
 import { getConfig } from '../hud/server/config.mjs'
 import { FOLDERS, MEMORY_DIR, parseFrontmatter } from '../hud/server/memory/index.mjs'
@@ -32,7 +33,7 @@ const cfg = getConfig()
 if (flags.has('list') || !rest[0]) {
   console.log('Rutiny (config/jarvis.json):')
   for (const r of cfg.routines) console.log(`  ${r.enabled ? '●' : '○'} ${r.id.padEnd(20)} ${r.every ? `každých ${r.every} min` : `${r.time}  ${r.days}`}  ${r.title}`)
-  if (!cfg.routines.length) console.log(cfg.configured ? '  Zatiaľ žiadne. Povedz Jarvisovi napríklad „každé ráno o siedmej mi priprav prehľad dňa".' : '  Zatiaľ žiadne. Nastavia sa pri úvodnom nastavení: otvor tento priečinok v Claude a napíš štart.')
+  if (!cfg.routines.length) console.log(cfg.configured ? '  Zatiaľ žiadne. Povedz Jarvisovi napríklad „každé ráno o siedmej mi priprav prehľad dňa".' : '  Zatiaľ žiadne. Nastavia sa pri úvodnom nastavení: Jarvis ťa ním prevedie na ploche (node scripts/setup.mjs).')
   if (cfg.alarm) console.log(`\nBudík: ${cfg.alarm.enabled ? cfg.alarm.time : 'vypnutý'} (node scripts/alarm.mjs)`)
   console.log('\nSpustenie: node scripts/routine.mjs <id>')
   process.exit(rest[0] ? 0 : flags.has('list') ? 0 : 1)
@@ -107,40 +108,17 @@ const context = [
   `Tvoja posledná správa je výsledok rutiny v tomto tvare: najprv celý text (markdown, stručne), potom samostatný riadok \`---\` a riadok \`HLAS: …\` ${fm.hlas ? `(${fm.hlas})` : 's jednou až tromi vetami'}, ktoré Jarvis prečíta nahlas (bez markdownu, prirodzene, ako komorník; časy slovami, napríklad „o deviatej").`,
   night ? `Čo Jarvis robil, kým používateľ spal (od včera 18:00):\n${night}` : wantsNight ? 'Cez noc Jarvis nerobil žiadnu úlohu ani rutinu. Nič si k tomu nevymýšľaj.' : '',
   'Nič neposielaj von za používateľa (maily, správy). Návrhy priprav a napíš, že čakajú na schválenie.',
+  STRANGERS_NOTE,
   callReady() ? 'Vieš používateľovi zavolať na mobil. Použi to len vtedy, keď niečo naozaj nepočká (niekto čaká na odpoveď do hodiny, termín padá dnes, niečo sa pokazilo): na samostatný riadok na konci napíš `VOLAJ: …` s jednou až tromi vetami, ktoré mu povieš do telefónu.' : '',
   entry?.every ? `Toto je strážna rutina, beží každých ${entry.every} minút. Ozvi sa len vtedy, keď je naozaj čo povedať. Keď nie je, tvoja celá odpoveď je jediné slovo: NIČ. To isté, čo si už ohlásil, neopakuj: čo si ohlásil, si zapíš do data/pulse/${id}.md a pred ohlásením sa tam pozri.` : '',
 ].filter(Boolean).join('\n')
 
+/** One full run of the agent Jarvis is set up with (Claude Code or Codex, hud/server/provider.mjs). */
 async function runClaude(prompt) {
-  if (!CLAUDE_BIN) throw new Error('Claude Code CLI sa nenašiel')
   const ctxFile = join(DATA_DIR, `routine-${id}.context.md`)
   writeFileSync(ctxFile, context, { mode: 0o600 })
   const model = entry?.model || fm.model
-  const args = ['-p', '--output-format', 'json', ...(model ? ['--model', String(model)] : modelArgs()), ...permissionArgs(), '--append-system-prompt-file', ctxFile]
-  return new Promise((resolve, reject) => {
-    const child = spawnBin(CLAUDE_BIN, args, { cwd: REPO, env: cleanEnv(), stdio: ['pipe', 'pipe', 'pipe'] })
-    let out = ''
-    let err = ''
-    const timer = setTimeout(() => {
-      child.kill()
-      reject(new Error('rutina trvala viac ako 20 minút'))
-    }, 20 * 60_000)
-    child.stdout.on('data', (d) => (out += d))
-    child.stderr.on('data', (d) => (err = `${err}${d}`.slice(-2000)))
-    child.on('error', (e) => (clearTimeout(timer), reject(e)))
-    child.on('exit', (code) => {
-      clearTimeout(timer)
-      try {
-        const res = JSON.parse(out.trim().split('\n').pop())
-        if (res.is_error) return reject(new Error(String(res.result ?? 'Claude skončil chybou').slice(0, 400)))
-        resolve(String(res.result ?? ''))
-      } catch {
-        reject(new Error(`Claude skončil (${code}): ${err.trim().split('\n').pop() ?? 'bez výstupu'}`))
-      }
-    })
-    child.stdin.on('error', () => {})
-    child.stdin.end(prompt)
-  })
+  return runAgent({ prompt, contextFile: ctxFile, ...(model ? { model: String(model) } : {}), cwd: REPO })
 }
 
 const MOCK_TEXT = `# ${title} (skúška)\n\nToto je skúšobný beh rutiny bez Claude. Overuje, že výsledok sa uloží do pamäte, ukáže v HUD a príde ako oznámenie.\n\n---\nHLAS: Skúška rutiny prebehla v poriadku. Všetko funguje.`

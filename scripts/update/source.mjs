@@ -114,7 +114,18 @@ export async function fetchIncoming(up = upstream()) {
       how = await unpack(up.source, P.incoming)
     }
   } else {
-    const res = await fetchBuf(`https://codeload.github.com/${up.repo}/tar.gz/refs/heads/${up.branch}`, 180_000)
+    // The tagged release when there is one (a tag does not move), the head of the branch otherwise.
+    // Either way the signature decides whether it gets installed (signature.mjs).
+    let res = null
+    const pkg = await fetchBuf(rawUrl(up.repo, up.branch, 'package.json'))
+    let version = null
+    try {
+      version = pkg.ok ? String(JSON.parse(pkg.buf.toString('utf8')).version ?? '') : null
+    } catch {
+      version = null
+    }
+    if (version && /^\d+\.\d+\.\d+$/.test(version)) res = await fetchBuf(`https://codeload.github.com/${up.repo}/tar.gz/refs/tags/v${version}`, 180_000)
+    if (!res?.ok) res = await fetchBuf(`https://codeload.github.com/${up.repo}/tar.gz/refs/heads/${up.branch}`, 180_000)
     if (!res.ok) return { ok: false, reason: res.reason }
     const file = join(P.tmp, 'incoming.tar.gz')
     mkdirSync(P.tmp, { recursive: true })

@@ -109,10 +109,12 @@ export async function createCore(canvas, opts = {}) {
   scene.add(heart.root)
   // Kalendár uzla ukazuje skutočný mesiac. Dátum sa určí raz pri štarte (alebo z opts.today), nie v renderi.
   const today = opts.today ? new Date(opts.today) : new Date()
-  const nodes = createNodes(U, { high, rand: rng(4242), nodes: opts.nodes ?? [], today })
+  const flows = createFlows(U, { high, rand: rng(77) })
+  const nodes = createNodes(U, { high, rand: rng(4242), nodes: opts.nodes ?? [], today, onFree: (index) => flows.setOn(index, 0) })
   scene.add(nodes.root)
-  const flows = createFlows(U, { high, rand: rng(77), count: nodes.items.length })
   scene.add(flows.points, ...flows.curves)
+  /** Where each orb sits right now (u, v, z, size ease toward the values of its definition). */
+  for (const n of nodes.items) n.cur = { u: num(n.u), v: num(n.v), z: num(n.z), size: num(n.size, 1) }
   const fish = createFish(U, { high, rand: rng(1306) })
   scene.add(fish.mesh)
 
@@ -176,39 +178,104 @@ export async function createCore(canvas, opts = {}) {
     camera.up.set(0, 1, 0)
     camera.lookAt(0, 0, 0)
     camera.updateMatrixWorld()
-    const nodeScale = NODE_PX / pxPerUnit
-    const focusPx = clamp(0.36 * Math.min(zh, zw * 1.1), 150, 380)
-    for (const n of nodes.items) {
-      const sx = cx + num(n.u) * (zw / 2)
-      const sy = cy - num(n.v) * (zh / 2)
-      tmp.set((sx / w) * 2 - 1, -(sy / h) * 2 + 1, 0.5).unproject(camera)
-      const dir = tmp.sub(camera.position).normalize()
-      const zPlane = num(n.z) * DEPTH_SPREAD
-      const t = (zPlane - camera.position.z) / dir.z
-      n.pos.copy(camera.position).addScaledVector(dir, t)
-      // Veľkosť planéty podľa významu (hlavné väčšie, mesiace menšie).
-      const size = num(n.size, 1)
-      n.scale = nodeScale * size
-      n.holder.position.copy(n.pos)
-      n.holder.scale.setScalar(n.scale)
-      // Spojnica: krivka od uzla k okraju jadra, mierne do boku.
-      const toCore = n.pos.clone().normalize()
-      const c = toCore.clone().multiplyScalar(R.shell * 0.75)
-      const side = new THREE.Vector3(-toCore.y, toCore.x, 0).multiplyScalar((n.index % 2 ? 1 : -1) * n.pos.length() * 0.16)
-      const b = n.pos.clone().add(c).multiplyScalar(0.5).add(side)
-      flows.setLink(n.index, n.pos, b, c)
-      const focusDist = h / 2 / ((focusPx / (n.scale * 1.05)) * TAN)
-      director.setFocusPose(n.id, n.pos, focusDist)
-      // Strana štítka: ak by sa štítok (~70 px) nad uzlom nezmestil do zóny, ide pod uzol a naopak.
-      tmp.copy(n.pos).project(camera)
-      const py = ((1 - tmp.y) / 2) * h
-      const pr = n.scale * 1.08 * (h / 2 / (TAN * Math.max(0.1, camera.position.distanceTo(n.pos))))
-      const want = n.side === 'below' ? 'below' : 'above'
-      n.autoSide = want === 'above' && py - pr - LABEL_PX < zone.top ? 'below' : want === 'below' && py + pr + LABEL_PX > zone.bottom ? 'above' : want
-    }
+    // The home camera is kept apart, so orbs can be placed any time, wherever the live camera happens to fly.
+    homeCam.copy(camera)
+    homeCam.updateMatrixWorld()
+    homeCam.updateProjectionMatrix()
+    for (const n of nodes.items) place(n)
     fish.layout(nodes.items)
     ready = true
     return true
+  }
+
+  const homeCam = new THREE.PerspectiveCamera(FOV, 1, 0.05, 1400)
+
+  /** Puts one orb where its current u, v, z and size say (free zone coordinates seen from the home camera). */
+  function place(n) {
+    const { w, h, zone, cx, cy, zw, zh, pxPerUnit } = view
+    if (!zone) return
+    const cur = (n.cur ??= { u: num(n.u), v: num(n.v), z: num(n.z), size: num(n.size, 1) })
+    const sx = cx + cur.u * (zw / 2)
+    const sy = cy - cur.v * (zh / 2)
+    tmp.set((sx / w) * 2 - 1, -(sy / h) * 2 + 1, 0.5).unproject(homeCam)
+    const dir = tmp.sub(homeCam.position).normalize()
+    const zPlane = cur.z * DEPTH_SPREAD
+    const t = (zPlane - homeCam.position.z) / dir.z
+    n.pos.copy(homeCam.position).addScaledVector(dir, t)
+    // Veľkosť planéty podľa významu (hlavné väčšie, mesiace menšie).
+    n.scale = (NODE_PX / pxPerUnit) * cur.size
+    n.holder.position.copy(n.pos)
+    n.holder.scale.setScalar(n.scale)
+    // Spojnica: krivka od uzla k okraju jadra, mierne do boku.
+    const toCore = n.pos.clone().normalize()
+    const c = toCore.clone().multiplyScalar(R.shell * 0.75)
+    const side = new THREE.Vector3(-toCore.y, toCore.x, 0).multiplyScalar((n.index % 2 ? 1 : -1) * n.pos.length() * 0.16)
+    const b = n.pos.clone().add(c).multiplyScalar(0.5).add(side)
+    flows.setLink(n.index, n.pos, b, c)
+    const focusPx = clamp(0.36 * Math.min(zh, zw * 1.1), 150, 380)
+    const focusDist = h / 2 / ((focusPx / (n.scale * 1.05)) * TAN)
+    director.setFocusPose(n.id, n.pos, focusDist)
+    // Strana štítka: ak by sa štítok (~70 px) nad uzlom nezmestil do zóny, ide pod uzol a naopak.
+    tmp.copy(n.pos).project(homeCam)
+    const py = ((1 - tmp.y) / 2) * h
+    const pr = n.scale * 1.08 * (h / 2 / (TAN * Math.max(0.1, homeCam.position.distanceTo(n.pos))))
+    const want = n.side === 'below' ? 'below' : 'above'
+    // A full ring shows compact labels (name and number), so less room is enough.
+    const labelPx = nodes.items.length > 9 ? LABEL_PX * 0.62 : LABEL_PX
+    n.autoSide = n.side === 'left' || n.side === 'right' ? n.side : want === 'above' && py - pr - labelPx < zone.top ? 'below' : want === 'below' && py + pr + labelPx > zone.bottom ? 'above' : want
+  }
+
+  // ── živá sada orbov ──
+  const MOVE_S = 1.25
+  const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2)
+  let moving = false
+
+  /**
+   * The orbs the world should show from now on. New ones grow in, missing ones fade away and the
+   * rest glide to their new places, all while the world keeps running.
+   * defs: [{ id, shape?, color?, u, v, z, size, side }]
+   */
+  function setNodes(defs) {
+    const T = lastT ?? 0
+    const want = new Map((defs ?? []).map((d) => [d.id, d]))
+    for (const n of nodes.items) if (!want.has(n.id) && !n.gone) nodes.remove(n.id)
+    for (const d of want.values()) {
+      const old = nodes.items.find((x) => x.id === d.id)
+      const target = { u: num(d.u), v: num(d.v), z: num(d.z), size: num(d.size, 1) }
+      if (!old || old.gone) {
+        const n = nodes.add(d)
+        if (!n) continue
+        n.cur = { ...target }
+        Object.assign(n, target, { side: d.side })
+        n.move = null
+        if (ready) place(n)
+        continue
+      }
+      old.side = d.side
+      const c = old.cur
+      if (Math.abs(c.u - target.u) + Math.abs(c.v - target.v) + Math.abs(c.z - target.z) + Math.abs(c.size - target.size) < 1e-4) continue
+      Object.assign(old, target)
+      old.move = { from: { ...c }, t0: T }
+      moving = true
+    }
+    if (ready) fish.layout(nodes.items)
+  }
+
+  function stepMoves(T) {
+    let any = false
+    for (const n of nodes.items) {
+      if (!n.move) continue
+      const k = ease(clamp((T - n.move.t0) / MOVE_S))
+      const a = n.move.from
+      n.cur = { u: a.u + (n.u - a.u) * k, v: a.v + (n.v - a.v) * k, z: a.z + (n.z - a.z) * k, size: a.size + (n.size - a.size) * k }
+      place(n)
+      if (k >= 1) n.move = null
+      else any = true
+    }
+    if (!any) {
+      moving = false
+      fish.layout(nodes.items)
+    }
   }
 
   // ── výkon: v živom behu sa pri pomalých snímkach zníži rozlíšenie (nikdy v capture) ──
@@ -286,9 +353,11 @@ export async function createCore(canvas, opts = {}) {
 
     const tools = toolSet(f.toolNodes)
     const flares = f.flares ?? {}
+    if (moving) stepMoves(T)
     nodes.update({ T, boot, flares, tools, focusWeights, hover: capture ? null : hoverId })
     let toolSum = 0
     for (const n of nodes.items) {
+      flows.setOn(n.index, n.vis)
       const fl = flares[n.id]
       flows.update(n.index, { flare: clamp(num(fl?.f), 0, 1.4), phase: num(fl?.phase, T * 0.075), tool: n.state.tool, boot })
       toolSum += n.state.tool
@@ -335,7 +404,7 @@ export async function createCore(canvas, opts = {}) {
       const depth = -tmp2.z
       const pxAt = depth > 0.01 ? view.h / 2 / (TAN * depth) : 0
       const r = n.scale * 1.08 * pxAt
-      const visible = depth > 0.05 && x > -r && x < view.w + r && y > -r && y < view.h + r
+      const visible = n.vis > 0.5 && depth > 0.05 && x > -r && x < view.w + r && y > -r && y < view.h + r
       // Štítok mizne, keď objekt odíde z obrazovky (napríklad pri prelete k inému uzlu).
       const edge = Math.min(x, view.w - x, y, view.h - y)
       const alpha = visible ? clamp((edge + r * 0.2) / 60) : 0
@@ -467,7 +536,7 @@ export async function createCore(canvas, opts = {}) {
   const innerApi = {
     /** Ponor do uzla. color = farba atmosféry (svetlo pri prechode). */
     enter(node, color) {
-      if (!nodes.items.some((n) => n.id === node)) return false
+      if (!nodes.items.some((n) => n.id === node && !n.gone)) return false
       if ((inn.phase === 'in' || inn.phase === 'diving') && inn.node === node) return true
       if (inn.phase === 'in' || inn.phase === 'leaving') {
         post.setView(null, null, false)
@@ -504,6 +573,14 @@ export async function createCore(canvas, opts = {}) {
     labels: (max) => (inn.phase === 'in' ? inner.labels(max) : []),
     groupLabels: () => (inn.phase === 'in' ? inner.groupLabels() : []),
     flyToGroup: inner.flyToGroup,
+    flyHome: inner.flyHome,
+    setMarks: inner.setMarks,
+    setDim: inner.setDim,
+    projectPoint: inner.projectPoint,
+    groups: () => (inn.phase === 'in' ? inner.groups() : []),
+    sway: inner.sway,
+    /** The free zone between the panes in CSS px, as the world was last laid out. */
+    zone: () => view.zone,
     screenOf: inner.screenOf,
     flyTo: inner.flyTo,
     look: inner.look,
@@ -512,5 +589,5 @@ export async function createCore(canvas, opts = {}) {
     world: inner.world,
   }
 
-  return { layout, frame, project, pick, setPointer, drag, zoom, info, inner: innerApi }
+  return { layout, frame, project, pick, setPointer, drag, zoom, info, setNodes, inner: innerApi }
 }

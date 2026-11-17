@@ -1,97 +1,68 @@
 /**
- * Probe "games": Steam (installed games, playtime), other launchers, Minecraft and Roblox.
+ * Probe "games": every game on this computer, whichever shop it came from (Steam, Epic, GOG, Battle.net,
+ * Riot, EA, Ubisoft, Xbox, itch, Rockstar, Heroic, Minecraft with its launchers, Roblox, games installed
+ * on their own), with playtime and the last session where the launcher keeps them. The detection itself
+ * is in launchers.mjs; this file turns it into findings and adds Minecraft worlds and servers.
  * Games say a lot about how the person rests and who they play with.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { IS_MAC, IS_WIN, sh } from '../lib.mjs'
+import { IS_MAC, IS_WIN } from '../lib.mjs'
 import { installedApps } from './apps.mjs'
-import { APPDATA, HOME, LOCALAPPDATA, MAC_SUPPORT, PROGRAMDATA, PROGRAMFILES, PROGRAMFILES86, ago, day, exists, gb, guarded, list, mapLimit, names, parseVdf, readJson, readText, regValue, sk, some, statOf, uniq } from './util.mjs'
+import { LAUNCHER_NAMES, defaultEnv, detectGames, instanceGameDir, minecraftDir } from './launchers.mjs'
+import { HOME, LOCALAPPDATA, ago, exists, gb, list, mapLimit, names, readJson, readText, sk, some, statOf, uniq } from './util.mjs'
 
-/** Case-insensitive lookup in a parsed VDF tree. */
-const pick = (obj, ...keys) => {
-  let cur = obj
-  for (const key of keys) {
-    if (!cur || typeof cur !== 'object') return undefined
-    const hit = Object.keys(cur).find((k) => k.toLowerCase() === key.toLowerCase())
-    cur = hit === undefined ? undefined : cur[hit]
-  }
-  return cur
+const hours = (minutes) => Math.round(minutes / 60)
+const dayOf = (isoTime) => (isoTime ? isoTime.slice(0, 10) : null)
+const msOf = (isoTime) => (isoTime ? Date.parse(isoTime) || 0 : 0)
+/** "Hades (12 h, naposledy pred 3 dňami)". */
+const withTime = (g) => {
+  const bits = [g.playtimeMin >= 60 ? `${hours(g.playtimeMin)} h` : g.playtimeMin ? `${g.playtimeMin} min` : null, g.lastPlayed ? `naposledy ${ago(msOf(g.lastPlayed))}` : null].filter(Boolean)
+  return bits.length ? `${g.name} (${bits.join(', ')})` : g.name
 }
-const NOT_A_GAME = /steamworks common|proton|steam linux runtime|steamvr|redistributable|dedicated server|\bsdk\b/i
+/** The record as it goes into the report: hours next to minutes, a day instead of a timestamp. */
+const row = (g) => ({
+  id: g.id,
+  name: g.name,
+  launcher: g.launcher,
+  installed: g.installed,
+  ...(g.sizeBytes ? { sizeBytes: g.sizeBytes, sizeGB: gb(g.sizeBytes) } : {}),
+  ...(g.playtimeMin ? { playtimeMin: g.playtimeMin, hours: Math.round((g.playtimeMin / 60) * 10) / 10 } : {}),
+  ...(g.lastPlayed ? { lastPlayed: g.lastPlayed, lastPlayedDay: dayOf(g.lastPlayed), ...(g.approx ? { approx: true } : {}) } : {}),
+  ...(g.path ? { path: g.path } : {}),
+  ...(g.also ? { also: g.also } : {}),
+})
 
-async function steam(ctx) {
-  const roots = uniq([
-    IS_MAC ? join(MAC_SUPPORT, 'Steam') : null,
-    IS_WIN ? (await regValue('HKCU\\Software\\Valve\\Steam', 'SteamPath'))?.replace(/\//g, '\\') : null,
-    IS_WIN ? join(PROGRAMFILES86, 'Steam') : null,
-    IS_WIN ? join(PROGRAMFILES, 'Steam') : null,
-    !IS_MAC && !IS_WIN ? join(HOME, '.steam', 'steam') : null,
-    !IS_MAC && !IS_WIN ? join(HOME, '.local', 'share', 'Steam') : null,
-    !IS_MAC && !IS_WIN ? join(HOME, '.var', 'app', 'com.valvesoftware.Steam', '.local', 'share', 'Steam') : null,
-  ]).filter((p) => exists(join(p, 'steamapps')) || exists(join(p, 'userdata')))
-  const root = roots[0]
-  if (!root) return
-
-  const libs = new Set([root])
-  const folders = pick(parseVdf(readText(join(root, 'steamapps', 'libraryfolders.vdf'), 500_000) ?? ''), 'libraryfolders') ?? {}
-  for (const value of Object.values(folders)) {
-    const path = typeof value === 'string' ? value : value?.path
-    if (path && !guarded(path) && exists(path)) libs.add(path)
-  }
-  const installed = new Map()
-  for (const lib of libs) {
-    for (const file of (await names(join(lib, 'steamapps'))).filter((n) => /^appmanifest_\d+\.acf$/.test(n))) {
-      const app = pick(parseVdf(readText(join(lib, 'steamapps', file), 200_000) ?? ''), 'AppState')
-      if (!app?.appid || !app.name || NOT_A_GAME.test(app.name)) continue
-      installed.set(String(app.appid), { appid: String(app.appid), name: app.name, sizeGB: gb(Number(app.SizeOnDisk) || 0), lastPlayed: Number(app.LastPlayed) * 1000 || 0, minutes: 0 })
-    }
-  }
-
-  // playtime lives in the newest user's local config
-  let persona = null
-  const played = new Map()
-  const users = (await list(join(root, 'userdata'))).entries.filter((e) => e.isDirectory() && /^\d+$/.test(e.name))
-  const configs = users.map((u) => join(root, 'userdata', u.name, 'config', 'localconfig.vdf')).filter(exists).sort((a, b) => (statOf(b)?.mtimeMs ?? 0) - (statOf(a)?.mtimeMs ?? 0))
-  if (configs[0]) {
-    const tree = pick(parseVdf(readText(configs[0], 30_000_000) ?? ''), 'UserLocalConfigStore')
-    persona = pick(tree, 'friends', 'PersonaName') ?? null
-    for (const [appid, v] of Object.entries(pick(tree, 'Software', 'Valve', 'Steam', 'apps') ?? {})) {
-      const minutes = Number(pick(v, 'Playtime')) || 0
-      const last = Number(pick(v, 'LastPlayed')) * 1000 || 0
-      if (minutes || last) played.set(appid, { minutes, last })
-    }
-  }
-  for (const [appid, p] of played) {
-    const game = installed.get(appid)
-    if (game) {
-      game.minutes = p.minutes
-      if (p.last > game.lastPlayed) game.lastPlayed = p.last
-    }
-  }
-  const games = [...installed.values()]
-  const totalMinutes = [...played.values()].reduce((n, p) => n + p.minutes, 0)
-  const byTime = games.filter((g) => g.minutes > 0).sort((a, b) => b.minutes - a.minutes)
-  const byRecent = games.filter((g) => g.lastPlayed).sort((a, b) => b.lastPlayed - a.lastPlayed)
-  const unnamed = [...played.keys()].filter((id) => !installed.has(id)).length
-  const hours = (m) => Math.round(m / 60)
+function steamFinding(ctx, detected) {
+  const info = detected.launchers.find((l) => l.id === 'steam')
+  if (!info) return
+  const games = detected.games.filter((g) => g.launcher === 'steam')
+  const byTime = games.filter((g) => g.playtimeMin > 0).sort((a, b) => b.playtimeMin - a.playtimeMin)
+  const byRecent = games.filter((g) => g.lastPlayed).sort((a, b) => b.lastPlayed.localeCompare(a.lastPlayed))
+  const playedGames = byTime.length + (info.playedNotInstalled ?? 0)
   ctx.finding({
     id: 'games.steam',
     category: 'games',
     title: 'Steam',
     detail:
       `Steam: ${sk(games.length, 'nainštalovaná hra', 'nainštalované hry', 'nainštalovaných hier')}${games.length ? ` (${some(games.map((g) => g.name), 6)})` : ''}.` +
-      (totalMinutes ? ` Spolu odohraných ${hours(totalMinutes)} hodín v ${played.size} hrách.` : '') +
-      (byTime.length ? ` Najviac: ${byTime.slice(0, 4).map((g) => `${g.name} (${hours(g.minutes)} h)`).join(', ')}.` : '') +
-      (byRecent[0] ? ` Naposledy: ${byRecent[0].name} (${ago(byRecent[0].lastPlayed)}).` : '') +
-      (persona ? ` Prezývka: ${persona}.` : ''),
-    path: root,
+      (info.totalMin ? ` Spolu odohraných ${hours(info.totalMin)} hodín v ${sk(playedGames, 'hre', 'hrách', 'hrách')}.` : '') +
+      (byTime.length ? ` Najviac: ${byTime.slice(0, 4).map((g) => `${g.name} (${hours(g.playtimeMin)} h)`).join(', ')}.` : '') +
+      (byRecent[0] ? ` Naposledy: ${byRecent[0].name} (${ago(msOf(byRecent[0].lastPlayed))}).` : '') +
+      (info.playedNotInstalled ? ` Ďalších ${sk(info.playedNotInstalled, 'hru', 'hry', 'hier')} (${hours(info.playedNotInstalledMin)} h) už nainštalovaných nie je, ich názvy Steam v počítači neuchováva.` : '') +
+      (info.skippedLibraries?.length ? ` Knižnicu na externom disku som nečítal (${some(info.skippedLibraries, 2)}).` : '') +
+      (info.persona ? ` Prezývka: ${info.persona}.` : ''),
+    path: info.root,
     data: {
-      persona,
-      installed: games.sort((a, b) => b.lastPlayed - a.lastPlayed).map((g) => ({ name: g.name, appid: g.appid, sizeGB: g.sizeGB, hours: Math.round((g.minutes / 60) * 10) / 10, lastPlayed: day(g.lastPlayed) })),
-      playedGames: played.size,
-      totalHours: hours(totalMinutes),
-      playedButNotInstalled: unnamed,
+      persona: info.persona,
+      installed: byRecent
+        .concat(games.filter((g) => !g.lastPlayed))
+        .map((g) => ({ name: g.name, appid: g.id.split(':')[1], sizeGB: gb(g.sizeBytes ?? 0), hours: Math.round(((g.playtimeMin ?? 0) / 60) * 10) / 10, lastPlayed: dayOf(g.lastPlayed) })),
+      playedGames,
+      totalHours: hours(info.totalMin ?? 0),
+      playedButNotInstalled: info.playedNotInstalled ?? 0,
+      libraries: info.libraries,
+      skippedLibraries: info.skippedLibraries ?? [],
     },
     use: 'Poznám tvoje hry a koľko času pri nich tráviš. Hodí sa to, keď plánujem tvoj oddych, a viem, o čom hovoríš.',
     action: 'none',
@@ -99,50 +70,52 @@ async function steam(ctx) {
   })
 }
 
-async function launchers(ctx, apps) {
+const MINECRAFT_FAMILY = new Set(['minecraft', 'prism', 'multimc', 'curseforge', 'modrinth', 'atlauncher'])
+/** Launchers that the detection may miss (no local game list) but whose app is installed. */
+const APP_ONLY = { epic: 'Epic Games Launcher', gog: 'GOG Galaxy', riot: 'Riot Client', battlenet: 'Battle.net', ea: 'EA app', ubisoft: 'Ubisoft Connect', xbox: 'Xbox', rockstar: 'Rockstar Games Launcher', heroic: 'Heroic', itch: 'itch' }
+
+function launchersFinding(ctx, detected, apps) {
   const found = []
-  // Epic Games
-  const epicDir = IS_MAC ? join(MAC_SUPPORT, 'Epic', 'EpicGamesLauncher', 'Data', 'Manifests') : IS_WIN ? join(PROGRAMDATA, 'Epic', 'EpicGamesLauncher', 'Data', 'Manifests') : null
-  const epicGames = []
-  for (const file of (await names(epicDir ?? '')).filter((n) => n.endsWith('.item'))) {
-    const item = readJson(join(epicDir, file), 2_000_000)
-    if (item?.DisplayName && item.bIsApplication !== false) epicGames.push(item.DisplayName)
+  for (const l of detected.launchers) {
+    if (l.id === 'steam' || l.id === 'roblox' || MINECRAFT_FAMILY.has(l.id)) continue
+    found.push({ id: l.id, launcher: LAUNCHER_NAMES[l.id] ?? l.name, records: detected.games.filter((g) => g.launcher === l.id) })
   }
-  if (epicGames.length || apps.has('Epic Games Launcher')) found.push({ launcher: 'Epic Games', games: uniq(epicGames) })
-
-  // GOG
-  const gogGames = []
-  if (IS_WIN) {
-    const res = await sh('reg.exe', ['query', 'HKLM\\SOFTWARE\\WOW6432Node\\GOG.com\\Games', '/s', '/v', 'gameName'], { timeout: 8000 })
-    for (const m of res.out.matchAll(/gameName\s+REG_SZ\s+(.+)/gi)) gogGames.push(m[1].trim())
-  }
-  if (gogGames.length || apps.has('GOG Galaxy')) found.push({ launcher: 'GOG', games: uniq(gogGames) })
-
-  // Riot
-  const riotDir = IS_WIN ? 'C:\\Riot Games' : IS_MAC ? '/Users/Shared/Riot Games' : null
-  const riotGames = (await names(riotDir ?? '')).filter((n) => !/^(riot client|metadata)$/i.test(n) && !n.startsWith('.'))
-  if (apps.has('League of Legends')) riotGames.push('League of Legends')
-  if (apps.has('VALORANT')) riotGames.push('VALORANT')
-  if (riotGames.length || apps.has('Riot Client')) found.push({ launcher: 'Riot Games', games: uniq(riotGames) })
-
-  // Battle.net
-  const blizzard = ['World of Warcraft', 'Overwatch', 'Diablo IV', 'Diablo III', 'Diablo II Resurrected', 'Hearthstone', 'StarCraft II', 'StarCraft', 'Heroes of the Storm', 'Call of Duty', 'Warcraft III']
-  const blizzardRoots = IS_WIN ? [PROGRAMFILES86, PROGRAMFILES] : IS_MAC ? ['/Applications'] : []
-  const blizzardGames = blizzard.filter((g) => blizzardRoots.some((r) => exists(join(r, g))))
-  if (blizzardGames.length || apps.has('Battle.net')) found.push({ launcher: 'Battle.net', games: blizzardGames })
-
-  for (const name of ['EA app', 'Ubisoft Connect', 'Xbox', 'GeForce NOW', 'Rockstar Games Launcher', 'Heroic', 'itch']) if (apps.has(name)) found.push({ launcher: name, games: [] })
+  for (const [id, appName] of Object.entries(APP_ONLY)) if (!found.some((f) => f.id === id) && apps.has(appName)) found.push({ id, launcher: LAUNCHER_NAMES[id], records: [] })
+  if (apps.has('GeForce NOW')) found.push({ id: 'geforcenow', launcher: 'GeForce NOW', records: [] })
   if (!found.length) return
-  const withGames = found.filter((f) => f.games.length)
+  const withGames = found.filter((f) => f.records.length)
+  const timed = found.some((f) => f.records.some((g) => g.playtimeMin || g.lastPlayed))
   ctx.finding({
     id: 'games.launchers',
     category: 'games',
     title: 'Ďalšie herné obchody',
-    detail: `Herné obchody a hry mimo Steamu: ${found.map((f) => (f.games.length ? `${f.launcher} (${some(f.games, 4)})` : f.launcher)).join(', ')}.`,
-    data: { launchers: found },
-    use: withGames.length ? 'Viem, aké ďalšie hry hrávaš.' : 'Viem, kde ďalej hrávaš. Názvy hier z týchto obchodov v počítači nevidím.',
+    detail: `Herné obchody a hry mimo Steamu: ${found.map((f) => (f.records.length ? `${f.launcher} (${some(f.records.map(withTime), 4)})` : f.launcher)).join(', ')}.`,
+    data: { launchers: found.map((f) => ({ launcher: f.launcher, id: f.id, games: uniq(f.records.map((g) => g.name)), records: f.records.map(row) })) },
+    use: withGames.length
+      ? `Viem, aké ďalšie hry hrávaš${timed ? ' a pri niektorých aj kedy naposledy' : ''}. Odohraný čas si v počítači ukladá len Steam, GOG Galaxy, itch a Heroic.`
+      : 'Viem, kde ďalej hrávaš. Názvy hier z týchto obchodov v počítači nevidím.',
     action: 'none',
     weight: 2,
+  })
+}
+
+function libraryFinding(ctx, detected) {
+  const games = detected.games.filter((g) => g.kind !== 'instance')
+  if (games.length < 2 || new Set(games.map((g) => g.launcher)).size < 2) return
+  const byTime = games.filter((g) => g.playtimeMin > 0).sort((a, b) => b.playtimeMin - a.playtimeMin)
+  const recent = games.filter((g) => g.lastPlayed).sort((a, b) => b.lastPlayed.localeCompare(a.lastPlayed))
+  ctx.finding({
+    id: 'games.all',
+    category: 'games',
+    title: 'Všetky hry v počítači',
+    detail:
+      `${sk(games.length, 'hra', 'hry', 'hier')} z ${sk(new Set(games.map((g) => g.launcher)).size, 'zdroja', 'zdrojov', 'zdrojov')}.` +
+      (byTime.length ? ` Najviac nahraté: ${byTime.slice(0, 5).map((g) => `${g.name} (${hours(g.playtimeMin)} h)`).join(', ')}.` : '') +
+      (recent.length ? ` Naposledy: ${recent.slice(0, 3).map((g) => `${g.name} (${ago(msOf(g.lastPlayed))})`).join(', ')}.` : ''),
+    data: { games: games.map(row), errors: detected.errors },
+    use: 'Jeden zoznam hier naprieč obchodmi. Podľa neho v zázname aktivity spoznám, ktorú hru práve hráš.',
+    action: 'none',
+    weight: 1,
   })
 }
 
@@ -174,14 +147,12 @@ function minecraftServers(file) {
 
 async function worldsIn(savesDir) {
   const entries = (await list(savesDir)).entries.filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-  const worlds = await mapLimit(entries.slice(0, 200), 16, async (e) => ({ name: e.name, played: statOf(join(savesDir, e.name, 'level.dat'))?.mtimeMs ?? statOf(join(savesDir, e.name))?.mtimeMs ?? 0 }))
-  return worlds
+  return mapLimit(entries.slice(0, 200), 16, async (e) => ({ name: e.name, played: statOf(join(savesDir, e.name, 'level.dat'))?.mtimeMs ?? statOf(join(savesDir, e.name))?.mtimeMs ?? 0 }))
 }
 
-async function minecraft(ctx, apps) {
-  const dir = IS_MAC ? join(MAC_SUPPORT, 'minecraft') : IS_WIN ? join(APPDATA, '.minecraft') : join(HOME, '.minecraft')
+async function minecraft(ctx, detected, apps) {
+  const dir = minecraftDir(defaultEnv())
   const worlds = []
-  const instances = []
   let servers = []
   const players = []
   let profiles = []
@@ -192,7 +163,7 @@ async function minecraft(ctx, apps) {
     servers = minecraftServers(join(dir, 'servers.dat'))
     const lp = readJson(join(dir, 'launcher_profiles.json'))
     profiles = Object.values(lp?.profiles ?? {})
-      .map((p) => ({ name: p.name || p.type || null, version: p.lastVersionId ?? null, lastUsed: p.lastUsed ? Date.parse(p.lastUsed) || 0 : 0 }))
+      .map((p) => ({ name: p?.name || p?.type || null, version: p?.lastVersionId ?? null, lastUsed: p?.lastUsed ? Date.parse(p.lastUsed) || 0 : 0 }))
       .filter((p) => p.version)
       .sort((a, b) => b.lastUsed - a.lastUsed)
     for (const file of ['launcher_accounts.json', 'launcher_accounts_microsoft_store.json']) {
@@ -201,24 +172,15 @@ async function minecraft(ctx, apps) {
     mods = (await names(join(dir, 'mods'))).filter((n) => n.endsWith('.jar')).length
     lastUsed = Math.max(statOf(join(dir, 'saves'))?.mtimeMs ?? 0, statOf(join(dir, 'logs'))?.mtimeMs ?? 0, profiles[0]?.lastUsed ?? 0)
   }
-  // launchers with separate instances
-  const instanceRoots = [
-    ['Prism Launcher', IS_MAC ? join(MAC_SUPPORT, 'PrismLauncher', 'instances') : IS_WIN ? join(APPDATA, 'PrismLauncher', 'instances') : join(HOME, '.local', 'share', 'PrismLauncher', 'instances')],
-    ['CurseForge', join(HOME, 'curseforge', 'minecraft', 'Instances')],
-    ['CurseForge', join(HOME, 'Documents', 'curseforge', 'minecraft', 'Instances')],
-    ['Modrinth', IS_MAC ? join(MAC_SUPPORT, 'ModrinthApp', 'profiles') : IS_WIN ? join(APPDATA, 'ModrinthApp', 'profiles') : join(HOME, '.local', 'share', 'ModrinthApp', 'profiles')],
-    ['MultiMC', join(HOME, 'MultiMC', 'instances')],
-  ]
-  for (const [launcher, root] of instanceRoots) {
-    for (const e of (await list(root)).entries.filter((x) => x.isDirectory() && !x.name.startsWith('.') && !x.name.startsWith('_'))) {
-      const base = join(root, e.name)
-      const game = [join(base, '.minecraft'), join(base, 'minecraft'), base].find((p) => exists(join(p, 'saves')) || exists(join(p, 'mods'))) ?? base
-      const inst = { launcher, name: e.name, lastUsed: statOf(game)?.mtimeMs ?? 0 }
-      instances.push(inst)
-      worlds.push(...(await worldsIn(join(game, 'saves'))))
-      if (!servers.length) servers = minecraftServers(join(game, 'servers.dat'))
-      if (inst.lastUsed > lastUsed) lastUsed = inst.lastUsed
-    }
+  // launchers with separate instances (Prism, MultiMC, CurseForge, Modrinth, ATLauncher)
+  const instances = []
+  for (const g of detected.games.filter((x) => x.kind === 'instance')) {
+    const used = msOf(g.lastPlayed)
+    instances.push({ launcher: LAUNCHER_NAMES[g.launcher] ?? g.launcher, name: g.name.replace(/^Minecraft: /, ''), lastUsed: used, hours: g.playtimeMin ? Math.round((g.playtimeMin / 60) * 10) / 10 : null })
+    const gameDir = instanceGameDir(g.path)
+    worlds.push(...(await worldsIn(join(gameDir, 'saves'))))
+    if (!servers.length) servers = minecraftServers(join(gameDir, 'servers.dat'))
+    if (used > lastUsed) lastUsed = used
   }
   // Bedrock edition on Windows
   if (IS_WIN) {
@@ -232,6 +194,7 @@ async function minecraft(ctx, apps) {
   if (!exists(dir) && !instances.length && !worlds.length && !apps.has('Minecraft')) return
   worlds.sort((a, b) => b.played - a.played)
   if (worlds[0]?.played > lastUsed) lastUsed = worlds[0].played
+  const instanceMin = detected.games.filter((x) => x.kind === 'instance').reduce((sum, g) => sum + (g.playtimeMin ?? 0), 0)
   ctx.finding({
     id: 'games.minecraft',
     category: 'games',
@@ -240,17 +203,19 @@ async function minecraft(ctx, apps) {
       `Minecraft${players.length ? ` (prezývka ${uniq(players).join(', ')})` : ''}: ${sk(worlds.length, 'svet', 'svety', 'svetov')}${worlds.length ? ` (${some(worlds.map((w) => w.name), 5)})` : ''}` +
       (servers.length ? `, uložené servery: ${some(servers.map((s) => s.name || s.address), 5)}` : '') +
       (instances.length ? `, ${sk(instances.length, 'vlastná inštalácia', 'vlastné inštalácie', 'vlastných inštalácií')} hry (${some(instances.map((i) => i.name), 4)})` : '') +
+      (instanceMin >= 60 ? `, v nich odohraných ${hours(instanceMin)} hodín` : '') +
       (lastUsed ? `. Naposledy hraný ${ago(lastUsed)}.` : '.'),
     path: exists(dir) ? dir : null,
     data: {
       players: uniq(players),
-      worlds: worlds.slice(0, 60).map((w) => ({ name: w.name, lastPlayed: day(w.played) })),
+      worlds: worlds.slice(0, 60).map((w) => ({ name: w.name, lastPlayed: w.played ? new Date(w.played).toISOString().slice(0, 10) : null })),
       servers,
-      profiles: profiles.slice(0, 20).map((p) => ({ ...p, lastUsed: day(p.lastUsed) })),
-      instances: instances.sort((a, b) => b.lastUsed - a.lastUsed).slice(0, 40).map((i) => ({ ...i, lastUsed: day(i.lastUsed) })),
+      profiles: profiles.slice(0, 20).map((p) => ({ ...p, lastUsed: p.lastUsed ? new Date(p.lastUsed).toISOString().slice(0, 10) : null })),
+      instances: instances.sort((a, b) => b.lastUsed - a.lastUsed).slice(0, 40).map((i) => ({ ...i, lastUsed: i.lastUsed ? new Date(i.lastUsed).toISOString().slice(0, 10) : null })),
+      instanceHours: hours(instanceMin),
       mods,
       otherClients: extra,
-      lastUsed: day(lastUsed),
+      lastUsed: lastUsed ? new Date(lastUsed).toISOString().slice(0, 10) : null,
     },
     use: 'Poznám tvoje svety a servery, na ktorých hrávaš. Viem sa na ne odvolávať a pamätať si, čo v nich staviaš.',
     action: 'none',
@@ -258,17 +223,17 @@ async function minecraft(ctx, apps) {
   })
 }
 
-async function roblox(ctx, apps) {
-  const dir = IS_MAC ? join(HOME, 'Library', 'Roblox') : IS_WIN ? join(LOCALAPPDATA, 'Roblox') : null
-  if (!exists(dir) && !apps.has('Roblox', 'RobloxStudio')) return
-  const used = Math.max(statOf(join(dir ?? '', 'logs'))?.mtimeMs ?? 0, statOf(dir ?? '')?.mtimeMs ?? 0)
+function roblox(ctx, detected, apps) {
+  const game = detected.games.find((g) => g.launcher === 'roblox')
+  if (!game && !apps.has('Roblox', 'RobloxStudio')) return
+  const used = msOf(game?.lastPlayed)
   ctx.finding({
     id: 'games.roblox',
     category: 'games',
     title: 'Roblox',
     detail: `Roblox je nainštalovaný${used ? `, naposledy spustený ${ago(used)}` : ''}${apps.has('RobloxStudio') ? '. Máš aj Roblox Studio na tvorbu vlastných hier' : ''}.`,
-    path: exists(dir) ? dir : null,
-    data: { lastUsed: day(used), studio: apps.has('RobloxStudio') },
+    path: game?.path ?? null,
+    data: { lastUsed: dayOf(game?.lastPlayed), studio: apps.has('RobloxStudio') },
     use: 'Viem, že hrávaš Roblox. Ak v ňom aj tvoríš, poviem ti, ako ti viem pomôcť so skriptami.',
     action: 'none',
     weight: 2,
@@ -277,10 +242,13 @@ async function roblox(ctx, apps) {
 
 export async function games(ctx) {
   const apps = await installedApps()
+  const detected = (await ctx.step('detect', () => detectGames({ apps: IS_MAC ? apps.list : null }, { timeout: Math.max(4000, ctx.deadline - Date.now()) }))) ?? { games: [], launchers: [], errors: [] }
+  for (const e of detected.errors) ctx.local?.errors?.push({ probe: `games.${e.launcher}`, error: e.error })
   await Promise.all([
-    ctx.step('steam', () => steam(ctx)),
-    ctx.step('launchers', () => launchers(ctx, apps)),
-    ctx.step('minecraft', () => minecraft(ctx, apps)),
-    ctx.step('roblox', () => roblox(ctx, apps)),
+    ctx.step('steam', () => steamFinding(ctx, detected)),
+    ctx.step('launchers', () => launchersFinding(ctx, detected, apps)),
+    ctx.step('library', () => libraryFinding(ctx, detected)),
+    ctx.step('minecraft', () => minecraft(ctx, detected, apps)),
+    ctx.step('roblox', () => roblox(ctx, detected, apps)),
   ])
 }

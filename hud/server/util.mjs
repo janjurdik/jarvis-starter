@@ -40,6 +40,8 @@ export function sendJson(res, status, body) {
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+    'cross-origin-resource-policy': 'same-origin',
     'content-length': Buffer.byteLength(data),
   })
   res.end(data)
@@ -213,3 +215,20 @@ export async function mapLimit(items, limit, fn) {
   await Promise.all(workers)
   return out
 }
+
+/**
+ * Environment for helper processes that run third-party packages (the python workers for the voice,
+ * speech recognition, the wake word and video). They get everything they need to run and none of
+ * the secrets of this installation: a bad release of a package must not find a Twilio key or the
+ * calendar address in its environment.
+ */
+const SECRET_ENV = /^(TWILIO_|ELEVENLABS_|ANTHROPIC_|OPENAI_|CODEX_|CLAUDE_|HUD_BRAIN_TOKEN|JARVIS_HUD_TOKEN|JARVIS_CALL_|CALENDAR_ICS_URL|GITHUB_TOKEN|GH_TOKEN|NPM_TOKEN|AWS_|GOOGLE_API|.*_API_KEY$|.*_SECRET$|.*_PASSWORD$)/i
+export function workerEnv(extra = {}) {
+  const env = {}
+  for (const [key, value] of Object.entries(process.env)) if (!SECRET_ENV.test(key)) env[key] = value
+  return { ...env, ...extra }
+}
+
+/** A tool of Windows itself by its full path: `winSys('taskkill.exe')`. Bare names are looked up in the working folder first. */
+export const winSys = (name) => `${process.env.SystemRoot || 'C:\\Windows'}\\System32\\${name}`
+export const WIN_POWERSHELL = winSys('WindowsPowerShell\\v1.0\\powershell.exe')

@@ -1,0 +1,61 @@
+
+HKEY_CURRENT_USER\Software\Valve\Steam
+    Language    REG_SZ    english
+    SteamPath    REG_SZ    {{ROOT}}/ProgramFiles86/Steam
+    SteamExe    REG_SZ    c:/program files (x86)/steam/steam.exe
+
+HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\GOG.com\Games
+
+HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\GOG.com\Games\1207658924
+    gameID    REG_SZ    1207658924
+    gameName    REG_SZ    The Witcher 3: Wild Hunt
+    path    REG_SZ    C:\GOG Games\The Witcher 3 Wild Hunt
+    exe    REG_SZ    C:\GOG Games\The Witcher 3 Wild Hunt\bin\x64\witcher3.exe
+    dependsOn    REG_SZ    
+
+HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\GOG.com\Games\1207658925
+    gameID    REG_SZ    1207658925
+    gameName    REG_SZ    The Witcher 3: Blood and Wine
+    dependsOn    REG_SZ    1207658924
+
+HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs\5059
+    InstallDir    REG_SZ    D:/Ubisoft/Tom Clancy's Rainbow Six Siege/
+
+HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Rockstar Games\Red Dead Redemption 2
+    InstallFolder    REG_SZ    D:\Rockstar\Red Dead Redemption 2
+
+HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Rockstar Games\Launcher
+    InstallFolder    REG_SZ    C:\Program Files\Rockstar Games\Launcher
+
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 730
+    DisplayName    REG_SZ    Counter-Strike 2
+    Publisher    REG_SZ    Valve
+    InstallLocation    REG_SZ    C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Global Offensive
+
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Genshin Impact
+    DisplayName    REG_SZ    Genshin Impact
+    Publisher    REG_SZ    COGNOSPHERE PTE. LTD.
+    InstallLocation    REG_SZ    D:\Genshin Impact
+    EstimatedSize    REG_DWORD    0x4c4b400
+
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{90160000-0011-0000-0000-0000000FF1CE}
+    DisplayName    REG_SZ    Microsoft Office Professional Plus 2021
+    Publisher    REG_SZ    Microsoft Corporation
+
+HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Diablo IV
+    DisplayName    REG_SZ    Diablo IV
+    Publisher    REG_SZ    Blizzard Entertainment
+    InstallLocation    REG_SZ    D:\Diablo IV
+
+HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Battle.net
+    DisplayName    REG_SZ    Battle.net
+    Publisher    REG_SZ    Blizzard Entertainment
+
+HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Uplay Install 5059
+    DisplayName    REG_SZ    Tom Clancy's Rainbow Six Siege
+    InstallLocation    REG_SZ    D:\Ubisoft\Tom Clancy's Rainbow Six Siege
+
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\Riot Game valorant.live
+    DisplayName    REG_SZ    VALORANT
+    Publisher    REG_SZ    Riot Games, Inc
+    InstallLocation    REG_SZ    C:\Riot Games\VALORANT\live

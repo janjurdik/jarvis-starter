@@ -22,7 +22,12 @@ mkdir -p "$OUT/$APP_NAME/Contents/MacOS" "$OUT/$APP_NAME/Contents/Resources"
 swiftc -O -swift-version 5 -target "$ARCH-apple-macosx14.0" \
   -o "$OUT/$APP_NAME/Contents/MacOS/JarvisHUD" main.swift
 # The app starts the HUD server itself, so it has to know where the Jarvis folder and node are.
-sed -e "s|__JARVIS_REPO__|$REPO|" -e "s|__JARVIS_NODE__|$NODE|" -e "s|__JARVIS_PORT__|$PORT|" Info.plist > "$OUT/$APP_NAME/Contents/Info.plist"
+# The values go through the plist tool, not through sed: a folder name with & or | would break a substitution.
+cp Info.plist "$OUT/$APP_NAME/Contents/Info.plist"
+for pair in "__JARVIS_REPO__=$REPO" "__JARVIS_NODE__=$NODE" "__JARVIS_PORT__=$PORT"; do
+  key="${pair%%=*}"; value="${pair#*=}"
+  JARVIS_KEY="$key" JARVIS_VALUE="$value" /usr/bin/perl -0pi -e 's/\Q$ENV{JARVIS_KEY}\E/$ENV{JARVIS_VALUE} =~ s{&}{&amp;}gr =~ s{<}{&lt;}gr/ge' "$OUT/$APP_NAME/Contents/Info.plist"
+done
 cp AppIcon.icns "$OUT/$APP_NAME/Contents/Resources/AppIcon.icns"
 # Ad-hoc signature by default. With your own identity (JARVIS_SIGN_IDENTITY) macOS remembers the
 # microphone permission across rebuilds.

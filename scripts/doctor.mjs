@@ -11,6 +11,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, sep } from 'node:path'
 import { DATA_DIR, IS_MAC, IS_WIN, LABEL, PORT, REPO, TASK_FOLDER, findBin, has, hudAlive, parseArgs, sh } from './lib.mjs'
+import { aiProvider } from '../hud/server/provider.mjs'
+import { prepareNeeded, prepareRunning, sttSummary } from '../hud/server/stt-plan.mjs'
 
 const { flags } = parseArgs()
 const checks = []
@@ -25,25 +27,38 @@ add('node', nodeMajor >= 20, 'Node.js 20 alebo novší', `v${process.versions.no
 
 add('deps', has(join(REPO, 'node_modules', 'three', 'package.json')) && has(join(REPO, 'node_modules', 'ws', 'package.json')), 'Balíčky HUD (npm install)', '', 'npm install')
 
-// ── Claude Code ──
-const claude = findBin('claude', { override: process.env.JARVIS_CLAUDE_BIN })
+// ── the AI Jarvis runs on: Claude Code or Codex (hud/server/provider.mjs) ──
+const ai = aiProvider()
 let login = null
-if (claude) {
-  const ver = await sh(claude, ['--version'])
-  add('claude', ver.code === 0, 'Claude Code CLI', ver.out.split('\n')[0] || claude, '')
-  const auth = await sh(claude, ['auth', 'status', '--json'])
-  try {
-    login = JSON.parse(auth.out)
-  } catch {
-    login = null
-  }
-  // Jarvis runs on the Claude subscription (Pro or Max). A Console login works too, but every run is paid per use.
-  const plan = String(login?.subscriptionType ?? '').toLowerCase()
-  const consoleLogin = login?.authMethod === 'console' || login?.apiKeySource
-  const loginDetail = !login?.loggedIn ? 'neprihlásený' : plan === 'free' ? 'bezplatný účet: Jarvis potrebuje predplatné Pro alebo Max' : consoleLogin && !plan ? 'prihlásený cez Anthropic Console: každé použitie sa platí z kreditu, nie z predplatného' : `predplatné ${login.subscriptionType ?? 'neznáme'}`
-  add('claude-login', login?.loggedIn === true && plan !== 'free', 'Prihlásenie do Claude', loginDetail, plan === 'free' ? 'Predplatné Pro alebo Max: claude.ai/upgrade, potom znova: claude auth login' : 'Spusti: claude auth login  (otvorí sa prehliadač, klikni Povoliť). Ak nejde, v Termináli napíš claude a prihlás sa.')
+if (ai.id === 'codex') {
+  const codex = ai.bin()
+  if (codex) {
+    const ver = await sh(codex, ['--version'])
+    add('claude', ver.code === 0, 'Codex CLI (ChatGPT)', ver.out.split('\n')[0] || codex, '')
+    const auth = await sh(codex, ['login', 'status'])
+    const ok = auth.code === 0 && /logged in/i.test(auth.out)
+    login = { loggedIn: ok, subscriptionType: ok ? 'chatgpt' : null }
+    add('claude-login', ok, 'Prihlásenie do ChatGPT', ok ? auth.out.split('\n')[0] : 'neprihlásený', 'Spusti: codex login  (v prehliadači sa prihlás účtom ChatGPT s predplatným Plus alebo Pro).')
+  } else add('claude', false, 'Codex CLI (ChatGPT)', 'nenašiel sa', 'npm i -g @openai/codex, potom: codex login')
 } else {
-  add('claude', false, 'Claude Code CLI', 'nenašiel sa', IS_WIN ? 'PowerShell: irm https://claude.ai/install.ps1 | iex' : 'Terminál: curl -fsSL https://claude.ai/install.sh | bash')
+  const claude = ai.bin()
+  if (claude) {
+    const ver = await sh(claude, ['--version'])
+    add('claude', ver.code === 0, 'Claude Code CLI', ver.out.split('\n')[0] || claude, '')
+    const auth = await sh(claude, ['auth', 'status', '--json'])
+    try {
+      login = JSON.parse(auth.out)
+    } catch {
+      login = null
+    }
+    // Jarvis runs on the Claude subscription (Pro or Max). A Console login works too, but every run is paid per use.
+    const plan = String(login?.subscriptionType ?? '').toLowerCase()
+    const consoleLogin = login?.authMethod === 'console' || login?.apiKeySource
+    const loginDetail = !login?.loggedIn ? 'neprihlásený' : plan === 'free' ? 'bezplatný účet: Jarvis potrebuje predplatné Pro alebo Max' : consoleLogin && !plan ? 'prihlásený cez Anthropic Console: každé použitie sa platí z kreditu, nie z predplatného' : `predplatné ${login.subscriptionType ?? 'neznáme'}`
+    add('claude-login', login?.loggedIn === true && plan !== 'free', 'Prihlásenie do Claude', loginDetail, plan === 'free' ? 'Predplatné Pro alebo Max: claude.ai/upgrade, potom znova: claude auth login' : 'Spusti: claude auth login  (otvorí sa prehliadač, klikni Povoliť). Ak nejde, v Termináli napíš claude a prihlás sa.')
+  } else {
+    add('claude', false, 'Claude Code CLI', 'nenašiel sa', IS_WIN ? 'PowerShell: irm https://claude.ai/install.ps1 | iex' : 'Terminál: curl -fsSL https://claude.ai/install.sh | bash')
+  }
 }
 
 const git = findBin('git')
@@ -52,10 +67,19 @@ add('git', Boolean(git), 'Git (voliteľné, na aktualizácie)', git ? '' : 'nena
 // ── voice ──
 const uv = findBin('uv', { override: process.env.UV_BIN })
 add('uv', Boolean(uv), 'uv (hlas Jarvisa)', uv ? '' : 'nenašiel sa: Jarvis bude hovoriť hlasom prehliadača', IS_WIN ? 'PowerShell: irm https://astral.sh/uv/install.ps1 | iex' : 'Terminál: curl -LsSf https://astral.sh/uv/install.sh | sh')
-if (IS_MAC && process.arch === 'arm64') {
-  const ffmpeg = findBin('ffmpeg')
-  add('ffmpeg', Boolean(ffmpeg), 'ffmpeg (voliteľné, lokálny Whisper)', ffmpeg ? '' : 'nenašiel sa', 'brew install ffmpeg')
-}
+
+// Speech recognition: which engine and model this computer gets and why (hud/server/stt-plan.mjs).
+const stt = sttSummary()
+const sttLocal = stt.engine === 'mlx' || stt.engine === 'faster'
+const sttWaiting = prepareNeeded()
+const sttName = sttLocal ? `lokálny Whisper ${stt.model}${stt.sizeMb ? ` (${(stt.sizeMb / 1000).toFixed(1).replace('.', ',')} GB)` : ''}` : stt.engine === 'off' ? 'vypnuté' : 'v prehliadači'
+add(
+  'stt',
+  stt.status === 'ready' || !sttWaiting,
+  'Rozpoznávanie reči',
+  `${sttName}${stt.status === 'ready' ? '' : sttLocal ? (prepareRunning() ? ', práve sa pripravuje' : ', ešte nie je stiahnuté') : ''}: ${stt.reason}`,
+  sttWaiting ? 'node scripts/voice.mjs prepare' : '',
+)
 
 // ── setup ──
 const configFile = process.env.JARVIS_CONFIG || join(REPO, 'config', 'jarvis.json')
@@ -65,7 +89,7 @@ try {
 } catch {
   config = null
 }
-add('config', Boolean(config?.name), 'Nastavenie (config/jarvis.json)', config?.name ? `meno: ${config.name}, mesto: ${config.city ?? '?'}` : 'ešte nie je', 'V Claude napíš: štart')
+add('config', Boolean(config?.name), 'Nastavenie (config/jarvis.json)', config?.name ? `meno: ${config.name}, mesto: ${config.city ?? '?'}` : 'ešte nie je', 'Jarvis ťa nastavením prevedie na ploche: node scripts/setup.mjs')
 
 const memoryDir = process.env.JARVIS_MEMORY_DIR || join(REPO, 'memory')
 let notes = 0
@@ -83,7 +107,7 @@ const walk = (dir, depth = 0) => {
   }
 }
 walk(memoryDir)
-add('memory', has(join(memoryDir, 'ja.md')), 'Pamäť (memory/ja.md)', `${notes} poznámok v ${memoryDir}`, 'V Claude napíš: štart')
+add('memory', has(join(memoryDir, 'ja.md')), 'Pamäť (memory/ja.md)', `${notes} poznámok v ${memoryDir}`, 'Jarvis ťa nastavením prevedie na ploche: node scripts/setup.mjs')
 
 // ── location ──
 if (IS_MAC) {
@@ -127,7 +151,8 @@ const required = ['os', 'node', 'deps', 'claude', 'claude-login']
 const ready = checks.filter((c) => required.includes(c.id)).every((c) => c.ok) && dataOk
 
 if (flags.has('json')) {
-  console.log(JSON.stringify({ ready, platform: process.platform, arch: process.arch, repo: REPO, port: PORT, subscription: login?.subscriptionType ?? null, checks }, null, 2))
+  const sttOut = { choice: stt.choice, engine: stt.engine, model: stt.model, sizeMb: stt.sizeMb, device: stt.device, status: stt.status, reason: stt.reason, notes: stt.notes, specs: stt.specs }
+  console.log(JSON.stringify({ ready, platform: process.platform, arch: process.arch, repo: REPO, port: PORT, subscription: login?.subscriptionType ?? null, stt: sttOut, checks }, null, 2))
 } else {
   console.log('\n  Jarvis: kontrola počítača\n')
   for (const c of checks) {

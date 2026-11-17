@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { speakable, stopTts, synthesize } from './tts.mjs'
-import { DATA_DIR, IS_MAC, IS_WIN, findBin } from './util.mjs'
+import { DATA_DIR, findBin, IS_MAC, IS_WIN, WIN_POWERSHELL } from './util.mjs'
 
 const SAY_VOICE = process.env.JARVIS_SAY_VOICE || (process.env.JARVIS_LANG === 'cs' ? 'Zuzana' : 'Laura')
 /** Turned off with JARVIS_LOCAL_VOICE=0: then only the HUD speaks, nothing comes out of the speakers on its own. */
@@ -32,7 +32,7 @@ const run = (bin, args, opts = {}) =>
     child.on('exit', (code) => resolve({ code: code ?? 1, out: out.trim() }))
   })
 
-const powershell = (script, env = {}) => run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { env: { ...process.env, ...env } })
+const powershell = (script, env = {}) => run(WIN_POWERSHELL, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { env: { ...process.env, ...env } })
 
 /** Splits a longer text into pieces the voice service handles quickly (sentences, at most ~220 chars). */
 export function chunks(text, max = 220) {
@@ -94,9 +94,9 @@ async function playFiles(items) {
 /** The system's own speech synthesizer, when no voice file could be made. */
 async function systemVoice(text) {
   if (IS_MAC) {
-    const res = await run('/usr/bin/say', ['-v', SAY_VOICE, text])
+    const res = await run('/usr/bin/say', ['-v', SAY_VOICE, '--', text])
     if (res.code === 0) return true
-    return (await run('/usr/bin/say', [text])).code === 0
+    return (await run('/usr/bin/say', ['--', text])).code === 0
   }
   if (IS_WIN) {
     const script = [
@@ -163,6 +163,52 @@ export function chimeFile() {
   return file
 }
 
+/**
+ * The user's own alarm sound (or the default song) instead of the chime: `sound` is
+ * { play, seconds, prepared } from alarm-sound.mjs. A prepared clip already fades in and out and
+ * has the right length. A raw file is stopped after `seconds`, on Windows with a fade.
+ * Returns false when the player could not play it: the caller then rings the chime.
+ */
+async function playSound(sound) {
+  if (!sound?.play || !existsSync(sound.play)) return false
+  const seconds = Math.max(3, Math.min(300, Number(sound.seconds) || 45))
+  if (IS_MAC) return (await run('/usr/bin/afplay', ['-t', String(seconds), sound.play])).code === 0
+  if (IS_WIN) {
+    const script = [
+      'Add-Type -AssemblyName PresentationCore',
+      '$p = New-Object System.Windows.Media.MediaPlayer',
+      '$p.Open([Uri]$env:J_FILE)',
+      '$i = 0; while (-not $p.NaturalDuration.HasTimeSpan -and $i -lt 100) { Start-Sleep -Milliseconds 50; $i++ }',
+      'if (-not $p.NaturalDuration.HasTimeSpan) { $p.Close(); exit 3 }',
+      '$total = [int]$p.NaturalDuration.TimeSpan.TotalMilliseconds',
+      '$max = [int]$env:J_MAX_MS',
+      'if ($max -gt 0 -and $total -gt $max) { $total = $max }',
+      '$fade = [int]$env:J_FADE_MS',
+      '$out = [int]$env:J_OUT_MS',
+      'if ($fade -gt 0) { $p.Volume = 0 } else { $p.Volume = 1 }',
+      '$p.Play()',
+      '$sw = [Diagnostics.Stopwatch]::StartNew()',
+      'while ($sw.ElapsedMilliseconds -lt $total) {',
+      '  $t = $sw.ElapsedMilliseconds',
+      '  $v = 1.0',
+      '  if ($fade -gt 0 -and $t -lt $fade) { $v = $t / $fade }',
+      '  if ($out -gt 0 -and ($total - $t) -lt $out) { $v = [Math]::Min($v, ($total - $t) / $out) }',
+      '  $p.Volume = $v',
+      '  Start-Sleep -Milliseconds 60',
+      '}',
+      '$p.Stop()',
+      '$p.Close()',
+    ].join('\n')
+    const raw = sound.prepared !== true
+    const res = await powershell(script, { J_FILE: sound.play, J_MAX_MS: String(seconds * 1000), J_FADE_MS: raw ? String(Math.min(6000, Math.round((seconds * 1000) / 3))) : '0', J_OUT_MS: raw ? '2500' : '0' })
+    return res.code === 0
+  }
+  const player = findBin('ffplay') ?? findBin('paplay') ?? findBin('aplay')
+  if (!player) return false
+  const args = player.endsWith('ffplay') ? ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-t', String(seconds), sound.play] : [sound.play]
+  return (await run(player, args, { timeout: (seconds + 5) * 1000 })).code === 0
+}
+
 // ── volume (macOS) ──────────────────────────────────────────────────────
 
 /**
@@ -191,25 +237,37 @@ async function restoreVolume(before) {
 /**
  * Says `text` through the speakers. Options:
  *   chime   the alarm sound first (and the volume raised on macOS for the duration)
+ *   sound   with chime: the user's own sound or the default song instead of the built-in chime
+ *           ({ kind, play, seconds, prepared } from alarm-sound.mjs). When it cannot be played, the chime rings.
  *   force   speak even when the voice is turned off (JARVIS_TTS=off): the alarm must be heard
- * Returns { ok, via } where via is edge, say, elevenlabs, system or none.
+ * Returns { ok, via, rang } where via is edge, say, elevenlabs, system or none and rang says which
+ * alarm sound played (custom, default, builtin, or null without chime).
  */
-export async function speakLocal(text, { chime = false, force = false } = {}) {
+export async function speakLocal(text, { chime = false, force = false, sound = null } = {}) {
   const parts = chunks(text)
+  const wanted = chime ? (sound?.play && existsSync(sound.play) ? sound.kind ?? 'custom' : 'builtin') : null
   // JARVIS_AUDIO=off: everything is prepared (voice files, chime) but nothing is played. For tests.
   if (process.env.JARVIS_AUDIO === 'off') {
     chimeFile()
     const made = await Promise.all(parts.map((p) => synthesize(p).catch(() => null))).finally(() => stopTts())
-    return { ok: true, via: `muted:${made.find(Boolean)?.provider ?? 'none'}` }
+    return { ok: true, via: `muted:${made.find(Boolean)?.provider ?? 'none'}`, rang: wanted }
   }
+  let rang = wanted
   const volume = chime ? await raiseVolume() : null
   // The voice is made while the chime plays. A voice service that hangs (first start, bad network)
   // must not leave the user with silence: after 30 s the system voice takes over.
   const making = Promise.race([Promise.all(parts.map((p) => synthesize(p))), new Promise((_, fail) => setTimeout(() => fail(new Error('timeout')), 30_000).unref())])
   making.catch(() => {})
   try {
-    if (chime) await playFiles([{ file: chimeFile(), durMs: 6000 }])
-    if (!parts.length) return { ok: chime, via: 'none' }
+    if (chime) {
+      // A sound file that is missing, broken or refused by the player must never leave the alarm silent.
+      const own = wanted !== 'builtin' && (await playSound(sound))
+      if (!own) {
+        rang = 'builtin'
+        await playFiles([{ file: chimeFile(), durMs: 6000 }])
+      }
+    }
+    if (!parts.length) return { ok: chime, via: 'none', rang }
     let made = []
     try {
       made = await making
@@ -217,10 +275,10 @@ export async function speakLocal(text, { chime = false, force = false } = {}) {
       made = []
     }
     if (made.length && made.every((m) => m.file)) {
-      if (await playFiles(made.map((m) => ({ file: m.file, durMs: m.durMs })))) return { ok: true, via: made[0].provider }
+      if (await playFiles(made.map((m) => ({ file: m.file, durMs: m.durMs })))) return { ok: true, via: made[0].provider, rang }
     }
-    if (process.env.JARVIS_TTS === 'off' && !force) return { ok: false, via: 'none' }
-    return { ok: await systemVoice(parts.join(' ')), via: 'system' }
+    if (process.env.JARVIS_TTS === 'off' && !force) return { ok: false, via: 'none', rang }
+    return { ok: await systemVoice(parts.join(' ')), via: 'system', rang }
   } finally {
     stopTts()
     await restoreVolume(volume)

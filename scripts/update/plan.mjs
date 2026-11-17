@@ -9,6 +9,7 @@ import { currentVersion, ensureBaseline } from './baseline.mjs'
 import { changelogSince } from './check.mjs'
 import { treeManifest } from './manifest.mjs'
 import { mergeFile } from './merge.mjs'
+import { verifyRelease } from './signature.mjs'
 import { fetchIncoming, upstream } from './source.mjs'
 
 const SCHEDULE_FILES = new Set(['scripts/schedule.mjs', 'scripts/autostart.mjs', 'scripts/routine.mjs', 'scripts/run-hidden.vbs'])
@@ -104,6 +105,14 @@ export async function plan({ force = false } = {}) {
   const up = upstream()
   const got = await fetchIncoming(up)
   if (!got.ok) return { ok: false, reason: got.reason, summary: FAIL[got.reason] ?? `Neviem stiahnuť novú verziu (${got.reason}).` }
+  // A downloaded version is installed only when the author signed exactly these files.
+  if (!up.source && process.env.JARVIS_UPDATE_UNSIGNED !== '1') {
+    const signed = verifyRelease(P.incoming)
+    if (!signed.ok) {
+      rmDir(P.incoming)
+      return { ok: false, reason: signed.reason, summary: `Novú verziu neinštalujem: ${signed.detail}. Stiahnutý balík nie je to, čo vydal autor Jarvisa. Skús to neskôr; ak sa to zopakuje, daj mu vedieť.` }
+    }
+  }
   const incoming = treeManifest(P.incoming)
   if (!incoming) return { ok: false, reason: 'bad-archive', summary: FAIL['bad-archive'] }
 

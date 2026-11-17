@@ -1,0 +1,5 @@
+auto_patching_enabled_by_player: true
+product_install_full_path: "{{ROOT}}/drive/Riot Games/VALORANT/live"
+product_install_root: "{{ROOT}}/drive/Riot Games"
+settings:
+    locale: "en_US"

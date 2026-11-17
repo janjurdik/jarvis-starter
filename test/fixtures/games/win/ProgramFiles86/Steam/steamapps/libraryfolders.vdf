@@ -1,0 +1,24 @@
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"{{ROOT}}/ProgramFiles86/Steam"
+		"label"		""
+		"apps"
+		{
+			"730"		"35000000000"
+		}
+	}
+	"1"
+	{
+		"path"		"{{ROOT}}/SteamLibrary"
+		"apps"
+		{
+			"1245620"		"50000000000"
+		}
+	}
+	"2"
+	{
+		"path"		"{{ROOT}}/DoesNotExist"
+	}
+}

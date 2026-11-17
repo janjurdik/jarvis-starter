@@ -389,6 +389,20 @@ const ICONS = {
     s: '<circle cx="12" cy="12" r="8.6"/>',
     l: '<path d="M11 7.6h2V11h3.4v2H13v3.4h-2V13H7.6v-2H11Z"/>',
   },
+  mail: {
+    d: '<rect x="3" y="5.5" width="18" height="13" rx="2"/>',
+    s: '<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m3.6 7.4 8.4 6.2 8.4-6.2"/>',
+    l: '<circle cx="19.4" cy="5.6" r="2.1"/>',
+  },
+  play: {
+    d: '<rect x="3" y="5" width="18" height="14" rx="2.2"/>',
+    s: '<rect x="3" y="5" width="18" height="14" rx="2.2"/>',
+    l: '<path d="M10 8.9v6.2l5.4-3.1Z"/>',
+  },
+  sliders: {
+    s: '<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/>',
+    l: '<circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/>',
+  },
 }
 
 /** Mená z v1 a scenes.json, aby staré udalosti mali ikonu. */
@@ -461,10 +475,15 @@ export const NODE_ICON = {
   rutiny: 'rutiny',
   projekty: 'projekty',
   questy: 'questy',
+  posta: 'mail',
+  ulohy: 'todo',
+  ludia: 'people',
+  appky: 'app',
 }
 
 /** Holografický render uzla (public/img/holo), pre karty v rozhovore. */
-export const holoImage = (node) => (NODE_ICON[node] ? `/img/holo/${node}.png` : null)
+const HOLO = new Set(['spravy', 'fotky', 'udalosti', 'spanok', 'kalendar', 'rutiny', 'projekty', 'questy'])
+export const holoImage = (node) => (HOLO.has(node) ? `/img/holo/${node}.png` : null)
 
 /**
  * Ikona nástroja mozgu, keď ju server nepošle alebo ju sada nepozná.

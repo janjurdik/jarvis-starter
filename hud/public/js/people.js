@@ -201,7 +201,7 @@ export function createPeople({ api, ui, isFilm = () => false, onApplied }) {
     const d = draftOf(c)
     const st = dec ? (dec.action === 'skip' ? icon('skip') : dec.action === 'merge' ? icon('link') : icon('check')) : ''
     return (
-      `<button type="button" class="pv-row${i === cur ? ' is-cur' : ''}${dec ? ` st-${dec.action}` : ''}" data-go="${i}">` +
+      `<button type="button" class="pv-row${i === cur ? ' is-cur' : ''}${dec && ['add', 'merge', 'skip'].includes(dec.action) ? ` st-${dec.action}` : ''}" data-go="${i}">` +
       avatar(c, d.avatar, 'pv-mini') +
       `<span class="pv-rmain"><span class="pv-rname">${esc(d.name || c.name)}</span><span class="pv-rsub">${esc(sourceLine(c))} · ${nf(c.messages)} ${plural(c.messages, 'správa', 'správy', 'správ')}</span></span>` +
       `<span class="pv-rst">${st}</span></button>`

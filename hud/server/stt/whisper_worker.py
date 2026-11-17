@@ -1,31 +1,73 @@
 # /// script
-# requires-python = ">=3.10,<3.13"
-# dependencies = ["mlx-whisper", "numpy<2.4", "openwakeword==0.6.0", "onnxruntime"]
+# requires-python = ">=3.11,<3.13"
+# dependencies = [
+#   "mlx-whisper==0.4.3",
+#   "numpy==2.3.5",
+#   "openwakeword==0.6.0",
+#   "onnxruntime>=1.20,<1.32",
+#   "imageio-ffmpeg==0.6.0",
+# ]
+#
+# [tool.uv]
+# exclude-newer = "2026-11-01T00:00:00Z"
 # ///
 """
 Speech to text for the HUD (push-to-talk and commands after "Hey Jarvis") with mlx-whisper.
-Apple Silicon only. Needs ffmpeg on PATH. Silero VAD checks that the recording contains speech
-first, otherwise the result is an empty text.
+Apple Silicon only. Audio is decoded by the ffmpeg binary that comes with the imageio-ffmpeg
+package, so nothing has to be installed by hand. Silero VAD checks that the recording contains
+speech first, otherwise the result is an empty text.
+
+WHISPER_MODEL is a folder with the model (config.json and weights) or a Hugging Face repository id.
+Package versions are pinned and `exclude-newer` freezes everything they pull in. onnxruntime is a
+range on purpose: its newest builds need macOS 14, older Macs get the last one that still runs there.
 
 stdin  {"id": "…", "path": "/abs/audio.webm", "prompt": "…"}
-stdout {"ready": true} once the model is loaded
+stdout {"ready": true, "engine": "mlx", "device": "metal"} once the model is loaded
        {"id": "…", "ok": true, "text": "…", "ms": 420} | {"id": "…", "ok": false, "error": "…"}
 Neither audio nor text is logged anywhere.
 """
 import json
 import os
+import shutil
+import subprocess
 import sys
 import time
 
 import mlx_whisper
 import numpy as np
 import openwakeword
-from mlx_whisper.audio import load_audio
 from openwakeword.vad import VAD
 
 MODEL = os.environ.get("WHISPER_MODEL", "mlx-community/whisper-large-v3-turbo")
 LANG = os.environ.get("JARVIS_LANG", "sk")
 MIN_SPEECH_S = 0.16  # menej reči podľa VAD = ticho alebo šum, Whisper by si vetu vymyslel
+
+
+def find_ffmpeg() -> str:
+    """The bundled ffmpeg, or one from PATH when the package has none for this machine."""
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:  # noqa: BLE001, any failure here just means: look on PATH
+        found = shutil.which("ffmpeg")
+        if not found:
+            raise RuntimeError("ffmpeg sa nenašiel") from None
+        return found
+
+
+FFMPEG = find_ffmpeg()
+
+
+def load_audio(path: str) -> np.ndarray:
+    """Any audio file (webm, ogg, wav, mp4, mp3) as 16 kHz mono float32."""
+    cmd = [FFMPEG, "-nostdin", "-loglevel", "error", "-threads", "0", "-i", path,
+           "-f", "s16le", "-ac", "1", "-acodec", "pcm_s16le", "-ar", "16000", "-"]
+    res = subprocess.run(cmd, capture_output=True, timeout=60, check=False)
+    if res.returncode != 0:
+        # ffmpeg's own message names the temporary file: that path is nobody's business.
+        raise RuntimeError("zvuk sa nedá prečítať, nahrávka je poškodená alebo v neznámom formáte")
+    return np.frombuffer(res.stdout, np.int16).astype(np.float32) / 32768.0
 
 # Silero VAD z openWakeWord (stiahne sa raz spolu s malým modelom hey_jarvis).
 openwakeword.utils.download_models(["hey_jarvis"])
@@ -68,7 +110,7 @@ def emit(obj: dict) -> None:
 def main() -> None:
     transcribe(np.zeros(8000, dtype=np.float32), "")  # načíta váhy pred prvou vetou
     speech_seconds(np.zeros(16000, dtype=np.float32))
-    emit({"ready": True})
+    emit({"ready": True, "engine": "mlx", "device": "metal"})
     for line in sys.stdin:
         try:
             req = json.loads(line)

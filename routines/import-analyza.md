@@ -2,7 +2,7 @@
 title: Spoznávanie ľudí z rozhovorov
 ---
 Používateľ naimportoval svoje rozhovory (Instagram, WhatsApp, Messenger, Discord, Telegram, ChatGPT, Claude…) a potvrdil, kto je kto.
-Tvoja úloha: prečítať pripravené výťahy a zapísať do pamäte, **kto títo ľudia sú a čo je o nich dôležité vedieť**. Pracuj podľa CLAUDE.md.
+Tvoja úloha: prečítať pripravené výťahy a zapísať do pamäte, **kto títo ľudia sú a čo je o nich dôležité vedieť**. Pracuj podľa AGENTS.md.
 
 Kde čo je:
 - `memory/archiv/digests/<Meno>.md`: výťah rozhovorov s jedným človekom (štatistika a ukážky správ zo začiatku, z najrušnejších dní a z posledného obdobia). Zoznam výťahov na spracovanie máš v zadaní. Ak nie, spracuj všetky, ktorých človek ešte nemá v poznámke odsek „Kto to je".

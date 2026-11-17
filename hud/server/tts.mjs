@@ -1,26 +1,29 @@
 /**
  * Jarvis's voice: a chain of providers, a cache keyed by hash and a per-turn sentence queue.
  *
- *   edge        Microsoft Edge neural voices (default sk-SK-LukasNeural), persistent Python worker
- *               started through uv. Free, works on macOS and Windows.
+ *   edge        Microsoft Edge neural voices, persistent Python worker started through uv. Free,
+ *               works on macOS and Windows. The voice comes from the settings (server/voices.mjs)
+ *               and is read again for every sentence, so a change applies without a restart.
  *   elevenlabs  only with JARVIS_TTS=elevenlabs and ELEVENLABS_API_KEY in .env
  *   say         macOS `say`, offline fallback
  *   browser     no audio file: the page speaks the sentence with the browser's own voice
  *               (last resort when uv is missing or the network is down)
  *
- * Files: data/tts/<sha1>.mp3 (say: .m4a). Content never changes for a hash, the browser may cache it.
+ * Files: data/tts/<sha1>.mp3 (say: .m4a). The hash covers provider, voice, rate, pitch and text, so
+ * every voice has its own clips and content never changes for a hash (the browser may cache it).
  */
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { access, mkdir, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { createInterface } from 'node:readline'
 import { join } from 'node:path'
-import { IS_MAC, ROOT, TTS_DIR, errMsg, findBin, log, spawnBin } from './util.mjs'
+import { getConfig } from './config.mjs'
+import { errMsg, findBin, IS_MAC, log, ROOT, spawnBin, TTS_DIR, workerEnv } from './util.mjs'
+import { resolveVoice } from './voices.mjs'
 
 const UV = findBin('uv', { override: process.env.UV_BIN })
-const EDGE_VOICE = process.env.JARVIS_EDGE_VOICE || 'sk-SK-LukasNeural'
-const EDGE_RATE = process.env.JARVIS_EDGE_RATE || '+4%'
-const EDGE_PITCH = process.env.JARVIS_EDGE_PITCH || '-2Hz'
+/** The Edge voice of this moment: { id, rate, pitch } from the config, .env or the default. */
+const edgeVoice = () => resolveVoice(getConfig())
 const SAY_VOICE = process.env.JARVIS_SAY_VOICE || 'Laura'
 const WANT = (process.env.JARVIS_TTS || 'edge').toLowerCase()
 const CACHE_MAX_FILES = 1500
@@ -199,7 +202,7 @@ class EdgeWorker {
       const proc = spawnBin(UV, ['run', '--quiet', join(ROOT, 'server/tts/edge_worker.py')], {
         cwd: ROOT,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, PYTHONUNBUFFERED: '1' },
+        env: workerEnv({ PYTHONUNBUFFERED: '1' }),
       })
       this.proc = proc
       // The very first start downloads Python packages, later starts take about a second.
@@ -245,7 +248,7 @@ class EdgeWorker {
       .catch(() => {})
   }
 
-  async synth(text, out) {
+  async synth(text, out, voice) {
     await this.start()
     const id = `e${++this.seq}`
     return new Promise((resolve, reject) => {
@@ -257,7 +260,7 @@ class EdgeWorker {
         resolve: (v) => (clearTimeout(timer), resolve(v)),
         reject: (e) => (clearTimeout(timer), reject(e)),
       })
-      this.proc.stdin.write(JSON.stringify({ id, text, voice: EDGE_VOICE, rate: EDGE_RATE, pitch: EDGE_PITCH, out }) + '\n')
+      this.proc.stdin.write(JSON.stringify({ id, text, voice: voice.id, rate: voice.rate, pitch: voice.pitch, out }) + '\n')
     })
   }
 
@@ -306,7 +309,7 @@ function synthSay(text, out) {
   const t0 = Date.now()
   return new Promise((resolve, reject) => {
     const tmp = `${out}.part.m4a`
-    const child = spawn('/usr/bin/say', ['-v', SAY_VOICE, '-r', '200', '-o', tmp, '--file-format=m4af', '--data-format=aac', text], { stdio: 'ignore' })
+    const child = spawn('/usr/bin/say', ['-v', SAY_VOICE, '-r', '200', '-o', tmp, '--file-format=m4af', '--data-format=aac', '--', text], { stdio: 'ignore' })
     child.on('error', reject)
     child.on('exit', async (code) => {
       if (code !== 0) return reject(new Error(`say skončil ${code}`))
@@ -327,10 +330,13 @@ const edgeUsable = () => Boolean(UV) && WANT !== 'say' && WANT !== 'browser' && 
 
 export const ttsInfo = () => {
   const provider = WANT === 'off' ? 'off' : WANT === 'elevenlabs' ? 'elevenlabs' : edgeUsable() ? 'edge' : WANT === 'browser' ? 'browser' : FALLBACK
-  return { provider, voice: provider === 'edge' ? EDGE_VOICE : provider === 'say' ? SAY_VOICE : provider }
+  return { provider, voice: provider === 'edge' ? edgeVoice().id : provider === 'say' ? SAY_VOICE : provider }
 }
 
-const keyOf = (provider, voice, text) => createHash('sha1').update(`${provider}|${voice}|${EDGE_RATE}|${EDGE_PITCH}|${text}`).digest('hex')
+/** Can the Edge voices be used right now (uv installed, not turned off, the service answering)? */
+export const edgeAvailable = () => WANT !== 'off' && edgeUsable()
+
+const keyOf = (provider, voice, edge, text) => createHash('sha1').update(`${provider}|${voice}|${edge.rate}|${edge.pitch}|${text}`).digest('hex')
 
 /** Poradie poskytovateľov pre jednu vetu. ElevenLabs len na výslovné želanie. */
 function chain() {
@@ -345,16 +351,20 @@ function chain() {
 
 /**
  * Syntetizuje vetu (z cache, ak je). Vráti { url, file, provider, ms, durMs, cached }.
+ * `voice` ({ id, rate?, pitch? }) asks for one Edge voice instead of the current one (a preview in
+ * the settings): then only Edge is tried, another provider would answer with a different voice.
  */
-export async function synthesize(text) {
+export async function synthesize(text, { voice: asked = null } = {}) {
   await mkdir(TTS_DIR, { recursive: true })
   let lastErr = null
-  for (const provider of chain()) {
+  const current = edgeVoice()
+  const edgeNow = asked ? { id: asked.id, rate: asked.rate ?? current.rate, pitch: asked.pitch ?? current.pitch } : current
+  for (const provider of asked ? ['edge'] : chain()) {
     // No file: the page reads the sentence itself with speechSynthesis.
     if (provider === 'browser') return { url: null, file: null, provider, ms: 0, durMs: Math.round(text.length * 70), cached: false, speak: true }
-    const voice = provider === 'edge' ? EDGE_VOICE : provider === 'say' ? SAY_VOICE : elevenConfig().voice
+    const voice = provider === 'edge' ? edgeNow.id : provider === 'say' ? SAY_VOICE : elevenConfig().voice
     const ext = provider === 'say' ? 'm4a' : 'mp3'
-    const hash = keyOf(provider, voice, text)
+    const hash = keyOf(provider, voice, edgeNow, text)
     const file = join(TTS_DIR, `${hash}.${ext}`)
     const url = `/tts/${hash}.${ext}`
     try {
@@ -366,7 +376,7 @@ export async function synthesize(text) {
     try {
       const t0 = Date.now()
       if (provider === 'edge') {
-        const r = await edge.synth(text, file)
+        const r = await edge.synth(text, file, edgeNow)
         edge.failures = 0
         return { url, file, provider, ms: Date.now() - t0, firstMs: r.first_ms, durMs: mp3DurMs(r.bytes), cached: false }
       }
@@ -392,8 +402,9 @@ export const COMMON_PHRASES = ['Pozriem kalendár.', 'Pozriem úlohy.', 'Pozriem
 export async function warmCommonPhrases() {
   if (chain()[0] !== 'edge') return
   let made = 0
+  const voice = edgeVoice()
   for (const text of COMMON_PHRASES) {
-    const hash = keyOf('edge', EDGE_VOICE, text)
+    const hash = keyOf('edge', voice.id, voice, text)
     try {
       await stat(join(TTS_DIR, `${hash}.mp3`))
       continue

@@ -10,6 +10,12 @@
  *   npm run hud -- --info     installation summary from the running server (JSON)
  *   npm run hud -- --apps     open the HUD and fly to the Tvoje appky orb (the app picker), optionally
  *                             at one app: node scripts/hud.mjs --apps instagram
+ *   npm run hud -- --no-prepare   do not wait for the voice (see below)
+ *
+ * Before the window opens for the first time the voice is prepared (`scripts/voice.mjs prepare`):
+ * the local Whisper model for speech recognition and the voice's packages. The wait is limited
+ * (JARVIS_PREPARE_WAIT_S, 15 minutes by default): after that the HUD opens anyway, the download
+ * carries on in the background and Jarvis listens through the browser until it is done.
  *
  * Window: on macOS the "Jarvis HUD" desktop app when it is installed, otherwise Chrome or Edge
  * in app mode (a clean full-screen window without tabs). F11 or ⌃⌘F toggles full screen.
@@ -18,7 +24,8 @@ import { spawn } from 'node:child_process'
 import { mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { DATA_DIR, HUD_URL, IS_MAC, IS_WIN, LOG_DIR, PORT, REPO, findBin, has, hudAlive, parseArgs, postHud } from './lib.mjs'
+import { DATA_DIR, HUD_URL, IS_MAC, IS_WIN, LOG_DIR, PORT, REPO, findBin, has, hudAlive, parseArgs, postHud, sh, winSys } from './lib.mjs'
+import { prepareNeeded, prepareRunning, readProgress } from '../hud/server/stt-plan.mjs'
 
 const { flags } = parseArgs()
 const PID_FILE = join(DATA_DIR, 'hud.pid')
@@ -69,7 +76,7 @@ function openWindow() {
   }
   // No Chromium browser found: fall back to whatever opens http links.
   if (IS_MAC) spawn('/usr/bin/open', [url], { detached: true, stdio: 'ignore' }).unref()
-  else if (IS_WIN) spawn('rundll32.exe', ['url.dll,FileProtocolHandler', url], { detached: true, stdio: 'ignore' }).unref()
+  else if (IS_WIN) spawn(winSys('rundll32.exe'), ['url.dll,FileProtocolHandler', url], { detached: true, stdio: 'ignore' }).unref()
   else spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref()
   return 'predvolený prehliadač'
 }
@@ -98,7 +105,10 @@ async function stopServer() {
   if (await hudAlive()) {
     // An older server without /api/quit: fall back to the process this script started.
     try {
-      process.kill(Number(readFileSync(PID_FILE, 'utf8')))
+      const pid = Number(readFileSync(PID_FILE, 'utf8'))
+      // A stale pid file may point at some other program by now: only a process that is this server gets stopped.
+      if (!IS_WIN && !/hud[\\/]server\.mjs/.test((await sh('/bin/ps', ['-p', String(pid), '-o', 'command='])).out)) return false
+      process.kill(pid)
     } catch {
       return false
     }
@@ -115,6 +125,45 @@ if (flags.has('restart')) {
   await stopServer()
   await new Promise((r) => setTimeout(r, 600))
 }
+
+/**
+ * The voice before the window: starts `voice.mjs prepare` when there is something to prepare (or
+ * joins one that already runs), shows its progress and waits for it, but never forever.
+ */
+async function ensureVoice() {
+  if (process.env.JARVIS_PREPARE === '0' || flags.has('no-prepare') || !prepareNeeded()) return
+  const startedAt = Date.now()
+  if (!prepareRunning()) {
+    mkdirSync(LOG_DIR, { recursive: true })
+    const log = openSync(join(LOG_DIR, 'voice-prepare.log'), 'a')
+    spawn(process.execPath, [join(REPO, 'scripts', 'voice.mjs'), 'prepare', '--progress'], { cwd: REPO, detached: true, stdio: ['ignore', log, log], windowsHide: true }).unref()
+  }
+  console.log('Pripravujem hlas Jarvisa. Pri prvom spustení sa sťahuje model na rozpoznávanie reči, môže to trvať pár minút.')
+  const waitS = Number(process.env.JARVIS_PREPARE_WAIT_S ?? 900)
+  const until = startedAt + (Number.isFinite(waitS) && waitS >= 0 ? waitS : 900) * 1000
+  let last = ''
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 500))
+    const p = readProgress()
+    const fresh = p && Number(p.at) >= startedAt - 1000
+    if (fresh && p.step) {
+      // A download reports every percent: here one line per ten is enough.
+      const key = p.state === 'downloading' && p.pct != null ? `${p.step}|${Math.floor(p.pct / 10)}` : `${p.step}|${p.state}|${p.text}`
+      if (key !== last) console.log(`  ${p.text}${p.state === 'downloading' && p.pct != null ? ` (${p.pct} %)` : ''}`)
+      last = key
+    }
+    if (fresh && p.done) {
+      const stt = p.result?.stt
+      console.log(stt?.status === 'ready' ? `Hlas je pripravený, Jarvis počúva lokálnym Whisperom (${stt.model}).` : `Jarvis bude počúvať cez prehliadač. ${stt?.reason ?? ''}`.trim())
+      return
+    }
+    // The preparation ended without a result (killed, crashed): do not wait for nothing.
+    if (Date.now() - startedAt > 8000 && !prepareRunning()) break
+  }
+  console.log(prepareRunning() ? 'Príprava hlasu ešte beží na pozadí. Jarvis zatiaľ počúva cez prehliadač a prepne sa sám.' : `Hlas sa nepodarilo pripraviť, Jarvis zatiaľ počúva cez prehliadač. Podrobnosti: ${join(LOG_DIR, 'voice-prepare.log')}`)
+}
+
+if (!flags.has('server') && !flags.has('restart')) await ensureVoice()
 
 const ok = await startServer()
 if (!ok) {

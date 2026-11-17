@@ -16,15 +16,23 @@
  *   node scripts/alarm.mjs test                     wake me now: prepare the brief with Claude and ring
  *   node scripts/alarm.mjs test --quick             ring now with the short brief from memory, no Claude
  *   node scripts/alarm.mjs ring                     what the system scheduler runs at the alarm time
+ *   node scripts/alarm.mjs sound                    which sound rings before the brief
+ *   node scripts/alarm.mjs sound <file|url>         the user's own sound: an mp3, wav or m4a file, or a link to a video
+ *                                                   (its audio is downloaded), copied into data/alarm
+ *   node scripts/alarm.mjs sound default            back to the song setup downloaded (downloads it when it is missing)
+ *   node scripts/alarm.mjs sound builtin | off      back to Jarvis's own chime
+ *                                                   (--seconds 60 sets how long the sound plays before he speaks)
  *
  * The time lives in config/jarvis.json under "alarm". `set`, `on` and `off` register it in the
- * system scheduler right away (scripts/schedule.mjs install).
+ * system scheduler right away (scripts/schedule.mjs install). The sound is "alarm.sound" in the
+ * same file (hud/server/alarm-sound.mjs).
  */
 // .env first: the modules below read JARVIS_MEMORY_DIR and JARVIS_DATA_DIR when they load.
 import '../hud/server/env.mjs'
 import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { RANO_TOPICS, daysLabel, markRang, nextAlarmAt, nightStart, overnightWork, parseAlarm, readPrepared, weekdaysOf } from '../hud/server/alarm.mjs'
+import { describe as describeSound, resolveSound, setSound, soundSummary } from '../hud/server/alarm-sound.mjs'
 import { callReady } from '../hud/server/call.mjs'
 import { CONFIG_FILE, getConfig } from '../hud/server/config.mjs'
 import { calendarRange } from '../hud/server/memory/calendar.mjs'
@@ -40,7 +48,7 @@ const value = (name) => {
   if (i < 0) return null
   return argv[i].includes('=') ? argv[i].split('=').slice(1).join('=') : argv[i + 1] ?? null
 }
-const rest = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && /^--(days|rano)$/.test(argv[i - 1])))
+const rest = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && /^--(days|rano|seconds)$/.test(argv[i - 1])))
 const action = rest[0] ?? 'status'
 const asJson = flags.has('json')
 
@@ -78,7 +86,10 @@ function readRawConfig() {
 
 function writeAlarm(alarm) {
   const raw = readRawConfig() ?? {}
-  raw.alarm = alarm
+  // The sound is chosen separately (alarm.mjs sound …): a new time must not throw it away.
+  const kept = {}
+  for (const key of ['sound', 'soundSeconds']) if (raw.alarm && raw.alarm[key] !== undefined) kept[key] = raw.alarm[key]
+  raw.alarm = { ...alarm, ...kept }
   mkdirSync(dirname(CONFIG_FILE), { recursive: true })
   writeFileSync(CONFIG_FILE, `${JSON.stringify(raw, null, 2)}\n`)
 }
@@ -217,9 +228,11 @@ async function ring({ test = false, quick = false } = {}) {
   }
 
   const { speakLocal } = await import('../hud/server/speak.mjs')
-  const res = await speakLocal(spoken, { chime: true, force: true })
-  log(res.ok ? `povedané (${res.via})` : 'nepodarilo sa prehrať zvuk')
-  return { ok: res.ok, via: res.via, prepared: Boolean(prepared), text: spoken }
+  // The user's own sound or the default song first, Jarvis's chime when there is none or it cannot be played.
+  const sound = resolveSound()
+  const res = await speakLocal(spoken, { chime: true, force: true, sound })
+  log(res.ok ? `povedané (${res.via}), zvuk: ${res.rang ?? 'builtin'}` : 'nepodarilo sa prehrať zvuk')
+  return { ok: res.ok, via: res.via, sound: res.rang ?? 'builtin', prepared: Boolean(prepared), text: spoken }
 }
 
 /** `test`: what the user hears tomorrow, now. Without --quick Claude prepares the brief first. */
@@ -244,7 +257,46 @@ if (action === 'topics') {
   process.exit(0)
 }
 
-if (action === 'set') {
+if (action === 'sound') {
+  // The sound that rings before the brief: status, the user's own file or link, the default song, the chime.
+  const what = rest.slice(1).join(' ').trim()
+  const secs = Number(value('seconds'))
+  if (value('seconds') !== null) {
+    if (!Number.isFinite(secs) || secs < 3 || secs > 300) {
+      console.error('Dĺžka zvuku je v sekundách, od 3 do 300. Napríklad: node scripts/alarm.mjs sound default --seconds 60')
+      process.exit(1)
+    }
+    const raw = readRawConfig() ?? {}
+    raw.alarm = { ...(raw.alarm && typeof raw.alarm === 'object' ? raw.alarm : {}), soundSeconds: Math.round(secs) }
+    mkdirSync(dirname(CONFIG_FILE), { recursive: true })
+    writeFileSync(CONFIG_FILE, `${JSON.stringify(raw, null, 2)}\n`)
+  }
+  if (!what) {
+    const now = describeSound()
+    out({ ok: true, sound: now, summary: now.summary }, `${now.summary}\nVlastný zvuk: node scripts/alarm.mjs sound <súbor mp3, wav, m4a alebo odkaz na video>. Späť: sound default, sound builtin.`)
+    process.exit(0)
+  }
+  try {
+    let shown = ''
+    const res = await setSound(what, {
+      onProgress: asJson
+        ? null
+        : (p) => {
+            const line = p.state === 'downloading' ? `Sťahujem zvuk${Number.isFinite(p.pct) ? ` ${p.pct} %` : ''}` : p.state === 'converting' ? 'Pripravujem zvuk' : ''
+            if (line && line !== shown && (p.state !== 'downloading' || p.pct % 20 === 0)) console.log((shown = line))
+          },
+    })
+    log(`zvuk budíka: ${res.kind}`)
+    const { ok: _ok, downloaded: _downloaded, ...sound } = res
+    out({ ok: true, sound, summary: res.summary }, `${res.summary}\nVyskúšaš ho: node scripts/alarm.mjs test --quick`)
+    process.exit(0)
+  } catch (err) {
+    const now = describeSound()
+    log(`zvuk budíka sa nepodarilo nastaviť: ${err.message}`)
+    out({ ok: false, sound: now, summary: `${err.message} Budík ostáva, ako bol. ${now.summary}` }, `${err.message}\nBudík ostáva, ako bol. ${now.summary}`)
+    process.exit(1)
+  }
+} else if (action === 'set') {
   const m = /^(\d{1,2})[:.](\d{2})$/.exec(rest[1] ?? '')
   if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) {
     console.error('Napíš čas v tvare 06:30. Napríklad: node scripts/alarm.mjs set 06:30 --days weekdays')
@@ -293,7 +345,8 @@ if (action === 'set') {
 } else {
   const alarm = getConfig().alarm
   const prepared = readPrepared()
-  out({ ok: true, alarm, next: nextAlarmAt(alarm)?.toISOString() ?? null, summary: describe(alarm), preparedToday: Boolean(prepared), notes: alarm?.enabled ? caveats(alarm) : [] }, [describe(alarm), alarm?.enabled ? caveats(alarm).join('\n') : 'Nastavíš ho: node scripts/alarm.mjs set 06:30 (alebo povedz Jarvisovi „zobuď ma o 6:30").'].join('\n'))
+  const sound = describeSound()
+  out({ ok: true, alarm, next: nextAlarmAt(alarm)?.toISOString() ?? null, summary: describe(alarm), sound, preparedToday: Boolean(prepared), notes: alarm?.enabled ? caveats(alarm) : [] }, [describe(alarm), soundSummary(), alarm?.enabled ? caveats(alarm).join('\n') : 'Nastavíš ho: node scripts/alarm.mjs set 06:30 (alebo povedz Jarvisovi „zobuď ma o 6:30").'].join('\n'))
   process.exit(0)
 }
 

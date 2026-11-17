@@ -2,7 +2,7 @@
 title: Ranný brief
 noc: true
 ---
-Priprav ranný brief na dnešok ({{dnes}}). Pracuj s pamäťou v priečinku `memory/` podľa CLAUDE.md.
+Priprav ranný brief na dnešok ({{dnes}}). Pracuj s pamäťou v priečinku `memory/` podľa AGENTS.md.
 
 Čo zisti:
 1. Kalendár na dnes a zajtra: `memory/kalendar.md`. Ak máš pripojený kalendárový konektor (Google Calendar, Outlook), pozri aj ten a nové udalosti na najbližších 7 dní dopíš do `memory/kalendar.md` (bez duplikátov, formát je v `memory/README.md`).

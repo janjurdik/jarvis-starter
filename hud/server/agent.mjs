@@ -7,21 +7,15 @@
  * What still holds is in the task itself, not in a permission list: anything that would go out
  * to other people (a mail, a message, an order) is prepared and waits for the user's yes.
  */
-import { dirname, join, sep } from 'node:path'
+import { sep } from 'node:path'
 import { MEMORY_DIR } from './memory/index.mjs'
-import { HOME, REPO, findBin, withPath } from './util.mjs'
+import { aiProvider, cleanEnv } from './provider.mjs'
+import { REPO } from './util.mjs'
 
-export const CLAUDE_BIN = findBin('claude', { override: process.env.JARVIS_CLAUDE_BIN })
+/** The CLI of the agent Jarvis runs on (Claude Code or Codex, see provider.mjs). Kept under its old name for the callers. */
+export const CLAUDE_BIN = aiProvider().bin()
 
-/** Environment for Claude child processes: the parent's, minus anything that would switch Claude to an API key. */
-export function cleanEnv() {
-  const env = withPath(process.env, [dirname(process.execPath), join(HOME, '.local', 'bin')])
-  for (const key of Object.keys(env)) {
-    if (key === 'ANTHROPIC_API_KEY' || key === 'ANTHROPIC_AUTH_TOKEN' || key === 'ANTHROPIC_BASE_URL' || key === 'CLAUDECODE' || key.startsWith('CLAUDE_CODE_')) delete env[key]
-  }
-  env.DISABLE_AUTOUPDATER = '1'
-  return env
-}
+export { cleanEnv }
 
 /** True when the memory folder lives outside the Jarvis folder (JARVIS_MEMORY_DIR, e.g. an Obsidian vault). */
 export const MEMORY_EXTERNAL = !(MEMORY_DIR + sep).startsWith(REPO + sep)

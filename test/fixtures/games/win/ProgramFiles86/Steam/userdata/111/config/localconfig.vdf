@@ -1,0 +1,35 @@
+"UserLocalConfigStore"
+{
+	"friends"
+	{
+		"PersonaName"		"tester"
+	}
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"apps"
+				{
+					"730"
+					{
+						"LastPlayed"		"1763000000"
+						"Playtime"		"6000"
+						"Playtime2wks"		"120"
+					}
+					"440"
+					{
+						"LastPlayed"		"1500000000"
+						"Playtime"		"300"
+					}
+					"1245620"
+					{
+						"lastplayed"		"1762000000"
+						"playtime"		"4321"
+					}
+				}
+			}
+		}
+	}
+}
