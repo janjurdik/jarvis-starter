@@ -6,9 +6,10 @@ import '../hud/server/env.mjs'
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { inWindow, quietNow } from '../hud/server/alarm.mjs'
 import { DATA_DIR, IS_MAC, IS_WIN, REPO, findBin, spawnBin } from '../hud/server/util.mjs'
 
-export { DATA_DIR, IS_MAC, IS_WIN, REPO, findBin, spawnBin }
+export { DATA_DIR, IS_MAC, IS_WIN, REPO, findBin, inWindow, quietNow, spawnBin }
 
 export const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
 export const HUD_URL = `http://127.0.0.1:${PORT}`
@@ -61,6 +62,21 @@ export async function hudAlive() {
   }
 }
 
+/**
+ * How many HUD windows listen right now: -1 when the server does not run, 0 when it runs without
+ * a window (then nobody would hear it speak), otherwise the number of open windows.
+ */
+export async function hudListeners() {
+  try {
+    const res = await fetch(`${HUD_URL}/api/health`, { signal: AbortSignal.timeout(1500) })
+    if (!res.ok) return -1
+    const body = await res.json().catch(() => ({}))
+    return Number.isFinite(body.clients) ? body.clients : 1
+  } catch {
+    return -1
+  }
+}
+
 export async function postHud(path, body) {
   try {
     const res = await fetch(`${HUD_URL}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(5000) })
@@ -75,16 +91,6 @@ export function parseArgs(argv = process.argv.slice(2)) {
   const flags = new Set(argv.filter((a) => a.startsWith('--')).map((a) => a.slice(2)))
   const rest = argv.filter((a) => !a.startsWith('--'))
   return { flags, rest }
-}
-
-/** True when HH:MM `now` falls inside a "22:30-07:00" style window (windows over midnight work too). */
-export function inWindow(range, date = new Date()) {
-  const m = /^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/.exec(String(range ?? '').trim())
-  if (!m) return false
-  const from = Number(m[1]) * 60 + Number(m[2])
-  const to = Number(m[3]) * 60 + Number(m[4])
-  const now = date.getHours() * 60 + date.getMinutes()
-  return from <= to ? now >= from && now < to : now >= from || now < to
 }
 
 /**

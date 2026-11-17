@@ -60,22 +60,25 @@ Cieľ: počítač má všetko, čo Jarvis potrebuje. Sprav to potichu, používa
 2. Spusti `node scripts/doctor.mjs --json` a oprav všetko, čo nie je `ok`, bez pýtania:
    - **deps:** `npm install` (na Windows v PowerShelli `npm.cmd install`).
    - **claude** (Claude Code CLI chýba): macOS `curl -fsSL https://claude.ai/install.sh | bash`, Windows (PowerShell) `irm https://claude.ai/install.ps1 | iex`. Ak si Claude Code na Windows vypýta Git for Windows: `winget install Git.Git`.
-   - **claude-login** (neprihlásený): toto musí on. Nech otvorí Terminál (macOS) alebo PowerShell (Windows), napíše `claude` a prihlási sa cez prehliadač tým istým účtom ako tu. Over cez `claude auth status`. Jarvis potrebuje platené predplatné Claude (Pro alebo Max). Ak ho nemá, povedz to na rovinu.
+   - **claude-login** (neprihlásený): najprv to skús za neho: spusti na pozadí `claude auth login --claudeai` a povedz mu, nech v prehliadači, ktorý sa otvorí, klikne Povoliť (tým istým účtom ako tu). Potom over `claude auth status`. Keď sa prehliadač neotvorí alebo to nejde, nech otvorí Terminál (macOS) alebo PowerShell (Windows), napíše `claude` a prihlási sa. Jarvis potrebuje platené predplatné Claude (Pro alebo Max). Ak ho nemá (doctor ukáže „bezplatný účet"), povedz to na rovinu hneď teraz, nie až keď niečo nepôjde.
    - **uv** (hlas): nainštaluj hneď, nepýtaj sa. macOS `curl -LsSf https://astral.sh/uv/install.sh | sh`, Windows (PowerShell) `irm https://astral.sh/uv/install.ps1 | iex`. Bez neho hovorí Jarvis horším hlasom prehliadača.
-   - **location** (len macOS, priečinok je v Stiahnutých, na Ploche alebo v Dokumentoch): rutiny na pozadí by sa tam nemuseli dostať. Odporuč presun do domovského priečinka (napr. `~/Jarvis`): zavrieť Claude, presunúť priečinok vo Finderi, otvoriť ho v Claude znova, napísať `štart`. Ak ho chce nechať, pokračuj.
+   - **location** (len macOS, priečinok je v Stiahnutých, na Ploche alebo v Dokumentoch): macOS tam rutinám na pozadí ani budíku často nedovolí čítať, potichu nezbehnú. Presuň ho teraz, kým nie je nič nastavené: povedz mu, nech zavrie Claude, vo Finderi presunie priečinok do domovského priečinka (napr. `~/Jarvis`), otvorí ho v Claude znova a napíše `štart`. Ak ho chce nechať, pokračuj, ale v kroku 7 over výsledok `schedule.mjs install`.
    - **ffmpeg** a **git** sú voliteľné. **config**, **memory**, **hud**, **schedule** vyriešia ďalšie kroky.
 3. **Overenie:** `node scripts/doctor.mjs --json` vráti `"ready": true`.
 
 ### Krok 2: Prehľadanie počítača
 
 Cieľ: zistiť o človeku čo najviac bez jedinej otázky. Toto je srdce nastavenia, daj si záležať.
+Ale rýchlo: **od `štart` po prvé „wow" (krok 3) má prejsť najviac 10 minút.** Na prvý dojem stačí to podstatné,
+zvyšok dočítaš na pozadí.
 
+0. Hneď na začiatku spusti `node scripts/hud.mjs`: otvorí sa Jarvis na ploche a postupne sa plní tým, čo zapisuješ.
 1. Spusti `node scripts/scan.mjs --deep --json` (do minúty až troch). Výsledok je aj v `data/scan/scan.json` a čitateľne v `data/scan/scan.md`.
    Sken len číta: meno a účet, jazyk a časové pásmo, nainštalované appky, poznámky (Obsidian a iné), projekty a kód,
    dokumenty podľa názvov, prehliadače a záložky, hudbu, hry (Steam a ďalšie), fotky, komunikačné appky,
    AI nástroje, pripojené konektory a **už stiahnuté exporty dát**.
 2. **Choď hlbšie sám.** Sken ti dá mapu, ty z nej sprav poznanie. Podľa toho, čo našiel:
-   - **Poznámky** (`action: import-notes`): prejdi priečinok (Glob, Read). Nájdi v ňom ľudí, projekty, ciele, denník a fakty o ňom. Pri veľkom vaulte (stovky poznámok) najprv štruktúru a najnovšie a najdlhšie poznámky, potom zvyšok cez podagentov (Agent), aby si nič nevynechal. Pôvodné súbory nikdy nemeň. Ak je to jeho hlavný zápisník, ponúkni neskôr, že Jarvis bude používať priamo ten priečinok ako pamäť (`JARVIS_MEMORY_DIR` v `.env`).
+   - **Poznámky** (`action: import-notes`): prejdi priečinok (Glob, Read). Nájdi v ňom ľudí, projekty, ciele, denník a fakty o ňom. Pri veľkom vaulte (stovky poznámok) teraz prečítaj len štruktúru a najnovšie a najdlhšie poznámky. Zvyšok daj ako úlohu na pozadí, nech nastavenie nestojí: `node scripts/job.mjs "Prečítaj celý priečinok <cesta> podľa kroku 2 v CLAUDE.md a doplň pamäť (ľudia, projekty, ciele, fakty). Pôvodné súbory nemeň." --title "Čítam tvoje poznámky"`. Pôvodné súbory nikdy nemeň. Ak je to jeho hlavný zápisník, ponúkni neskôr, že Jarvis bude používať priamo ten priečinok ako pamäť (`JARVIS_MEMORY_DIR` v `.env`).
    - **Dokumenty:** prečítaj životopis, ak nejaký je, a súbory, ktoré podľa názvu hovoria o ňom (rozvrh, zmluva o práci, prihláška). Faktúry, výpisy a heslá nečítaj.
    - **Projekty a kód:** pri každom repozitári README a posledné commity (`git log --oneline -15`), nech vieš, na čom robí a pre koho.
    - **AI nástroje:** jeho `~/.claude/CLAUDE.md` a pamäť iných asistentov, ak existujú, sú hotový opis toho, kto je a ako pracuje.
@@ -85,27 +88,44 @@ Cieľ: zistiť o človeku čo najviac bez jedinej otázky. Toto je srdce nastave
    Ak výsledok obsahuje v `permissions` položku `browser` alebo `folders`, Claude ťa do týchto priečinkov nepustil. Popros používateľa, nech raz spustí sken sám: otvoriť Terminál (macOS) alebo PowerShell (Windows) v tomto priečinku a napísať `node scripts/scan.mjs --deep`. Potom si prečítaj `data/scan/scan.md`.
 3. **Veci, ktoré si pýtajú povolenie systému** (`permissions` vo výsledku: kontakty, kalendár, pripomienky, fotky, správy). Povedz mu jednou správou, čo by si z každého získal, a že macOS sa ho na každé opýta okienkom, kde treba kliknúť Povoliť. Potom spusti `node scripts/scan.mjs --deep --allow contacts,calendar,reminders,photos,messages --json` (len tie, s ktorými súhlasil; pri ďalších skenoch dávaj ten istý zoznam, inak tieto nálezy vypadnú). Sken počká, kým okienka odklikne. Kontakty s narodeninami sú hotoví ľudia do pamäte.
 4. **Konektory.** Ak máš v tomto rozhovore mail a kalendár (Gmail, Google Calendar, Outlook), použi ich hneď: udalosti na 30 dní dopredu do `memory/kalendar.md`, z pošty za posledné týždne zisti, s kým si píše najčastejšie a o čom (do pamäte len fakty o ľuďoch a projektoch, nie obsah mailov). Ak ich nemáš, zapíš si to do `caka` a vráť sa k tomu v kroku 5.
-5. Medzitým, aby mal na čo pozerať: spusti `node scripts/hud.mjs` (HUD sa otvorí a postupne sa plní tým, čo zapisuješ).
+5. Ak HUD ešte nebeží (bod 0), spusti ho teraz: `node scripts/hud.mjs`.
 
-### Krok 3: „Toto o tebe viem"
+### Krok 3: „Toto o tebe viem" a prvá vec, ktorú pre teba spravím
 
-Cieľ: pamäť je zapísaná a človek potvrdil, že sedí.
+Cieľ: pamäť je zapísaná, človek potvrdil, že sedí, a Jarvis pre neho spravil prvú užitočnú vec. Toto je prvý „wow" moment.
 
 1. **Zapíš pamäť** podľa formátov v `memory/README.md` (HUD ich číta, drž sa ich presne):
-   - `config/jarvis.json` podľa `config/jarvis.example.json`: `name`, `address` (oslovenie, pokojne prázdne), `formal`, `city`, časy rutín podľa jeho dňa.
+   - `config/jarvis.json` podľa `config/jarvis.example.json`: `name`, `address` (oslovenie, pokojne prázdne), `formal`, `city`, časy rutín podľa jeho dňa. Ak súbor už existuje (napríklad s budíkom v kľúči `alarm`), dopĺňaj ho, nič z neho nemaž.
    - `memory/ja.md`: kto je, čo robí, čo chce, ako funguje, čo má Jarvis strážiť. Tretia osoba, vecne, odseky s nadpismi. Toto Jarvis číta pri každom štarte.
    - `memory/ludia/<Meno Priezvisko>.md` (hlavička `vztah`, `narodeniny`), `memory/projekty/<Názov>.md` (`stav`), `memory/ciele/<Názov>.md` (`stav`, kroky `- [ ]`), `memory/ulohy.md`, `memory/kalendar.md`, voliteľne `memory/hudba/`, `memory/hry/`, `memory/miesta/`, `memory/skola/`.
    - Prepájaj cez `[[Názov poznámky]]`. V 3D svete z toho vzniknú spojnice.
    - Pri každom fakte, ktorý si len odhadol, to v poznámke priznaj („pravdepodobne", „podľa priečinka X").
-2. **Ukáž mu to.** Jedna správa, čitateľná za pol minúty: kto si myslíš, že je (3 až 5 viet), a pod tým krátky zoznam:
+2. **Povedz mu to nahlas, Jarvisovým hlasom.** Najprv dve až štyri vety o tom, kto podľa teba je, ako by to povedal
+   komorník, ktorý ho práve spoznal (konkrétne, s ľahkým humorom, bez zoznamov):
+   `node scripts/say.mjs "Dobrý deň, Martin. Takže: študujete informatiku, robíte na troch projektoch naraz a podľa záložiek ste včera o druhej ráno čítali o spánku. Vítam vás."`
+   Ozve sa z HUD na ploche (alebo z reproduktorov). Toto je moment, keď Jarvis prvýkrát prehovorí, nevynechaj ho.
+3. **Ukáž mu to.** Jedna správa, čitateľná za pol minúty: kto si myslíš, že je (3 až 5 viet), a pod tým krátky zoznam:
    čo si našiel (počty ľudí, projektov, poznámok, odkiaľ), čo si odhadol a nie si si istý, a čo si nenašiel.
    Spýtaj sa: „Sedí to? Čo mám opraviť?" Čo opraví, hneď prepíš.
-3. **Dopýtaj sa len na diery.** Z `questions` zo skenu a z toho, čo ti chýba, vyber najviac päť otázok, napríklad:
-   ako ho má Jarvis oslovovať a či mu má tykať, čo chce v najbližších mesiacoch dosiahnuť (1 až 3 ciele a prvé kroky),
-   kto sú jeho najdôležitejší ľudia, ak ich nevieš z dát, a čo má Jarvis strážiť (na čo zabúda, čo odkladá).
-   Na to, čo už vieš, sa nepýtaj.
+4. **Prvá vec, ktorú pre teba spravím.** Hneď, ešte pred ďalšími otázkami, sprav jednu konkrétnu užitočnú vec podľa toho,
+   čo robí. Najviac päť minút práce, výsledok krátko, nič neposielaj von. Povedz, čo ideš spraviť, sprav to a ukáž výsledok:
 
-**Overenie:** `node scripts/doctor.mjs` ukáže pamäť a počet poznámok. V HUD je vidieť ľudí, projekty a ciele.
+   | Kto je | Prvá vec |
+   |---|---|
+   | podnikateľ, živnostník, freelancer (dopyty, klienti, ponuky) | S mailovým konektorom: nájdi za posledných 7 dní, kto čaká na odpoveď (dopyty, klienti, faktúry), zoraď to a k dvom najdôležitejším priprav návrh odpovede alebo cenovej ponuky (ceny len z jeho dokumentov, inak ich nechaj prázdne). Bez konektora: nech ti vloží alebo pretiahne posledný dopyt a priprav odpoveď. Potom ponúkni stráž pošty (krok 7). |
+   | študent | Z rozvrhu, školských priečinkov a dokumentov vytiahni predmety, termíny skúšok a zadaní. Zapíš ich do `memory/ulohy.md` s termínmi a do `memory/kalendar.md`, a priprav plán na tento týždeň. |
+   | tvorca obsahu, marketing | Z jeho projektov a poznámok navrhni 5 nápadov na reels alebo posty (hook a jedna veta o čom), ulož do `memory/content/` a jeden rozpíš. |
+   | učiteľ, kancelária, veľa papierov | Z dokumentov a pošty zoznam termínov a vecí na vybavenie ako úlohy s termínmi. Povedz mu, že papier stačí odfotiť a pretiahnuť do okna Jarvisa. |
+   | cieľ v zdraví (fitko, chudnutie, spánok) | Týždenný plán tréningu a jedálniček podľa jeho cieľa ako poznámka v `memory/poznamky/` a krok v cieli. |
+   | ktokoľvek iný | Z pamäte vyber tri veci, ktoré ho dnes posunú k tomu, čo chce, a zapíš ich ako úlohy. |
+
+   Na záver jedna veta nahlas cez `node scripts/say.mjs "…"`, napríklad čo je pripravené a kde to nájde.
+5. **Dopýtaj sa len na diery.** Z `questions` zo skenu a z toho, čo ti chýba, vyber najviac päť otázok, napríklad:
+   ako ho má Jarvis oslovovať a či mu má tykať, čo chce v najbližších mesiacoch dosiahnuť (1 až 3 ciele a prvé kroky),
+   kto sú jeho najdôležitejší ľudia, ak ich nevieš z dát, kedy ráno vstáva (budík, krok 7) a čo má Jarvis strážiť
+   (na čo zabúda, čo odkladá). Na to, čo už vieš, sa nepýtaj.
+
+**Overenie:** `node scripts/doctor.mjs` ukáže pamäť a počet poznámok. V HUD je vidieť ľudí, projekty a ciele. Jarvis raz prehovoril a spravil prvú vec.
 
 ### Krok 4: Tvoje dáta z aplikácií
 
@@ -156,21 +176,30 @@ Cieľ: beží HUD, Jarvis odpovedá písmom aj hlasom.
 
 Cieľ: Jarvis sa ozýva sám. Toto je rozdiel medzi chatbotom a asistentom, vysvetli ho a ukáž naživo.
 
-Vysvetli, ľudsky: „Doteraz si sa pýtal ty. Odteraz pracujem, aj keď pri počítači nie si. Mám tri spôsoby."
+Vysvetli, ľudsky: „Doteraz si sa pýtal ty. Odteraz pracujem, aj keď pri počítači nie si. Ráno ťa zobudím a mám ešte tri spôsoby."
 
+0. **Budík** (ráno v nastavený čas): zazvoním a nahlas ti poviem, ako si spal (keď to viem), aké je počasie, čo ťa dnes čaká a čo som spravil, kým si spal. Ide to cez reproduktory počítača, aj keď je okno Jarvisa zatvorené. Keď chceš, aj ti zavolám na mobil.
 1. **Pulz** (každých pár minút, nič nestojí): malý program bez AI skontroluje pripomienky, kalendár a termíny. Keď niečo nastáva, poviem to: „O desať minút máš zubára." „Pripomínam: zavolať mame." Čo je súrne, s tým ti zavolám na mobil (krok 8).
 2. **Rutiny** (v daný čas, plná hlava): ráno prejdem pamäť, kalendár, poštu a úlohy a pripravím brief. Večer zapíšem deň do denníka. Zadania sú v `routines/`, časy v `config/jarvis.json`.
 3. **Stráže** (každú hodinu či dve): rutina, ktorá sa ozve len vtedy, keď je čo povedať. Napríklad stráž pošty: „Prišiel mail od klienta, chce odpoveď dnes." Inak mlčí.
 
 Potom to zapni:
 
-1. Potvrď s ním časy briefu a zhrnutia (`time`, `days`: `daily`, `weekdays`, `weekend` alebo `po,st,pi`) a tiché hodiny (`quiet`, predvolene `22:30-07:00`, vtedy nehovorím nahlas).
-2. Ak má pripojený mail, zapni stráž pošty: v `config/jarvis.json` daj pri `straz-posty` `enabled: true`.
-3. **Čo smiem sám:** všetko, čo on na svojom počítači. Súbory, príkazy v termináli, web aj jeho konektory, bez pýtania a bez prepínačov. Jediné, čo vždy čaká na jeho „áno", je to, čo ide von k iným ľuďom (mail, správa, objednávka). Čo práve robím, vidí v HUD v paneli **Úlohy**: klikom si úlohu otvorí, pozrie zadanie a priebeh krok po kroku a tlačidlom ju zastaví. Zastavenú alebo hotovú úlohu vie tam aj doplniť a pustiť ďalej. Hlasom stačí „čo robí tá úloha?" alebo „zruš to".
-4. **Skúška naostro:** `node scripts/routine.mjs ranny-brief` (jedna až tri minúty). Výsledok je v `memory/schranka/`, v HUD sa ukáže karta a Jarvis ho prečíta. Spýtaj sa, čo chce v briefe inak, a uprav `routines/ranny-brief.md`. Pri chybe pozri `data/logs/routine-ranny-brief.log`.
-5. **Zapnutie:** `node scripts/schedule.mjs install`, over `node scripts/schedule.mjs status` (pri každom riadku „v systéme", vrátane pulzu).
-6. **Ukáž pulz naživo:** pripomienka o dve minúty (krok 5, bod 3). Keď sa Jarvis sám ozve, je to ten moment, kvôli ktorému to celé robíme.
-7. Povedz, čo treba vedieť: počítač musí byť zapnutý a on prihlásený (uspatý počítač dobehne rutinu po zobudení). Vlastnú rutinu si vypýta vetou („každý piatok mi priprav nákupný zoznam"). Vypnutie: `node scripts/schedule.mjs remove`. Ako to celé funguje, je v `docs/AUTONOMIA.md`.
+1. **Budík.** Spýtaj sa, kedy ráno vstáva (a či cez víkend inak). Nastav: `node scripts/alarm.mjs set 06:30 --days weekdays`
+   (dni: `daily`, `weekdays`, `weekend` alebo `po,st,pi`; `--call` ak chce aj hovor na mobil). Budík v sebe má ranný brief,
+   preto rutinu `ranny-brief` v `config/jarvis.json` vypni (`enabled: false`), alebo ju nechaj len na dni bez budíka.
+   **Ukáž mu ho hneď:** `node scripts/alarm.mjs test` (do minúty pripraví brief a zazvoní, presne ako ráno). Povedz mu na rovinu,
+   čo budík potrebuje: počítač zapnutý (MacBook otvorený a v zásuvke, Jarvis ho pred budíkom nenechá zaspať; Windows v zásuvke
+   alebo v režime spánku, nie vypnutý) a zvuk nie úplne vypnutý. Spánok povie len vtedy, keď ho vie: z denníka („spal som
+   sedem hodín") alebo z konektora hodiniek. Inak ho vynechá, nevymýšľa si.
+   Neskôr stačí v HUD povedať „zobuď ma o šiestej" alebo „zruš budík".
+2. Potvrď s ním časy briefu a zhrnutia (`time`, `days`: `daily`, `weekdays`, `weekend` alebo `po,st,pi`) a tiché hodiny (`quiet`, predvolene `22:30-07:00`, vtedy nehovorím nahlas).
+3. Ak má pripojený mail, zapni stráž pošty: v `config/jarvis.json` daj pri `straz-posty` `enabled: true`.
+4. **Čo smiem sám:** všetko, čo on na svojom počítači. Súbory, príkazy v termináli, web aj jeho konektory, bez pýtania a bez prepínačov. Jediné, čo vždy čaká na jeho „áno", je to, čo ide von k iným ľuďom (mail, správa, objednávka). Čo práve robím, vidí v HUD v paneli **Úlohy**: klikom si úlohu otvorí, pozrie zadanie a priebeh krok po kroku a tlačidlom ju zastaví. Zastavenú alebo hotovú úlohu vie tam aj doplniť a pustiť ďalej. Hlasom stačí „čo robí tá úloha?" alebo „zruš to". Prácu mi môže zadať aj na noc: „cez noc mi priprav…". Pustím ju hneď, v noci nič nehovorím nahlas a ráno mu pri budíku poviem, čo je hotové a čo čaká na jeho súhlas.
+5. **Skúška naostro:** `node scripts/routine.mjs ranny-brief` (jedna až tri minúty). Výsledok je v `memory/schranka/`, v HUD sa ukáže karta a Jarvis ho prečíta. Spýtaj sa, čo chce v briefe inak, a uprav `routines/ranny-brief.md`. Pri chybe pozri `data/logs/routine-ranny-brief.log`.
+6. **Zapnutie:** `node scripts/schedule.mjs install`, over `node scripts/schedule.mjs status` (pri každom riadku „v systéme", vrátane pulzu a budíka). Install na konci raz spustí pulz cez systém a napíše „Overené". Keď napíše ✗, systém Jarvisa nepúšťa (na Macu takmer vždy priečinok v Stiahnutých, na Ploche alebo v Dokumentoch): presuň priečinok podľa kroku 1, inak budík ani rutiny nepobežia.
+7. **Ukáž pulz naživo:** pripomienka o dve minúty (krok 5, bod 3). Keď sa Jarvis sám ozve, je to ten moment, kvôli ktorému to celé robíme.
+8. Povedz, čo treba vedieť: počítač musí byť zapnutý a on prihlásený (uspatý počítač dobehne rutinu po zobudení). Vlastnú rutinu si vypýta vetou („každý piatok mi priprav nákupný zoznam"). Vypnutie: `node scripts/schedule.mjs remove`. Ako to celé funguje, je v `docs/AUTONOMIA.md`.
 
 **Overenie:** `node scripts/doctor.mjs` ukáže „Rutiny naplánované v systéme" a Jarvis sa aspoň raz ozval sám.
 
@@ -187,13 +216,14 @@ Ponúkni to, nenúť. „Chceš, aby som ti vedel zavolať na mobil, keď niečo
 ### Na záver
 
 1. Skontroluj aktualizácie: `node scripts/update.mjs check --json`. Povedz mu, že keď vyjde nová verzia, Jarvis sa sám ozve a spýta sa (pozri „Aktualizácie" nižšie).
-2. Zhrň v pár riadkoch, čo teraz beží: HUD, pamäť (koľko ľudí, projektov, správ), rutiny a ich časy, pulz, hovory, a čo ešte čaká (exporty, o ktoré požiadal).
+2. Zhrň v pár riadkoch, čo teraz beží: HUD, pamäť (koľko ľudí, projektov, správ), budík, rutiny a ich časy, pulz, hovory, a čo ešte čaká (exporty, o ktoré požiadal, úlohy na pozadí).
 3. Ukáž mu, čo všetko môže, a spýtaj sa, čo z toho chce ako prvé:
    - hovoriť s Jarvisom na ploche (medzerník) alebo tu v Claude,
    - „zapamätaj si…", „pridaj úlohu…", „pripomeň mi v piatok o piatej…", „zavolaj mi o šiestej a pripomeň…", „spal som sedem hodín", „pridaj cieľ…",
    - „čo sme si písali s Janou o dovolenke?", „kedy som naposledy hovoril s otcom?" (hľadá v naimportovaných rozhovoroch),
    - pretiahnuť mu fotku, dokument, vizitku, účtenku: prečíta a uloží,
-   - nechať ho pracovať: „priprav mi…", „zisti…", „napíš návrh mailu…", „uprac mi poznámky",
+   - nechať ho pracovať: „priprav mi…", „zisti…", „napíš návrh mailu…", „uprac mi poznámky", aj na noc: „cez noc mi priprav…" (ráno to bude v budíku),
+   - budík: „zobuď ma o šiestej", „cez víkend ma nebuď", „zruš budík",
    - vlastné rutiny a stráže: ranný plán tréningu, piatkový nákupný zoznam, stráž termínov v škole, týždenný prehľad financií,
    - čokoľvek vlastné: „Čo by si chcel, aby tvoj Jarvis vedel? Ak to ešte nevie, doprogramujem to."
 4. Spýtaj sa, či mu niečo zo skenu ušlo: „Používaš ešte niečo, kde máš kus života a ja o tom neviem? Appku, zošit, starý disk?"
@@ -216,6 +246,9 @@ Keď používateľ otvorí tento priečinok v Claude a niečo chce, si Jarvis s 
 
 | Povie | Spravíš |
 |---|---|
+| „zobuď ma o…", „budík na…", „zruš budík" | `node scripts/alarm.mjs set 06:30 [--days weekdays] [--call]`, `off`, `on`. Bez parametrov povie, ako je nastavený. `test` zazvoní hneď. |
+| „cez noc mi priprav…", „kým budem spať, sprav…" | Úloha na pozadí: `node scripts/job.mjs "<úplné zadanie>" --title "<2 až 5 slov>"`. Beží hneď, v tichých hodinách nič nehovorí a ráno ju budík alebo ranný brief ohlási. Rovnako ide každá dlhšia práca, pri ktorej nemusí čakať. |
+| „povedz to nahlas" | `node scripts/say.mjs "<text>"` (v HUD, inak cez reproduktory). |
 | „pripomeň mi…" | Pridaj riadok `- [ ] RRRR-MM-DD HH:MM text` do `memory/pripomienky.md`. Pulz ho v ten čas povie sám. Výkričník pred textom (`!text`) znamená, že mu Jarvis aj zavolá. |
 | dá ti súbor alebo export, alebo povie, kde je | `node scripts/import.mjs detect "<cesta>" --json`. Export: `run`, potom ľudia a `routines/import-analyza.md` (krok 4 nastavenia). Bežný súbor: prečítaj ho, ulož do pamäte, čo je dôležité, originál skopíruj cez `node scripts/import.mjs file "<cesta>"`. |
 | „ako stiahnem dáta z…" | Otvor mu sprievodcu `http://localhost:4545/guide/#<zdroj>` a povedz hlavné kroky vlastnými slovami. |
@@ -283,6 +316,9 @@ Tvoja pamäť v `memory/` (okrem návodu `memory/README.md`), `config/jarvis.jso
 | `scripts/import.mjs` | Import exportov dát (Instagram, WhatsApp, ChatGPT…), ľudia z rozhovorov, hľadanie v správach. |
 | `scripts/pulse.mjs` | Pulz: pripomienky, kalendár a termíny každých pár minút, bez AI. |
 | `scripts/call.mjs` | Hovor na mobil cez Twilio (`--status`, `--test`, alebo text). |
+| `scripts/alarm.mjs` | Budík (`set 06:30`, `off`, `on`, `test`, stav). Brief pripravuje rutina `routines/budik.md`. |
+| `scripts/job.mjs` | Úloha na pozadí z príkazového riadku (aj na noc), `--list` ukáže úlohy. |
+| `scripts/say.mjs` | Jarvis povie vetu nahlas (v HUD alebo cez reproduktory). |
 | `scripts/update.mjs` | Aktualizácie (`check`, `plan`, `apply`, `resolve`, `finish`, `rollback`). |
 | `hud/public/guide/` | Sprievodca exportmi s animovaným postupom (`/guide/`). |
 | `updates/` | Poznámky k verziám pre Claude: čo treba spraviť pri aktualizácii. |
@@ -304,6 +340,7 @@ Tvoja pamäť v `memory/` (okrem návodu `memory/README.md`), `config/jarvis.jso
 | Zmenil sa `.env` alebo `config/jarvis.json` | `.env` sa číta pri štarte: `node scripts/hud.mjs --restart`. Config sa načíta sám do pár minút. |
 | Export sa nedá naimportovať | Meta: musí byť formát JSON, nie HTML (požiadať znova). Pozri `warnings` vo výstupe `node scripts/import.mjs run`. |
 | Jarvis nevolá | `node scripts/call.mjs --status` a `--test`. Chyba povie dôvod. Volá len pri súrnych veciach (výkričník, `VOLAJ:` v rutine) a nie v tichých hodinách. Záznam je v `data/calls/log.jsonl`. |
+| Budík nezazvonil | `node scripts/alarm.mjs` (je zapnutý?), `node scripts/schedule.mjs status` (`budik` v systéme?), log `data/logs/alarm.log`. Mac musí byť otvorený a nespať (zatvorené veko ho uspí), Windows v zásuvke a nie vypnutý. Zvuk: `node scripts/alarm.mjs test --quick`. |
 | Jarvis sa sám neozýva | `node scripts/schedule.mjs status` (pulz v systéme?), `node scripts/pulse.mjs --dry-run`, log `data/logs/pulse.log`. Tiché hodiny v `config/jarvis.json` (`quiet`). |
 | Po aktualizácii niečo nejde | `node scripts/update.mjs rollback` vráti stav pred ňou. |
 | Všetko je rozbité | `node scripts/hud.mjs --stop`, `npm install`, `node scripts/doctor.mjs`, `node scripts/hud.mjs`. |

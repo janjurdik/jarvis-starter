@@ -15,11 +15,12 @@ To je všetko. Claude spraví zvyšok: skontroluje počítač, sám si v ňom zi
 
 ## Čo Jarvis robí
 
+- **Zobudí ťa.** Povieš „zobuď ma o 6:30" a ráno zazvoní a povie ti nahlas, ako si spal (keď to vie), aké je počasie, čo ťa dnes čaká a čo spravil, kým si spal. Aj keď je jeho okno zatvorené.
 - **Pozná ťa.** Pri nastavení si s tvojím súhlasom prejde počítač: poznámky, projekty, dokumenty, appky, hudbu, hry. Povie ti, čo zistil, a ty len opravíš, čo nesedí. Všetko si zapíše do priečinka `memory/` ako obyčajné textové súbory, ktoré vieš kedykoľvek otvoriť a upraviť.
 - **Je tvoj druhý mozog.** Ukáže ti krok za krokom, ako si stiahnuť svoje dáta z Instagramu, WhatsAppu, Messengera, Discordu, ChatGPT, Spotify a ďalších. Export pretiahneš do jeho okna. Prečíta si rozhovory, spýta sa, kto je kto, a odvtedy vie odpovedať na „čo sme si písali s Janou o dovolenke?".
 - **Žije na ploche.** HUD je obrazovka s 3D svetom tvojej pamäte: ľudia, projekty, ciele, kalendár, denník. Píšeš mu alebo podržíš medzerník a hovoríš. Odpovedá hlasom.
 - **Pamätá si.** Povieš „zapamätaj si, že sestra má v máji narodeniny" a o pol roka ti to pripomenie. Večer si sám zapíše, čo sa cez deň dialo.
-- **Pracuje sám.** Ráno ti pripraví prehľad dňa. Cez deň sám pripomenie, čo si chcel, a upozorní pred udalosťou v kalendári. Stráži poštu a ozve sa, len keď prišlo niečo dôležité. Večer zhrnie deň do denníka. Keď mu povieš „zisti mi…", pracuje na pozadí a ozve sa, keď je hotový.
+- **Pracuje sám.** Ráno ti pripraví prehľad dňa. Cez deň sám pripomenie, čo si chcel, a upozorní pred udalosťou v kalendári. Stráži poštu a ozve sa, len keď prišlo niečo dôležité. Večer zhrnie deň do denníka. Keď mu povieš „zisti mi…" alebo „cez noc mi priprav…", pracuje na pozadí a ozve sa, keď je hotový. Čo dorobí v noci, povie ti ráno.
 - **Zavolá ti.** Keď niečo nepočká, zazvoní ti mobil a Jarvis ti to povie. Odpovieš mu hlasom a on to zariadi.
 - **Rastie.** Keď vyjde nová verzia, sám sa ozve a po tvojom súhlase ju nainštaluje tak, aby ti ostali tvoje úpravy.
 - **Je tvoj.** Žiadny server, žiadna databáza v cloude, žiadne API kľúče. Beží na tvojom predplatnom Claude a tvoje dáta ostávajú u teba.
@@ -49,6 +50,8 @@ node scripts/doctor.mjs             skontroluje, čo počítaču chýba
 node scripts/hud.mjs                spustí Jarvisa na obrazovke
 node scripts/scan.mjs               pozrie, čo sa o tebe dá zistiť z počítača (len číta)
 node scripts/import.mjs run <súbor> naimportuje export dát (Instagram, WhatsApp, ChatGPT…)
+node scripts/alarm.mjs set 06:30     budík (test = zazvoní hneď, off = vypne)
+node scripts/job.mjs "…"            úloha na pozadí, aj na noc
 node scripts/routine.mjs --list     zoznam rutín
 node scripts/schedule.mjs install   zapne rutiny a pulz v systéme
 node scripts/schedule.mjs remove    vypne ich
@@ -80,6 +83,7 @@ Jarvis is a personal AI assistant built on Claude Code. It runs on your own comp
 
 - **Memory**: a local folder of markdown notes about your life (people, projects, goals, daily log), built during a guided interview and kept up to date by Jarvis itself.
 - **HUD**: a full-screen desktop interface with a 3D world of that memory, voice in and out, and a chat with Claude.
+- **Alarm clock**: at the set time Jarvis plays a chime and speaks a morning brief through the computer's speakers (sleep when known, weather, calendar, deadlines, what he did overnight), prepared by Claude a few minutes ahead, with a no-LLM fallback. Works with the HUD closed.
 - **Routines**: scheduled headless Claude Code runs (launchd on macOS, Task Scheduler on Windows), such as a morning brief and an evening summary that writes the day into memory, plus a pulse every few minutes (no LLM) for reminders, upcoming events and deadlines.
 - **Second brain**: a read-only scan of the computer during setup, an animated guide for requesting data exports (Instagram, Facebook, WhatsApp, Discord, Telegram, ChatGPT, Claude, Spotify and more), local importers, and a review screen where you confirm who is who.
 - **Phone calls**: when something cannot wait, Jarvis rings your mobile through your own Twilio account, says it, and acts on your spoken answer. No inbound access to your computer is needed.

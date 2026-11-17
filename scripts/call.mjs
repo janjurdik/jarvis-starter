@@ -12,6 +12,8 @@
  * (needs local speech recognition, docs/HLAS.md) and acts on it in the HUD.
  * Setup: docs/HOVORY.md. The pulse and the routines use this script when something is urgent.
  */
+// .env first: the modules below read JARVIS_MEMORY_DIR and JARVIS_DATA_DIR when they load.
+import '../hud/server/env.mjs'
 import { readFile } from 'node:fs/promises'
 import { callStatus, fetchReply, placeCall, waitCall } from '../hud/server/call.mjs'
 import { HUD_URL, hudAlive, parseArgs, postHud } from './lib.mjs'

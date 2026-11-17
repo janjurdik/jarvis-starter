@@ -100,7 +100,19 @@ The voice brain is a warm `claude -p` process with three MCP servers from `hud/s
 
 - `memory`: `calendar_list`, `view_todo`, `list_goals`, `upcoming_celebrations`, `get_health`, `memory_stats`, `search_notes`, `read_note`, `remember`, `add_todo`, `complete_todo`, `add_event`, `log_day`, `write_note`
 - `computer`: `open_app`, `open_url`
-- `jarvis-hud`: `hud_focus`, `hud_card`, `hud_log`, `weather`, `agent_task`, `agent_jobs`, `agent_reply`, `agent_stop`
+- `jarvis-hud`: `hud_focus`, `hud_card`, `hud_log`, `weather`, `call_user`, `agent_task`, `agent_jobs`, `agent_reply`, `agent_stop`, `set_alarm` (runs `scripts/alarm.mjs`)
 
 plus the built-in `WebSearch` and `WebFetch`, and `Read` limited to `memory/prilohy` (files dropped into the HUD;
 `data/brain` is denied explicitly).
+
+## Scripts that talk to the server
+
+- `scripts/job.mjs "<task>" --title "<title>"` → `POST /api/jobs` (starts the server when it is not running), `--list` → `GET /api/jobs`.
+- `scripts/say.mjs "<text>"` → `POST /api/say` when a HUD window is connected (`GET /api/health` → `clients`), otherwise the
+  computer's speakers (`hud/server/speak.mjs`).
+- `scripts/pulse.mjs` and `scripts/routine.mjs` post `/api/announce` with `silent: true` when no window is connected and
+  speak through the speakers instead. `scripts/alarm.mjs ring` always speaks through the speakers and only shows the card.
+
+For development on a machine that runs its own Jarvis: `JARVIS_SCHEDULE_DRY=1` keeps `schedule.mjs install` (and
+`alarm.mjs set`) away from launchd and Task Scheduler, `JARVIS_AUDIO=off` prepares the voice files but plays nothing.
+

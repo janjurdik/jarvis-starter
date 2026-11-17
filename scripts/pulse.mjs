@@ -9,27 +9,68 @@
  *   - a calendar event that starts in a few minutes,
  *   - tasks with a deadline today that are still open late in the afternoon.
  *
- * When something is due, Jarvis says it in the HUD and sends a system notification. A reminder or
+ * When something is due, Jarvis says it in the HUD (or through the speakers when no HUD window is
+ * open) and sends a system notification. A reminder or
  * an event marked as urgent (text starting with "!") also rings the user's mobile, when calls are
  * set up (docs/HOVORY.md). Each thing is announced once. In quiet hours he neither speaks nor calls.
+ *
+ * On a Mac with the alarm on, the pulse also keeps the computer from falling asleep in the hours
+ * before the alarm (caffeinate), so the alarm really rings at its time.
  *
  *   node scripts/pulse.mjs             run one check now
  *   node scripts/pulse.mjs --dry-run   only print what would be announced
  *   node scripts/pulse.mjs --json      the same as data
  */
+// .env first: the modules below read JARVIS_MEMORY_DIR and JARVIS_DATA_DIR when they load.
+import '../hud/server/env.mjs'
+import { spawn } from 'node:child_process'
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { ALARM_DIR, nextAlarmAt } from '../hud/server/alarm.mjs'
 import { getConfig } from '../hud/server/config.mjs'
 import { calendarRange } from '../hud/server/memory/calendar.mjs'
 import { MEMORY_DIR, todos } from '../hud/server/memory/index.mjs'
 import { isoDay } from '../hud/server/util.mjs'
 import { callReady } from '../hud/server/call.mjs'
-import { DATA_DIR, LOG_DIR, callOut, hudAlive, inWindow, notify, parseArgs, postHud } from './lib.mjs'
+import { DATA_DIR, IS_MAC, LOG_DIR, callOut, hudListeners, notify, parseArgs, postHud, quietNow } from './lib.mjs'
 
 const { flags } = parseArgs()
 const dry = flags.has('dry-run')
 const cfg = getConfig()
 const now = new Date()
+
+// Proof of life for `schedule.mjs install`, which checks that the system scheduler really runs Jarvis.
+if (!dry && !flags.has('json')) {
+  mkdirSync(join(DATA_DIR, 'pulse'), { recursive: true })
+  writeFileSync(join(DATA_DIR, 'pulse', 'heartbeat'), now.toISOString())
+}
+
+/**
+ * macOS does not wake up for a scheduled job, it runs it after waking. So in the 12 hours before the
+ * alarm a `caffeinate -i` keeps the Mac from idle sleep (the display may still turn off). A closed
+ * MacBook lid still puts it to sleep: that is in the docs.
+ */
+function keepAwakeForAlarm() {
+  const next = nextAlarmAt(cfg.alarm, now)
+  if (!IS_MAC || !next) return
+  const left = next.getTime() - now.getTime()
+  if (left > 12 * 3600_000) return
+  const file = join(ALARM_DIR, 'caffeinate.json')
+  try {
+    const held = JSON.parse(readFileSync(file, 'utf8'))
+    process.kill(held.pid, 0)
+    if (held.until >= next.getTime()) return
+  } catch {
+    // nothing holds the Mac awake yet
+  }
+  const seconds = Math.round(left / 1000) + 20 * 60
+  const child = spawn('/usr/bin/caffeinate', ['-i', '-t', String(seconds)], { detached: true, stdio: 'ignore' })
+  child.on('error', () => {})
+  child.unref()
+  mkdirSync(ALARM_DIR, { recursive: true })
+  writeFileSync(file, JSON.stringify({ pid: child.pid, until: next.getTime() + 20 * 60_000 }))
+}
+if (!dry && !flags.has('json')) keepAwakeForAlarm()
 const today = isoDay(now)
 const minutesNow = now.getHours() * 60 + now.getMinutes()
 const DIR = join(DATA_DIR, 'pulse')
@@ -114,19 +155,22 @@ try {
   // no task file yet
 }
 
-if (flags.has('json')) console.log(JSON.stringify({ ok: true, at: now.toISOString(), quiet: inWindow(cfg.quiet), due }, null, 2))
+if (flags.has('json')) console.log(JSON.stringify({ ok: true, at: now.toISOString(), quiet: quietNow(cfg, now), due }, null, 2))
 else if (dry) console.log(due.length ? due.map((d) => `• ${d.say}`).join('\n') : 'Teraz nie je čo ohlásiť.')
 if (dry || !due.length) process.exit(0)
 
 // ── deliver ──
 mkdirSync(DIR, { recursive: true })
 mkdirSync(LOG_DIR, { recursive: true })
-const hush = inWindow(cfg.quiet)
-const alive = await hudAlive()
+const hush = quietNow(cfg, now)
+const listeners = await hudListeners()
 const canCall = !hush && callReady()
+const aloud = []
 for (const d of due) {
   if (d.urgent && canCall) callOut(d.say, 'pulz')
-  if (alive) await postHud('/api/announce', { title: d.title, text: d.text, say: d.say, node: d.node, icon: 'alarm', silent: hush })
+  // The HUD speaks only when a window is open. Without one, Jarvis says it through the speakers.
+  if (listeners >= 0) await postHud('/api/announce', { title: d.title, text: d.text, say: d.say, node: d.node, icon: 'alarm', silent: hush || listeners === 0 })
+  if (!hush && listeners <= 0) aloud.push(d.say)
   await notify(`Jarvis: ${d.title}`, d.say)
   state.fired[d.id] = now.toISOString()
   appendFileSync(join(LOG_DIR, 'pulse.log'), `${now.toISOString()} ${hush ? '(ticho) ' : ''}${d.urgent && canCall ? '(volám) ' : ''}${d.say}\n`)
@@ -140,3 +184,9 @@ if (firedLines.length && reminderLines) {
 const cutoff = Date.now() - 3 * 86_400_000
 for (const [id, at] of Object.entries(state.fired)) if (new Date(at).getTime() < cutoff) delete state.fired[id]
 writeFileSync(STATE_FILE, JSON.stringify(state, null, 2))
+
+if (aloud.length) {
+  const { localVoiceOn, speakLocal } = await import('../hud/server/speak.mjs')
+  if (localVoiceOn()) await speakLocal(aloud.join(' '))
+}
+process.exit(0)

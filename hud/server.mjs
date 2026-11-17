@@ -20,6 +20,7 @@ import { stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { networkInterfaces } from 'node:os'
 import { extname, join, normalize, sep } from 'node:path'
+import { quietNow } from './server/alarm.mjs'
 import { Brain, CLAUDE, EFFORT, MODEL } from './server/brain.mjs'
 import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onVoiceChange, sayText, sendChat, setVoice, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
 import { CONFIG_FILE, getConfig } from './server/config.mjs'
@@ -618,7 +619,10 @@ async function drainAnnounce() {
     while (announceQueue.length) {
       while (voiceState() !== 'idle' || currentTurnId()) await new Promise((r) => setTimeout(r, 400))
       const { job, silent, say } = announceQueue.shift()
+      // Quiet hours: a job that finishes at night ("cez noc mi priprav…") shows its card, the voice waits for the morning brief.
+      const hush = quietNow(getConfig())
       if (say) {
+        if (hush) continue
         sayText(say)
         await new Promise((r) => setTimeout(r, 1200))
         continue
@@ -643,7 +647,7 @@ async function drainAnnounce() {
       }
       sendHud({ type: job.status === 'done' ? 'done' : 'alert', text: `Úloha ${title} · ${STATUS_SK[job.status] ?? job.status}`, icon: job.status === 'done' ? 'check' : 'alarm', say: null, heard: null, node: 'projekty', source: 'jarvis' })
       pushSnapshot('úloha').catch(() => {})
-      if (!silent) {
+      if (!silent && !hush) {
         // Only the short spoken line of the job is read, never the whole written result.
         sayText(`${lead} ${job.say ?? ''}`.trim().slice(0, 420))
         await new Promise((r) => setTimeout(r, 1200))

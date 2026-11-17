@@ -8,22 +8,32 @@
  *   npm run schedule -- status             what is registered now
  *   npm run schedule -- remove             remove everything Jarvis registered
  *
- * A routine that was missed because the computer slept runs after it wakes up.
+ * A routine that was missed because the computer slept runs after it wakes up. The alarm
+ * (scripts/alarm.mjs) is registered here too: its brief a few minutes ahead and the ring itself.
+ * On Windows both wake the computer from sleep; on macOS the pulse keeps the Mac awake instead.
+ *
+ * After `install`, the pulse is started once through the scheduler to prove that the system really
+ * runs Jarvis (macOS may keep it out of Downloads, Desktop and Documents).
  */
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+// .env first: the modules below read JARVIS_MEMORY_DIR and JARVIS_DATA_DIR when they load.
+import '../hud/server/env.mjs'
+import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
+import { prepareSlot } from '../hud/server/alarm.mjs'
 import { getConfig } from '../hud/server/config.mjs'
-import { IS_MAC, IS_WIN, LABEL, LOG_DIR, REPO, TASK_FOLDER, has, parseArgs, sh } from './lib.mjs'
+import { DATA_DIR, IS_MAC, IS_WIN, LABEL, LOG_DIR, REPO, TASK_FOLDER, has, parseArgs, sh } from './lib.mjs'
 
 const { flags, rest } = parseArgs()
 const action = rest[0] ?? 'status'
-const dry = flags.has('dry-run')
+// JARVIS_SCHEDULE_DRY=1: never touch the system scheduler (development and tests on a machine that runs its own Jarvis).
+const dry = flags.has('dry-run') || process.env.JARVIS_SCHEDULE_DRY === '1'
 const NODE = process.execPath
 const SCRIPT = join(REPO, 'scripts', 'routine.mjs')
 const PULSE = join(REPO, 'scripts', 'pulse.mjs')
-/** What the scheduler starts: a routine goes through routine.mjs, the pulse is its own script. */
-const command = (job) => (job.script ? [job.script] : [SCRIPT, job.id])
+const ALARM = join(REPO, 'scripts', 'alarm.mjs')
+/** What the scheduler starts: a routine goes through routine.mjs, the pulse and the alarm are their own scripts. */
+const command = (job) => (job.script ? [job.script, ...(job.args ?? [])] : [SCRIPT, job.id])
 /** "07:30 (daily)" or "každých 5 min". */
 const when = (job) => (job.every ? `každých ${job.every} min` : `${job.time} (${job.days})`)
 const AGENTS_DIR = join(homedir(), 'Library', 'LaunchAgents')
@@ -117,7 +127,8 @@ function winScript(routine) {
   return [
     `$action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ${psq(argument)} -WorkingDirectory ${psq(REPO)}`,
     `$trigger = ${trigger}`,
-    '$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 30)',
+    // The alarm wakes the computer from sleep (when wake timers are allowed in the power plan, the default on AC power).
+    `$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 30)${routine.wake ? ' -WakeToRun' : ''}`,
     `Register-ScheduledTask -TaskName ${psq(routine.id)} -TaskPath ${psq(`\\${TASK_FOLDER}\\`)} -Action $action -Trigger $trigger -Settings $settings -Description ${psq(`Jarvis: ${routine.title}`)} -Force | Out-Null`,
   ].join('\n')
 }
@@ -137,6 +148,37 @@ async function winInstall(routines) {
   }
 }
 
+// ── proof that the scheduler really runs Jarvis ────────────────────────
+
+/**
+ * Starts the pulse once through the system scheduler and waits for its heartbeat. When it does
+ * not come, the system did not let the scheduled job run: on macOS typically because the folder
+ * is in Downloads, Desktop or Documents.
+ */
+async function selfTest() {
+  const file = join(DATA_DIR, 'pulse', 'heartbeat')
+  const before = (() => {
+    try {
+      return statSync(file).mtimeMs
+    } catch {
+      return 0
+    }
+  })()
+  const started = IS_MAC ? await sh('/bin/launchctl', ['kickstart', `${domain()}/${PREFIX}pulz`]) : await ps(`Start-ScheduledTask -TaskName 'pulz' -TaskPath ${psq(`\\${TASK_FOLDER}\\`)}`)
+  if (started.code !== 0) return console.log(`  · Skúšobné spustenie pulzu sa nepodarilo (${started.out.slice(0, 120)}). Over: node scripts/schedule.mjs status`)
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 500))
+    try {
+      if (statSync(file).mtimeMs > before) return console.log('  ✓ Overené: systém Jarvisa naozaj spúšťa.')
+    } catch {
+      // not yet
+    }
+  }
+  console.log('  ✗ Systém úlohu spustil, ale Jarvis sa neozval do 15 sekúnd.')
+  if (IS_MAC && /\/(Downloads|Desktop|Documents)\//.test(`${REPO}/`)) console.log(`    macOS pravdepodobne nepustil rutiny do priečinka ${REPO}. Presuň Jarvisa do domovského priečinka (napríklad ~/Jarvis) a spusti install znova.`)
+  else console.log(`    Pozri ${join(LOG_DIR, 'routine-pulz.out.log')}.`)
+}
+
 // ── main ───────────────────────────────────────────────────────────────
 
 if (!IS_MAC && !IS_WIN) {
@@ -150,7 +192,14 @@ const cfg = getConfig()
  * tiny script without Claude checks reminders, the calendar and deadlines and speaks up when due.
  */
 const pulse = cfg.pulse?.enabled === false ? [] : [{ id: 'pulz', title: 'Pulz (pripomienky, kalendár, termíny)', every: cfg.pulse.every, script: PULSE, enabled: true }]
-const all = [...cfg.routines, ...pulse]
+/** The alarm: Claude prepares the brief a few minutes ahead (routine budik), then the ring itself. */
+const alarm = cfg.alarm
+  ? [
+      { id: 'budik-priprava', title: 'Budík: príprava briefu', ...prepareSlot(cfg.alarm), script: SCRIPT, args: ['budik', '--prepare'], enabled: cfg.alarm.enabled, wake: true },
+      { id: 'budik', title: 'Budík', time: cfg.alarm.time, days: cfg.alarm.days, script: ALARM, args: ['ring'], enabled: cfg.alarm.enabled, wake: true },
+    ]
+  : []
+const all = [...cfg.routines.filter((r) => r.id !== 'budik' && r.id !== 'budik-priprava'), ...alarm, ...pulse]
 const routines = all.filter((r) => r.enabled)
 
 if (action === 'install') {
@@ -169,6 +218,7 @@ if (action === 'install') {
   console.log('Registrujem rutiny v systéme:')
   if (IS_MAC) await macInstall(ready)
   else await winInstall(ready)
+  if (ready.some((r) => r.id === 'pulz') && !flags.has('no-test')) await selfTest()
   console.log('\nHotovo. Rutiny pobežia samy, aj keď je Claude zatvorený. Počítač musí byť zapnutý a ty prihlásený.')
 } else if (action === 'remove') {
   const list = IS_MAC ? macInstalled() : await winInstalled()

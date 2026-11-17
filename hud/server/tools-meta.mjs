@@ -23,6 +23,7 @@ const META = {
   add_todo: { label: 'Pridávam úlohu', icon: 'check', node: 'projekty' },
   call_user: { label: 'Volám na mobil', icon: 'alarm', node: null },
   remind: { label: 'Nastavujem pripomienku', icon: 'alarm', node: 'kalendar' },
+  set_alarm: { label: 'Nastavujem budík', icon: 'alarm', node: 'rutiny' },
   search_messages: { label: 'Hľadám v rozhovoroch', icon: 'search', node: 'spravy' },
   read_thread: { label: 'Čítam rozhovor', icon: 'search', node: 'spravy' },
   complete_todo: { label: 'Odškrtávam úlohu', icon: 'check', node: 'projekty' },

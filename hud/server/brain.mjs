@@ -58,6 +58,7 @@ export function allowedTools() {
     'mcp__jarvis-hud__agent_jobs',
     'mcp__jarvis-hud__agent_reply',
     'mcp__jarvis-hud__agent_stop',
+    'mcp__jarvis-hud__set_alarm',
     'WebSearch',
     'WebFetch',
     'Read',

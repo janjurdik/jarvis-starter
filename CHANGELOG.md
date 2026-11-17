@@ -2,6 +2,21 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.3.0 (2026-11-17)
+
+- **Budík.** Povieš „zobuď ma o 6:30" a ráno Jarvis zazvoní a nahlas ti povie, ako si spal (keď to vie), aké je počasie,
+  čo ťa dnes čaká a čo spravil, kým si spal. Hovorí cez reproduktory počítača, aj keď je jeho okno zatvorené. Na Macu ho
+  pred budíkom nenechá zaspať, na Windows ho zobudí. Keď chceš, aj ti zavolá na mobil. Skúška: `node scripts/alarm.mjs test`.
+- **Práca cez noc.** „Cez noc mi priprav…" Jarvis sa do toho pustí hneď, v noci je ticho a ráno ti povie, čo je hotové
+  a čo čaká na tvoje „áno". To isté platí pre ranný brief.
+- **Jarvis prehovorí aj bez okna.** Pripomienky a výsledky rutín povie cez reproduktory, keď HUD nie je otvorený.
+  Úlohy, ktoré skončia v tichých hodinách, už v noci nehovoria nahlas.
+- **Rýchlejší prvý dojem.** Pri nastavení ti Jarvis do pár minút povie nahlas, čo o tebe zistil, a hneď pre teba spraví
+  prvú užitočnú vec podľa toho, čo robíš (maily a ponuky, škola, obsah, papiere). Veľké poznámky dočíta na pozadí.
+- **Kontrola, že rutiny naozaj bežia.** Po zapnutí rutín Jarvis overí, že ich systém spúšťa, a povie, keď nie
+  (na Macu typicky priečinok v Stiahnutých). Kontrola počítača ukáže aj bezplatný účet Claude, s ktorým Jarvis nefunguje.
+- **Oprava.** Pulz a rutiny čítajú pamäť z priečinka nastaveného v `.env` (`JARVIS_MEMORY_DIR`), predtým ho mohli prehliadnuť.
+
 ## 1.2.0 (2026-11-15)
 
 - **Jarvis smie všetko, čo ty.** Obmedzený režim je preč. Úlohy na pozadí, rutiny aj hlasový Jarvis pracujú so súbormi kdekoľvek

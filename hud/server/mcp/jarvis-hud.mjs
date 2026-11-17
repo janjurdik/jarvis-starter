@@ -8,8 +8,27 @@
  *   hud_log(text, icon?, type?) a line in the LOG
  *   weather(place?, days?)      weather (Open-Meteo through the HUD server)
  *   agent_task / agent_jobs / agent_reply / agent_stop   background jobs (full Claude Code)
+ *   set_alarm(time?, days?, call?, off?)   the alarm clock (scripts/alarm.mjs)
  */
+import { execFile } from 'node:child_process'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { serveMcp } from './stdio.mjs'
+
+const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+
+/** Runs scripts/alarm.mjs with --json and returns its answer. */
+function alarmScript(args) {
+  return new Promise((resolve) => {
+    execFile(process.execPath, [join(REPO, 'scripts', 'alarm.mjs'), ...args, '--json'], { cwd: REPO, timeout: 120_000, windowsHide: true }, (err, stdout) => {
+      try {
+        resolve(JSON.parse(stdout.slice(stdout.indexOf('{'), stdout.lastIndexOf('}') + 1)))
+      } catch {
+        resolve({ ok: false, summary: `Budík sa nepodarilo nastaviť: ${String(err?.message ?? stdout).slice(0, 200)}` })
+      }
+    })
+  })
+}
 
 const HUD = (process.env.HUD_URL || 'http://127.0.0.1:4545').replace(/\/$/, '')
 const TOKEN = process.env.HUD_BRAIN_TOKEN || ''
@@ -153,6 +172,27 @@ serveMcp({
       handler: async ({ id }) => {
         const r = await hud('job_stop', { id })
         return r.isError ? r : `Úloha ${id} zastavená.`
+      },
+    },
+    {
+      name: 'set_alarm',
+      description:
+        'Budík: ráno v daný čas Jarvis zazvoní a povie nahlas ranný brief (spánok, ak je známy, počasie, kalendár, termíny, čo spravil cez noc), aj keď je HUD zatvorený. Na „zobuď ma o…", „budík na…", „zruš budík". Bez parametrov povie, ako je nastavený.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          time: { type: 'string', description: 'Čas HH:MM v 24-hodinovom tvare, napr. "06:30".' },
+          days: { type: 'string', description: 'daily (každý deň), weekdays (pondelok až piatok), weekend, alebo zoznam po,ut,st,št,pi,so,ne. Bez zadania ostane, ako bolo.' },
+          call: { type: 'boolean', description: 'true = budík mu aj zavolá na mobil (ak má nastavené hovory).' },
+          off: { type: 'boolean', description: 'true = vypnúť budík.' },
+        },
+      },
+      handler: async ({ time, days, call, off }) => {
+        const args = off ? ['off'] : time ? ['set', String(time), ...(days ? ['--days', String(days)] : []), ...(call === true ? ['--call'] : call === false ? ['--no-call'] : [])] : ['status']
+        const r = await alarmScript(args)
+        await hud('memory_changed', {}).catch(() => null)
+        const text = [r.summary, r.problem ? `Problém: ${r.problem}` : '', ...(r.notes ?? [])].filter(Boolean).join(' ')
+        return r.ok === false ? { text, isError: true } : `${text} Povedz to jednou až dvoma vetami, hlavne čas a že počítač má ostať zapnutý.`
       },
     },
     {

@@ -29,6 +29,10 @@ JARVIS_EDGE_VOICE=sk-SK-ViktoriaNeural
 Slovenské hlasy: `sk-SK-LukasNeural`, `sk-SK-ViktoriaNeural`. České: `cs-CZ-AntoninNeural`, `cs-CZ-VlastaNeural`.
 Pre češtinu pridaj aj `JARVIS_LANG=cs`.
 
+Keď okno HUD nie je otvorené, Jarvis hovorí cez reproduktory počítača tým istým hlasom: budík ráno, pripomienky
+a výsledky rutín. Na Macu prehráva `afplay`, na Windows PowerShell. Keď to nechceš (okrem budíka), daj do `.env`
+`JARVIS_LOCAL_VOICE=0`.
+
 ## Ako Jarvis počúva
 
 V HUD podrž **medzerník**, povedz vetu a pusti. Na prepis reči na text sú tri možnosti (`JARVIS_STT` v `.env`):

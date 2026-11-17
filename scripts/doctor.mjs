@@ -37,7 +37,11 @@ if (claude) {
   } catch {
     login = null
   }
-  add('claude-login', login?.loggedIn === true, 'Prihlásenie do Claude', login?.loggedIn ? `predplatné ${login.subscriptionType ?? 'neznáme'}` : 'neprihlásený', 'V termináli spusti: claude  (a prihlás sa cez prehliadač)')
+  // Jarvis runs on the Claude subscription (Pro or Max). A Console login works too, but every run is paid per use.
+  const plan = String(login?.subscriptionType ?? '').toLowerCase()
+  const consoleLogin = login?.authMethod === 'console' || login?.apiKeySource
+  const loginDetail = !login?.loggedIn ? 'neprihlásený' : plan === 'free' ? 'bezplatný účet: Jarvis potrebuje predplatné Pro alebo Max' : consoleLogin && !plan ? 'prihlásený cez Anthropic Console: každé použitie sa platí z kreditu, nie z predplatného' : `predplatné ${login.subscriptionType ?? 'neznáme'}`
+  add('claude-login', login?.loggedIn === true && plan !== 'free', 'Prihlásenie do Claude', loginDetail, plan === 'free' ? 'Predplatné Pro alebo Max: claude.ai/upgrade, potom znova: claude auth login' : 'Spusti: claude auth login  (otvorí sa prehliadač, klikni Povoliť). Ak nejde, v Termináli napíš claude a prihlás sa.')
 } else {
   add('claude', false, 'Claude Code CLI', 'nenašiel sa', IS_WIN ? 'PowerShell: irm https://claude.ai/install.ps1 | iex' : 'Terminál: curl -fsSL https://claude.ai/install.sh | bash')
 }
@@ -105,6 +109,12 @@ if (IS_MAC) {
   scheduled = res.out.split(/\r?\n/).map((l) => l.split('","')[0].replace(/^"/, '')).filter((n) => n.startsWith(`\\${TASK_FOLDER}\\`))
 }
 add('schedule', scheduled.length > 0, 'Rutiny naplánované v systéme', scheduled.length ? scheduled.join(', ') : 'zatiaľ nie', 'npm run schedule -- install')
+
+// ── alarm ──
+const alarm = config?.alarm && typeof config.alarm === 'object' ? config.alarm : null
+const alarmOn = Boolean(alarm?.time) && alarm.enabled !== false
+const alarmIn = scheduled.some((n) => /(^|[.\\])budik$/.test(n))
+add('alarm', alarmOn && alarmIn, 'Budík', alarmOn ? `${alarm.time} (${alarm.days ?? 'daily'})${alarmIn ? '' : ', ešte nie je v systéme'}` : 'nenastavený', alarmOn ? 'node scripts/schedule.mjs install' : 'Povedz Jarvisovi: zobuď ma o 6:30  (alebo node scripts/alarm.mjs set 06:30)')
 
 let dataOk = true
 try {

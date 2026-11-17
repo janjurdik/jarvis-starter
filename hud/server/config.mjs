@@ -4,6 +4,7 @@
  */
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { parseAlarm } from './alarm.mjs'
 import { REPO } from './util.mjs'
 
 export const CONFIG_FILE = process.env.JARVIS_CONFIG || join(REPO, 'config', 'jarvis.json')
@@ -66,6 +67,8 @@ export function getConfig() {
     dueAt: /^\d{1,2}:\d{2}$/.test(p.dueAt ?? '') ? p.dueAt.padStart(5, '0') : DEFAULTS.pulse.dueAt,
   }
   value.quiet = typeof raw.quiet === 'string' ? raw.quiet : DEFAULTS.quiet
+  // The alarm clock (scripts/alarm.mjs). Like routines, only from the user's own config.
+  value.alarm = mtime ? parseAlarm(raw.alarm) : null
   cache = { mtime, value }
   return value
 }

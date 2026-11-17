@@ -1,7 +1,8 @@
 # Samostatnosť: ako Jarvis pracuje sám
 
-Chatbot čaká, kým sa niečo opýtaš. Agent pracuje aj vtedy, keď pri počítači nesedíš. Jarvis je agent vďaka piatim veciam:
+Chatbot čaká, kým sa niečo opýtaš. Agent pracuje aj vtedy, keď pri počítači nesedíš. Jarvis je agent vďaka šiestim veciam:
 
+0. **Budík:** ráno ťa zobudí a povie ti, ako si spal, čo ťa dnes čaká a čo spravil, kým si spal.
 1. **Pulz:** každých päť minút malý program bez AI skontroluje pripomienky, kalendár a termíny. Keď niečo nastáva, Jarvis to povie.
 2. **Rutiny:** v daný čas sa spustí sám a spraví zadanú prácu (ranný brief, večerné zhrnutie).
 3. **Stráže:** rutiny, ktoré bežia každú hodinu a ozvú sa len vtedy, keď je čo povedať (stráž pošty).
@@ -12,7 +13,10 @@ Chatbot čaká, kým sa niečo opýtaš. Agent pracuje aj vtedy, keď pri počí
 
 | Kedy | Čo sa stane | Čo to spustilo | Stojí to predplatné? |
 |---|---|---|---|
-| 07:30 | Prejde kalendár, úlohy, ciele, poštu a počasie a povie ti brief | rutina `ranny-brief` | áno, ako jeden dlhší rozhovor |
+| 23:00 | „Cez noc mi priprav ponuku pre Novákovcov." Pustí sa do toho hneď, v noci nič nehovorí | úloha na pozadí | áno |
+| 06:10 | Pripraví ranné budenie: spánok, počasie, kalendár, termíny, čo spravil cez noc | rutina `budik` | áno, ako jeden rozhovor |
+| 06:30 | Zazvoní a povie ti to nahlas cez reproduktory, aj keď je HUD zatvorený | budík | nie |
+| 07:30 | Prejde kalendár, úlohy, ciele, poštu a počasie a povie ti brief (keď nemáš budík) | rutina `ranny-brief` | áno, ako jeden dlhší rozhovor |
 | 08:45 | „O pätnásť minút máte poradu." | pulz | nie |
 | 09:00 až 21:00, každú hodinu | Pozrie poštu. Ozve sa, len keď píše niekto dôležitý | stráž `straz-posty` | áno, málo (malý model) |
 | 15:00 | „Pripomínam: zavolať mame." Pri súrnej pripomienke ti zavolá na mobil | pulz, `memory/pripomienky.md` | nie (hovor stojí pár centov) |
@@ -22,7 +26,49 @@ Chatbot čaká, kým sa niečo opýtaš. Agent pracuje aj vtedy, keď pri počí
 | 22:30 až 07:00 | Tiché hodiny: nič nehovorí nahlas, len zapisuje | `quiet` v konfigurácii | |
 | raz za 12 hodín | Pozrie, či vyšla nová verzia Jarvisa, a spýta sa, či ju má nainštalovať | HUD | nie |
 
-Všetko, čo Jarvis povie, ide do HUD na ploche a ako oznámenie systému. Čo nepočká, s tým ti zavolá na mobil (`docs/HOVORY.md`).
+Všetko, čo Jarvis povie, ide do HUD na ploche a ako oznámenie systému. Keď okno HUD nie je otvorené, povie to cez
+reproduktory počítača (vypneš to v `.env`: `JARVIS_LOCAL_VOICE=0`). Čo nepočká, s tým ti zavolá na mobil (`docs/HOVORY.md`).
+
+## Budík
+
+Povieš „zobuď ma o 6:30 cez týždeň" (v HUD aj v Claude) a ráno sa stane toto:
+
+1. Pár minút pred budíkom (predvolene 20) Claude bez okna pripraví ranné budenie podľa `routines/budik.md`:
+   spánok, ak ho vie, počasie, čo ťa dnes čaká, termíny, čo spravil cez noc a čo čaká na tvoj súhlas.
+2. V čase budíka zaznie zvonenie a Jarvis ti to povie nahlas cez reproduktory počítača. Nezáleží na tom, či je HUD otvorený.
+   V HUD sa ukáže karta a celý text je v `memory/schranka/`.
+3. Keď Claude brief nestihne (bez internetu, bez predplatného), Jarvis povie kratší brief priamo z pamäte.
+4. S `--call` ti budík aj zavolá na mobil (`docs/HOVORY.md`).
+5. Tiché hodiny sa po budíku pre ten deň končia: pripomienky ráno už znova hovoria.
+
+```json
+"alarm": { "time": "06:30", "days": "weekdays", "enabled": true, "call": false, "prepare": 20 }
+```
+
+| Príkaz | Čo robí |
+|---|---|
+| `node scripts/alarm.mjs` | ako je budík nastavený |
+| `node scripts/alarm.mjs set 06:30 --days weekdays` | nastaví budík a zapíše ho do systému (`daily`, `weekdays`, `weekend`, `po,st,pi`) |
+| `node scripts/alarm.mjs off` / `on` | vypne alebo zapne |
+| `node scripts/alarm.mjs test` | zazvoní hneď, s briefom od Clauda (asi minúta) |
+| `node scripts/alarm.mjs test --quick` | zazvoní hneď s krátkym briefom z pamäte |
+
+Čo budík potrebuje:
+
+- **Zapnutý počítač.** Mac: nechaj MacBook otvorený a v zásuvke. V hodinách pred budíkom ho Jarvis nenechá uspať
+  (displej môže zhasnúť), zatvorené veko ho ale uspí a budík zazvoní až po otvorení. Windows: v zásuvke, zapnutý alebo
+  v režime spánku, budík ho zobudí (ak to plán napájania povoľuje, na sieti je to predvolené). Vypnutý počítač nezazvoní.
+- **Zvuk.** Na Macu Jarvis stlmený alebo veľmi tichý zvuk na budík zosilní na 50 % a potom vráti (`JARVIS_ALARM_VOLUME`).
+  Na Windows nechaj hlasitosť zapnutú.
+- **Spánok** povie len vtedy, keď ho vie: z denníka (stačí mu povedať „spal som sedem hodín") alebo z konektora, ktorý
+  má dáta z hodiniek. Inak ho vynechá. Jarvis sám spánok nemeria.
+
+## Práca cez noc
+
+„Cez noc mi priprav cenovú ponuku pre Novákovcov" alebo „kým budem spať, prejdi moje poznámky a uprac ich". Jarvis
+pustí úlohu na pozadí hneď, v tichých hodinách nič nehovorí nahlas a ráno ti pri budíku (alebo v rannom briefe) povie,
+čo je hotové a čo čaká na tvoje „áno". Mail ani správu za teba neodošle, pripraví ich. HUD musí bežať (spúšťa sa po
+prihlásení, `node scripts/autostart.mjs install`). Z príkazového riadku: `node scripts/job.mjs "zadanie" --title "Názov"`.
 
 ## Ako funguje pulz
 
@@ -97,7 +143,9 @@ node scripts/schedule.mjs install
 | `node scripts/routine.mjs ranny-brief` | spustí rutinu hneď |
 | `node scripts/routine.mjs ranny-brief --mock` | skúška doručenia bez Claude |
 | `node scripts/pulse.mjs --dry-run` | čo by pulz teraz ohlásil |
-| `node scripts/schedule.mjs install` | zaregistruje rutiny, stráže a pulz v systéme |
+| `node scripts/alarm.mjs test --quick` | skúška budíka hneď |
+| `node scripts/job.mjs "…"` | úloha na pozadí (aj na noc) |
+| `node scripts/schedule.mjs install` | zaregistruje rutiny, stráže, budík a pulz v systéme a overí, že ich systém naozaj spúšťa |
 | `node scripts/schedule.mjs status` | čo je zaregistrované |
 | `node scripts/schedule.mjs remove` | všetko odregistruje |
 

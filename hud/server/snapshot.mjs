@@ -136,7 +136,10 @@ async function build() {
         return { kind: e.kind, name: e.person, day: e.day, daysUntil: days, when: days === 0 ? 'dnes' : days === 1 ? 'zajtra' : days === 2 ? 'pozajtra' : `o ${days} dní`, age: e.age ?? null }
       }),
     todo: { open: open.length, today: open.filter((t) => t.due && t.due <= today).length },
-    routines: cfg.routines.filter((r) => r.enabled && routineRunsOn(r, today)).map((r) => ({ id: r.id, time: r.time, name: r.title, bot: 'Jarvis' })),
+    routines: [
+      ...(cfg.alarm?.enabled && routineRunsOn(cfg.alarm, today) ? [{ id: 'budik', time: cfg.alarm.time, name: 'Budík', bot: 'Jarvis' }] : []),
+      ...cfg.routines.filter((r) => r.enabled && routineRunsOn(r, today)).map((r) => ({ id: r.id, time: r.time, name: r.title, bot: 'Jarvis' })),
+    ],
     weather,
     quests: {
       active: goalList.filter((q) => q.status === 'active').length,

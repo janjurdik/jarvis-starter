@@ -4,6 +4,7 @@
   "formal": true,
   "city": "Bratislava",
   "quiet": "22:30-07:00",
+  "alarm": { "time": "06:30", "days": "weekdays", "enabled": false, "call": false },
   "pulse": { "enabled": true, "every": 5, "eventLead": 15, "dueAt": "17:00" },
   "routines": [
     { "id": "ranny-brief", "title": "Ranný brief", "time": "07:30", "days": "daily", "enabled": true },

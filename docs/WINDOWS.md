@@ -48,6 +48,14 @@ Zaregistruje rutiny v Plánovači úloh v priečinku `Jarvis`. Uvidíš ich, ke�
 Bežia pod tvojím účtom, len keď si prihlásený, a zmeškaná rutina sa spustí po zobudení počítača.
 Odstránenie: `node scripts\schedule.mjs remove`.
 
+## Budík
+
+`node scripts/alarm.mjs set 06:30` zaregistruje budík v Plánovači úloh s voľbou „zobudiť počítač". Počítač nechaj
+v zásuvke, zapnutý alebo v režime spánku (vypnutý ani v hibernácii nezazvoní). Budenie zo spánku musí povoľovať plán
+napájania (Možnosti napájania → Povoliť časovače budenia, na sieti je to zvyčajne zapnuté). Hlas ide cez reproduktory
+aj bez otvoreného HUD. Bez `uv` hovorí systémovým hlasom Windows, ktorý po slovensky nemusí vedieť: nainštaluj `uv`.
+Skúška: `node scripts\alarm.mjs test --quick`.
+
 ## Časté problémy
 
 - **`npm` hlási chybu o skriptoch v PowerShelli:** použi `npm.cmd install`, alebo príkazy v tvare `node scripts\…`.
