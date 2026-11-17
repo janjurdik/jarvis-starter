@@ -77,6 +77,14 @@ zvyšok dočítaš na pozadí.
    Sken len číta: meno a účet, jazyk a časové pásmo, nainštalované appky, poznámky (Obsidian a iné), projekty a kód,
    dokumenty podľa názvov, prehliadače a záložky, hudbu, hry (Steam a ďalšie), fotky, komunikačné appky,
    AI nástroje, pripojené konektory a **už stiahnuté exporty dát**.
+   **Keď Claude sken nepustí** (príkaz vráti zamietnutie povolenia, napríklad „Permission denied" alebo hlášku
+   o „auto mode classifier"), neskúšaj ho spustiť inak ani obísť. Claude Code v automatickom režime niekedy zablokuje
+   program, ktorý prechádza celý domovský priečinok. Povedz používateľovi jednou vetou prečo a daj mu jeden riadok
+   na spustenie: macOS Terminál (Cmd+Medzerník, „Terminál") `cd "<cesta k tomuto priečinku>" && node scripts/scan.mjs --deep`,
+   Windows PowerShell `cd "<cesta>"; node scripts/scan.mjs --deep`. Za `<cesta>` dosaď skutočnú cestu k priečinku Jarvisa.
+   Ak beží Claude desktop, rovnaký riadok môže napísať aj do okna Claude s výkričníkom na začiatku (`! node scripts/scan.mjs --deep`).
+   Zapíš si do `data/setup.json` do `caka` „sken spustí používateľ". Keď napíše, že je hotovo, prečítaj `data/scan/scan.md`
+   a `data/scan/scan.json` a pokračuj bodom 2. Rovnako postupuj pri skene s `--allow` v bode 3.
 2. **Choď hlbšie sám.** Sken ti dá mapu, ty z nej sprav poznanie. Podľa toho, čo našiel:
    - **Poznámky** (`action: import-notes`): prejdi priečinok (Glob, Read). Nájdi v ňom ľudí, projekty, ciele, denník a fakty o ňom. Pri veľkom vaulte (stovky poznámok) teraz prečítaj len štruktúru a najnovšie a najdlhšie poznámky. Zvyšok daj ako úlohu na pozadí, nech nastavenie nestojí: `node scripts/job.mjs "Prečítaj celý priečinok <cesta> podľa kroku 2 v CLAUDE.md a doplň pamäť (ľudia, projekty, ciele, fakty). Pôvodné súbory nemeň." --title "Čítam tvoje poznámky"`. Pôvodné súbory nikdy nemeň. Ak je to jeho hlavný zápisník, ponúkni neskôr, že Jarvis bude používať priamo ten priečinok ako pamäť (`JARVIS_MEMORY_DIR` v `.env`).
    - **Dokumenty:** prečítaj životopis, ak nejaký je, a súbory, ktoré podľa názvu hovoria o ňom (rozvrh, zmluva o práci, prihláška). Faktúry, výpisy a heslá nečítaj.
@@ -85,7 +93,7 @@ zvyšok dočítaš na pozadí.
    - **Záložky a história prehliadača:** z domén vyčítaš, čo používa (škola, banka, nástroje, záľuby). Do pamäte píš závery, nie zoznam stránok.
    - **Hry, hudba, appky:** stačí, čo má rád a čo používa.
    - **Exporty na disku** (`exports`): rovno ich naimportuj, pozri krok 4.
-   Ak výsledok obsahuje v `permissions` položku `browser` alebo `folders`, Claude ťa do týchto priečinkov nepustil. Popros používateľa, nech raz spustí sken sám: otvoriť Terminál (macOS) alebo PowerShell (Windows) v tomto priečinku a napísať `node scripts/scan.mjs --deep`. Potom si prečítaj `data/scan/scan.md`.
+   Ak výsledok obsahuje v `permissions` položku `browser` alebo `folders`, Claude ťa do týchto priečinkov nepustil. Popros používateľa, nech raz spustí sken sám, rovnakým riadkom ako vyššie pri zamietnutí. Potom si prečítaj `data/scan/scan.md`.
 3. **Veci, ktoré si pýtajú povolenie systému** (`permissions` vo výsledku: kontakty, kalendár, pripomienky, fotky, správy). Povedz mu jednou správou, čo by si z každého získal, a že macOS sa ho na každé opýta okienkom, kde treba kliknúť Povoliť. Potom spusti `node scripts/scan.mjs --deep --allow contacts,calendar,reminders,photos,messages --json` (len tie, s ktorými súhlasil; pri ďalších skenoch dávaj ten istý zoznam, inak tieto nálezy vypadnú). Sken počká, kým okienka odklikne. Kontakty s narodeninami sú hotoví ľudia do pamäte.
 4. **Konektory.** Ak máš v tomto rozhovore mail a kalendár (Gmail, Google Calendar, Outlook), použi ich hneď: udalosti na 30 dní dopredu do `memory/kalendar.md`, z pošty za posledné týždne zisti, s kým si píše najčastejšie a o čom (do pamäte len fakty o ľuďoch a projektoch, nie obsah mailov). Ak ich nemáš, zapíš si to do `caka` a vráť sa k tomu v kroku 5.
 5. Ak HUD ešte nebeží (bod 0), spusti ho teraz: `node scripts/hud.mjs`.
