@@ -13,9 +13,10 @@
  * people ends with a `NEEDS_OK: …` line and waits for the user's approval.
  */
 import { spawn } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { basename, isAbsolute, join, resolve } from 'node:path'
+import { homedir } from 'node:os'
 import { createInterface } from 'node:readline'
 import { CLAUDE_BIN as CLAUDE, MEMORY_EXTERNAL, cleanEnv, modelArgs, permissionArgs } from './agent.mjs'
 import { MEMORY_DIR } from './memory/index.mjs'
@@ -40,6 +41,7 @@ const contextPrompt = (film) =>
     'Keď treba niečo poslať alebo zverejniť za používateľa (mail, správa, príspevok, objednávka), priprav presné znenie, napíš komu a kam, a odpoveď ukonči samostatným riadkom `NEEDS_OK: <čo a komu>`. Odošli až po schválení.',
     'Keď bez používateľa nevieš pokračovať (chýba informácia), ukonči riadkom `NEEDS_OK: <otázka>`.',
     'Tvoja úplne posledná správa má presne tento tvar. Najprv výsledok: najviac päť krátkych riadkov obyčajného textu, čo je hotové a kde. Žiadny markdown: žiadne hviezdičky, mriežky, tabuľky, odrážky, kód ani emoji. Dlhý výstup (rešerš, zoznam, návrh textu) ulož do súboru a napíš len, kde je. Potom samostatný posledný riadok `HLAS: …` s jednou až dvoma krátkymi vetami, ktoré Jarvis povie nahlas (zdvorilo, vecne, pokojne so suchým humorom).',
+    'Keď je výsledkom web (nasadený alebo bežiaci lokálne) alebo obrázok, napíš do výsledku jeho celú adresu (https://… alebo http://localhost:…) alebo plnú cestu k súboru. Jarvis ho po dokončení ukáže na ploche.',
     film ? 'Režim natáčania: v poslednej správe ani v NEEDS_OK nespomínaj mená ľudí ani firiem.' : '',
   ]
     .filter(Boolean)
@@ -67,7 +69,46 @@ const pub = (j) => ({
   needsOk: j.needsOk,
   cost: j.cost,
   mock: j.mock || undefined,
+  artifacts: j.artifacts?.length ? j.artifacts.map(({ kind, url, name }, i) => ({ kind, name, url: kind === 'image' ? `/api/jobs/${j.id}/file/${i}` : url })) : undefined,
 })
+
+const IMAGE_RE = /\.(png|jpe?g|webp|gif|avif)$/i
+const IMAGE_MAX = 25 * 1024 * 1024
+
+/**
+ * Web addresses and image files a finished job names in its result. The desktop shows them in the
+ * middle of the screen (a web as a glass card, an image as itself). Only files that exist are kept,
+ * and only these exact files can be fetched back (GET /api/jobs/<id>/file/<n>).
+ */
+function findArtifacts(text) {
+  const out = []
+  const seen = new Set()
+  for (const m of String(text ?? '').matchAll(/https?:\/\/[^\s<>"'`)\]]+/g)) {
+    const url = m[0].replace(/[.,;:!?]+$/, '')
+    if (seen.has(url) || out.length >= 4) continue
+    seen.add(url)
+    out.push({ kind: 'web', url, name: url.replace(/^https?:\/\//, '').replace(/\/$/, '') })
+  }
+  for (const m of String(text ?? '').matchAll(/(?:~\/|\/|[A-Za-z]:\\|(?:memory|data|hud)\/)[^\s"'`<>|]*?\.(?:png|jpe?g|webp|gif|avif)\b/gi)) {
+    const raw = m[0]
+    const file = raw.startsWith('~/') ? join(homedir(), raw.slice(2)) : isAbsolute(raw) ? raw : resolve(REPO, raw)
+    if (seen.has(file) || out.length >= 6 || !IMAGE_RE.test(file)) continue
+    try {
+      if (!existsSync(file) || statSync(file).size > IMAGE_MAX) continue
+    } catch {
+      continue
+    }
+    seen.add(file)
+    out.push({ kind: 'image', file, name: basename(file) })
+  }
+  return out
+}
+
+/** Absolute path of a job's image for GET /api/jobs/<id>/file/<n>, or null. */
+export function jobFile(id, index) {
+  const a = jobs.get(id)?.artifacts?.[Number(index)]
+  return a?.kind === 'image' && existsSync(a.file) ? a.file : null
+}
 
 export const listJobs = () => [...jobs.values()].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')).slice(0, 30).map(pub)
 export const runningCount = () => [...jobs.values()].filter((j) => j.status === 'running').length
@@ -257,6 +298,7 @@ function finish(j, status, { summary = null, error = null } = {}) {
   j.status = status
   j.endedAt = new Date().toISOString()
   if (summary !== null) {
+    j.artifacts = findArtifacts(summary)
     const m = /^\s*NEEDS_OK:\s*(.+)$/m.exec(summary)
     if (m && status === 'done') {
       j.status = 'needs_ok'

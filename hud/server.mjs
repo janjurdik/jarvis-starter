@@ -24,7 +24,7 @@ import { quietNow } from './server/alarm.mjs'
 import { Brain, CLAUDE, EFFORT, MODEL } from './server/brain.mjs'
 import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onVoiceChange, sayText, sendChat, setVoice, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
 import { CONFIG_FILE, getConfig } from './server/config.mjs'
-import { createJob, initJobs, jobDetail, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob } from './server/jobs.mjs'
+import { createJob, initJobs, jobDetail, jobFile, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob } from './server/jobs.mjs'
 import { normalizeCard } from './server/cards.mjs'
 import { FILES, MEMORY_DIR, getIndex, stats } from './server/memory/index.mjs'
 import { attachMic, micStats, micStatus, micWorkerState, onVoice, setMicWake, stopMic, wakeAvailable } from './server/mic.mjs'
@@ -39,6 +39,7 @@ import { routeInner } from './server/inner.mjs'
 import { initImports, loadImports, resolveAttachments, routeImportGet, routeImportPost, stopImports } from './server/imports.mjs'
 import { startUpdateWatch, updateInfo } from './server/updates.mjs'
 import { callProblems } from './server/call.mjs'
+import { getApps, saveApps } from './server/apps.mjs'
 
 const ROOT = import.meta.dirname
 const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
@@ -76,6 +77,9 @@ const MIME = {
   '.woff2': 'font/woff2',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.avif': 'image/avif',
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
@@ -168,7 +172,7 @@ function allowRead(req, url) {
   if (isLocal(req)) return true
   return remoteTokenOk(req, url)
 }
-const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|inner|setup|attachment|import|update)|tts\/)/
+const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|inner|setup|attachment|import|update)|tts\/)/
 
 async function serveFile(req, res, file, { cache, immutable = false }) {
   let info
@@ -455,6 +459,18 @@ async function routePost(req, res, path) {
       return sendJson(res, err.status ?? 500, { ok: false, error: err.message })
     }
   }
+  if (path === '/api/apps/open') {
+    // Setup (scripts/hud.mjs --apps) or Jarvis: the camera flies to the Tvoje appky orb and the picker opens.
+    const app = slug(body.app) || null
+    send('world', { focus: 'appky', caption: null, app })
+    return sendJson(res, 200, { ok: true, clients: clientCount() })
+  }
+  if (path === '/api/apps') {
+    const apps = saveApps(body)
+    send('apps', apps)
+    log('apps', `${apps.picked.length} appiek, ${apps.wants.length} prianí`)
+    return sendJson(res, 200, { ok: true, ...apps })
+  }
   if (path === '/api/jobs') {
     const job = await createJob({ task: body.task, title: body.title, mock: body.mock === true, silent: body.silent === true })
     return sendJson(res, 202, { ok: true, job })
@@ -542,6 +558,14 @@ async function route(req, res) {
   if (path === '/api/setup') return sendJson(res, 200, await setupBody())
   if (path === '/api/mode') return sendJson(res, 200, { film: state.film })
   if (path === '/api/jobs') return sendJson(res, 200, listJobs())
+  if (path === '/api/apps') return sendJson(res, 200, getApps())
+  // An image a finished job named in its result, shown in the middle of the desktop. Only those exact files.
+  const jobImg = /^\/api\/jobs\/(j\d+)\/file\/(\d{1,2})$/.exec(path)
+  if (jobImg) {
+    const file = jobFile(jobImg[1], jobImg[2])
+    if (file && (await serveFile(req, res, file, { cache: false })) !== false) return
+    return sendJson(res, 404, { ok: false, error: 'súbor nie je' })
+  }
   // One job with its assignment and the whole feed, for the detail view.
   const jobOne = /^\/api\/jobs\/(j\d+)$/.exec(path)
   if (jobOne) {

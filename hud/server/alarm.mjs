@@ -53,8 +53,27 @@ export function parseAlarm(raw) {
     call: raw.call === true,
     // Minutes ahead of the alarm when Claude prepares the spoken brief.
     prepare: Math.min(90, Math.max(5, Math.round(Number(raw.prepare) || 20))),
+    // What the user wants to hear after the alarm, in this order (routines/budik.md). Empty = the default brief.
+    rano: Array.isArray(raw.rano) ? raw.rano.filter((t) => RANO.has(t)) : [],
   }
 }
+
+/** Topics of the morning brief the user can choose (scripts/alarm.mjs set … --rano pocasie,den,posta). */
+export const RANO_TOPICS = {
+  spanok: 'ako som spal',
+  pocasie: 'počasie',
+  den: 'čo ma dnes čaká',
+  ulohy: 'úlohy a termíny',
+  posta: 'maily, ktoré čakajú na odpoveď',
+  skola: 'škola: hodiny, testy a odovzdávky',
+  trening: 'tréning na dnes',
+  ludia: 'narodeniny a meniny mojich ľudí',
+  noc: 'čo Jarvis spravil, kým som spal',
+  svet: 'tri správy zo sveta',
+  peniaze: 'výdavky a čo sa obnovuje',
+  citat: 'jedna myšlienka na deň',
+}
+const RANO = new Set(Object.keys(RANO_TOPICS))
 
 /** The next moment the alarm rings after `from`, or null. */
 export function nextAlarmAt(alarm, from = new Date()) {

@@ -109,7 +109,7 @@ main { padding: 1.25rem 0 5rem; outline: none; }
     linear-gradient(180deg, rgba(10, 22, 30, 0.72), rgba(6, 13, 19, 0.66));
   box-shadow: inset 0 1px 0 rgba(210, 250, 255, 0.14), inset 0 0 0 1px rgba(127, 243, 255, 0.07), 0 1.5rem 4rem rgba(0, 0, 0, 0.3);
 }
-.eyebrow { display: inline-flex; align-items: center; gap: 0.5rem; font: 500 0.75rem/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ice); }
+.eyebrow { display: inline-flex; align-items: center; gap: 0.5rem; font: 500 0.9375rem/1.2 var(--sans); color: var(--ice); }
 .eyebrow::before { content: ''; width: 0.4rem; height: 0.4rem; border-radius: 50%; background: var(--ice); box-shadow: 0 0 0.6rem var(--ice); }
 h1 { font-weight: 300; font-size: clamp(2rem, 1.2rem + 2.6vw, 3.25rem); line-height: 1.08; letter-spacing: -0.025em; color: var(--white); text-wrap: balance; }
 h2 { font-weight: 600; font-size: 1.3125rem; line-height: 1.2; letter-spacing: -0.012em; color: var(--white); }
@@ -340,7 +340,7 @@ h3 { font-weight: 600; font-size: 1rem; line-height: 1.3; color: var(--white); }
 .sc-dev { position: relative; display: flex; flex-direction: column; overflow: hidden; background: #08121a; color: var(--t1); line-height: 1.3; box-shadow: 0 0 0 1px rgba(127, 243, 255, 0.28), 0 0 0 0.4em #050b10, 0 0 0 calc(0.4em + 1px) rgba(127, 243, 255, 0.12), 0 1.6em 4em rgba(0, 0, 0, 0.55), 0 0 4em rgba(127, 243, 255, 0.07); }
 .sc-phone .sc-dev { aspect-ratio: 10 / 19; font-size: 13px; font-size: 4.4cqw; border-radius: 2.5em; }
 .sc-browser .sc-dev, .sc-app .sc-dev { aspect-ratio: 16 / 10.6; font-size: 13px; font-size: 2.2cqw; border-radius: 0.9em; }
-.sc-tag { position: absolute; right: 0.4rem; top: calc(100% + 0.7rem); font: 500 0.6875rem/1 var(--mono); letter-spacing: 0.1em; color: var(--t3); }
+.sc-tag { position: absolute; right: 0.4rem; top: calc(100% + 0.7rem); font: 500 0.8125rem/1 var(--sans); color: var(--t3); }
 
 .sc-status { flex: none; display: flex; align-items: center; justify-content: space-between; height: 2.3em; padding: 0.3em 1.7em 0; font-size: 0.74em; font-weight: 600; color: var(--t2); }
 .sc-notch { width: 5.6em; height: 1.45em; border-radius: 1em; background: #020609; }
@@ -561,3 +561,11 @@ h3 { font-weight: 600; font-size: 1rem; line-height: 1.3; color: var(--white); }
   .sc *, .sc *::before, .sc *::after { transition: none !important; animation: none !important; }
   .tile, .first-c, .btn { transition: none; }
 }
+
+/* Real app icons in the round marks (Tvoje appky catalog). */
+.glyph.is-brand { color: var(--c); background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--c) 30%, transparent), color-mix(in srgb, var(--c) 5%, transparent) 72%); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, transparent), 0 0 1.2em color-mix(in srgb, var(--c) 30%, transparent); }
+.glyph.is-brand::before { border-color: color-mix(in srgb, var(--c) 35%, transparent); }
+.glyph.is-brand.is-dark { color: var(--white); --c: #9fb4ba; }
+.glyph-mark { position: relative; width: 1.35em; height: 1.35em; filter: drop-shadow(0 0 0.35em color-mix(in srgb, var(--c) 60%, transparent)); }
+.sec-h a { color: var(--ice); }
+.first-c > .glyph { grid-row: span 3; font-size: 1.3rem; margin-top: 0.1rem; }

@@ -23,6 +23,9 @@ import { createWake } from './wake.js'
 import { createJobs, demoJobs } from './jobs.js'
 import { createDrop } from './drop.js'
 import { createPeople } from './people.js'
+import { createAppsPanel } from './apps-panel.js'
+import { createReveal } from './reveal.js'
+import { setWorldApps } from './world/apps.js'
 import { DEMO_HISTORY } from './demo.js'
 import { toolIcon } from './icons.js'
 import { levelAt, loadAudio, play, syntheticLevel, syntheticWave, waveAt } from './audio.js'
@@ -47,15 +50,17 @@ const QUALITY = params.get('q') ?? (Math.min(screen.width, screen.height) < 600 
  * na vonkajšom okruhu, menšie mesiace na vnútornom okruhu hlbšie v priestore.
  */
 const NODE_LAYOUT = [
-  { id: 'spravy', u: -0.84, v: 0.4, z: 0.45, side: 'above', size: 0.95 },
-  { id: 'fotky', u: -0.9, v: -0.2, z: -0.55, side: 'below', size: 1.05 },
-  { id: 'udalosti', u: -0.54, v: -0.8, z: 0.25, side: 'below', size: 0.9 },
-  { id: 'projekty', u: -0.36, v: 0.84, z: -0.35, side: 'above', size: 1.1 },
-  { id: 'questy', u: 0.36, v: 0.84, z: 0.3, side: 'above', size: 0.95 },
-  { id: 'spanok', u: 0.84, v: 0.4, z: -0.45, side: 'above', size: 1.05 },
-  { id: 'kalendar', u: 0.9, v: -0.2, z: 0.55, side: 'below', size: 0.9 },
-  { id: 'rutiny', u: 0.54, v: -0.8, z: -0.25, side: 'below', size: 0.8 },
+  // Ten planets evenly on the ring, 36° apart, Tvoje appky on top.
+  { id: 'appky', u: 0, v: 0.93, z: 0.6, side: 'below', size: 1.25 },
+  { id: 'projekty', u: -0.55, v: 0.75, z: -0.35, side: 'above', size: 1.1 },
+  { id: 'spravy', u: -0.88, v: 0.29, z: 0.45, side: 'above', size: 0.95 },
+  { id: 'fotky', u: -0.88, v: -0.29, z: -0.55, side: 'below', size: 1.05 },
+  { id: 'udalosti', u: -0.55, v: -0.75, z: 0.25, side: 'below', size: 0.9 },
   { id: 'ludia', u: 0, v: -0.94, z: 0.5, side: 'above', size: 1.15 },
+  { id: 'rutiny', u: 0.55, v: -0.75, z: -0.25, side: 'below', size: 0.8 },
+  { id: 'kalendar', u: 0.88, v: -0.29, z: 0.55, side: 'below', size: 0.9 },
+  { id: 'spanok', u: 0.88, v: 0.29, z: -0.45, side: 'above', size: 1.05 },
+  { id: 'questy', u: 0.55, v: 0.75, z: 0.3, side: 'above', size: 0.95 },
   // Moons: smaller and deeper in space. `ulohy` is always there, the others appear when the
   // user's memory has a folder of that name (memory/knihy, memory/filmy, …).
   ...[
@@ -72,6 +77,10 @@ const NODE_LAYOUT = [
 
 /** Počty pre vnútorné svety (pamäť), dorážajú po štarte z /api/inner. */
 let innerCounts = {}
+
+/** Appky, ktoré si používateľ vybral (GET /api/apps, SSE `apps`). */
+let appsState = { picked: [], wants: [] }
+let appsPanel = null
 
 function buildNodes(snapshot) {
   const m = snapshot.memory ?? {}
@@ -101,6 +110,7 @@ function buildNodes(snapshot) {
     content: { label: 'Obsah', value: count(extra.content), sub: '' },
     miesta: { label: 'Miesta', value: count(extra.miesta), sub: '' },
     hudba: { label: 'Hudba', value: count(extra.hudba), sub: '' },
+    appky: { label: 'Tvoje appky', value: appsState.picked.length ? nf(appsState.picked.length) : '+', sub: appsState.picked.length ? 'v Jarvisovi' : 'vyber, čo používaš' },
   }
   // The 3D world is built once: moons that appear later show up after a reload.
   bootNodeIds ??= new Set(NODE_LAYOUT.filter((n) => !n.minor || n.id === 'ulohy' || (extra[n.id] ?? 0) > 0).map((n) => n.id))
@@ -577,6 +587,7 @@ function onVoice(v) {
 
 function onWorld(w) {
   if (!w) return
+  if (w.focus === 'appky') return focusNode('appky', w.app ?? null)
   world.focus = w.focus ? { node: w.focus, since: now() } : null
   world.caption = w.focus ? w.caption ?? null : null
   if (w.focus) (live.flareTimes[w.focus] ??= []).push(now())
@@ -648,6 +659,7 @@ function connectEvents() {
   on('snapshot', (snap) => paint('snapshot', () => onSnapshot(snap)))
   // Úlohy: bez wakeUp, bežiaca úloha pokojový režim nebrzdí.
   on('job', (job) => jobs?.apply(job))
+  on('apps', (a) => applyApps(a))
   on('job-feed', (m) => jobs?.feed(m.id, m.entry))
   on('import', (ev) => drop?.applyImport(ev))
   on('status', onStatus)
@@ -867,11 +879,25 @@ async function toggleWake() {
   }
 }
 
-function focusNode(id) {
+function applyApps(a) {
+  if (!a || !Array.isArray(a.picked)) return
+  appsState = { picked: a.picked, wants: a.wants ?? [] }
+  setWorldApps(appsState.picked)
+  if (!snapshot || !ui) return
+  nodes = buildNodes(snapshot)
+  ui.setSnapshot(snapshot, nodes)
+}
+
+function focusNode(id, appId = null) {
   if (!id) return
   world.focus = { node: id, since: now() }
+  // Tvoje appky: namiesto vnútra pamäte sa otvorí výber appiek nad svetom.
+  if (id === 'appky') {
+    dossier?.close()
+    if (!film) appsPanel?.show(appId)
+  }
   // Klik na uzol otvorí vnútro planéty z pamäte (v režime natáčania len prelet kamery).
-  if (!film) dossier?.open(id)
+  else if (!film) dossier?.open(id)
   world.caption = null
   ;(live.flareTimes[id] ??= []).push(now())
 }
@@ -1126,6 +1152,15 @@ async function main() {
     if (data.audio) audio = await loadAudio(data.audio)
   }
   const counted = await loadInnerCounts(SCENE_ID ? 1 : 2500)
+  if (!SCENE_ID && !CAPTURE) {
+    try {
+      const a = await (await fetch('/api/apps', { cache: 'no-store', signal: AbortSignal.timeout(2000) })).json()
+      appsState = { picked: Array.isArray(a.picked) ? a.picked : [], wants: a.wants ?? [] }
+    } catch {
+      // bez servera ostane planéta s pozvánkou
+    }
+  }
+  setWorldApps(appsState.picked)
   nodes = buildNodes(snapshot)
   await document.fonts.ready
 
@@ -1138,16 +1173,27 @@ async function main() {
     },
   })
   ui = createUI({ capture: CAPTURE })
+  const reveal = CAPTURE || SCENE_ID ? null : createReveal({ onOpen: (id) => jobs?.open(id), fileUrl: api.fileUrl })
   jobs = createJobs({
     api,
     ui,
     capture: CAPTURE,
+    onFinished: (job) => reveal?.show(job),
     onChange: () => paint('jobs', () => ui.renderJobsChip(jobs.active, jobs.waiting)),
   })
   chat = createChat({ onSend: (text, via) => send(text, via), capture: CAPTURE, fileUrl: api.fileUrl })
   if (!CAPTURE && !SCENE_ID) {
     people = createPeople({ api, ui, isFilm: () => film, onApplied: () => drop?.load() })
     drop = createDrop({ api, ui, desktop: DESKTOP, onSend: (text, via) => send(text, via), onReview: () => people.open() })
+    appsPanel = createAppsPanel({
+      onClose: () => {
+        world.focus = null
+        world.caption = null
+      },
+      onSaved: (a) => applyApps(a),
+      // „Povedať Jarvisovi" a vlastné priania idú do rozhovoru ako bežná správa, prianie si Jarvis zapíše do pamäte.
+      onAsk: (kind, text) => text && send(kind === 'wish' ? `Zapamätaj si, s čím ti mám pomáhať: ${text}` : text, 'text'),
+    })
   }
   ui.setSnapshot(snapshot, nodes)
   if (!counted && !SCENE_ID)
@@ -1223,6 +1269,7 @@ async function main() {
   }
 
   bindControls()
+  if (!scene && location.hash.startsWith('#appky')) focusNode('appky', decodeURIComponent(location.hash.split('/')[1] ?? '') || null)
   // First run: the memory is empty until the onboarding in Claude is done.
   if (!scene && snapshot.configured === false) ui.toast('Jarvis ťa ešte nepozná. Otvor tento priečinok v Claude a napíš <kbd>štart</kbd>.', { iconName: 'pamat', ms: 20000 })
   if (scene) ui.toast('<kbd>Medzerník</kbd> spustí scénu · <kbd>Esc</kbd> zastaví · <kbd>F</kbd> celá obrazovka', { ms: 0, iconName: 'film' })

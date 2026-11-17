@@ -8,6 +8,8 @@
  *   npm run hud -- --restart  stop and start again (after changing .env)
  *   npm run hud -- --status   is it running?
  *   npm run hud -- --info     installation summary from the running server (JSON)
+ *   npm run hud -- --apps     open the HUD and fly to the Tvoje appky orb (the app picker), optionally
+ *                             at one app: node scripts/hud.mjs --apps instagram
  *
  * Window: on macOS the "Jarvis HUD" desktop app when it is installed, otherwise Chrome or Edge
  * in app mode (a clean full-screen window without tabs). F11 or ⌃⌘F toggles full screen.
@@ -119,8 +121,38 @@ if (!ok) {
   console.error(`HUD server sa nespustil. Pozri ${join(LOG_DIR, 'hud-server.log')}`)
   process.exit(1)
 }
+/** Number of HUD windows connected to the server (0 when none is open yet). */
+async function clients() {
+  try {
+    const res = await fetch(`${HUD_URL}/api/health`, { signal: AbortSignal.timeout(2000) })
+    return (await res.json()).clients ?? 0
+  } catch {
+    return 0
+  }
+}
+
 if (flags.has('server') || flags.has('restart')) {
   console.log(`HUD server beží: ${HUD_URL}`)
+} else if (flags.has('apps')) {
+  // The picker lives in the 3D world: open a window when none is connected, wait for it, then fly to the orb.
+  const app = (parseArgs().rest[0] ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '')
+  let opened = null
+  if (!(await clients())) opened = openWindow()
+  for (let i = 0; i < 40 && !(await clients()); i++) await new Promise((r) => setTimeout(r, 500))
+  // A fresh window builds its world first, the camera flight looks right only after that.
+  if (opened) await new Promise((r) => setTimeout(r, 2500))
+  const ok = await postHud('/api/apps/open', { app: app || null })
+  console.log(ok ? `Jarvis ukazuje Tvoje appky${opened ? ` (${opened})` : ''}: http://localhost:${PORT}/#appky` : `HUD sa neozval. Otvor http://localhost:${PORT}/#appky`)
 } else {
   console.log(`HUD beží na http://localhost:${PORT}, otváram ${openWindow()}.`)
+}
+
+// Jarvis has to be there after every restart of the computer: the first manual start turns on the
+// start at login, unless the user turned it off on purpose (npm run autostart -- remove).
+if (!flags.has('server') && (IS_MAC || IS_WIN) && !process.env.JARVIS_NO_AUTOSTART) {
+  await new Promise((done) => {
+    const p = spawn(process.execPath, [join(REPO, 'scripts', 'autostart.mjs'), 'ensure'], { cwd: REPO, stdio: 'inherit', windowsHide: true })
+    p.on('exit', done)
+    p.on('error', done)
+  })
 }

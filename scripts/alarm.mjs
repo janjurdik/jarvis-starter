@@ -10,6 +10,8 @@
  *   node scripts/alarm.mjs set 06:30                every day at 6:30
  *   node scripts/alarm.mjs set 06:30 --days weekdays    daily | weekdays | weekend | po,st,pi
  *   node scripts/alarm.mjs set 06:30 --call         also ring the mobile (docs/HOVORY.md), --no-call turns it off
+ *   node scripts/alarm.mjs set 06:30 --rano pocasie,den,posta   what Jarvis says after the alarm, in this order
+ *                                                   (topics: node scripts/alarm.mjs topics)
  *   node scripts/alarm.mjs off | on                 turn it off or back on
  *   node scripts/alarm.mjs test                     wake me now: prepare the brief with Claude and ring
  *   node scripts/alarm.mjs test --quick             ring now with the short brief from memory, no Claude
@@ -22,7 +24,7 @@
 import '../hud/server/env.mjs'
 import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { daysLabel, markRang, nextAlarmAt, nightStart, overnightWork, parseAlarm, readPrepared, weekdaysOf } from '../hud/server/alarm.mjs'
+import { RANO_TOPICS, daysLabel, markRang, nextAlarmAt, nightStart, overnightWork, parseAlarm, readPrepared, weekdaysOf } from '../hud/server/alarm.mjs'
 import { callReady } from '../hud/server/call.mjs'
 import { CONFIG_FILE, getConfig } from '../hud/server/config.mjs'
 import { calendarRange } from '../hud/server/memory/calendar.mjs'
@@ -38,7 +40,7 @@ const value = (name) => {
   if (i < 0) return null
   return argv[i].includes('=') ? argv[i].split('=').slice(1).join('=') : argv[i + 1] ?? null
 }
-const rest = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && /^--(days)$/.test(argv[i - 1])))
+const rest = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && /^--(days|rano)$/.test(argv[i - 1])))
 const action = rest[0] ?? 'status'
 const asJson = flags.has('json')
 
@@ -237,6 +239,11 @@ const out = (data, text) => {
   else console.log(text)
 }
 
+if (action === 'topics') {
+  out({ ok: true, topics: RANO_TOPICS }, Object.entries(RANO_TOPICS).map(([id, name]) => `${id.padEnd(8)} ${name}`).join('\n'))
+  process.exit(0)
+}
+
 if (action === 'set') {
   const m = /^(\d{1,2})[:.](\d{2})$/.exec(rest[1] ?? '')
   if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) {
@@ -249,7 +256,13 @@ if (action === 'set') {
     console.error('Dni: daily, weekdays, weekend alebo zoznam ako po,st,pi.')
     process.exit(1)
   }
-  const alarm = parseAlarm({ time: `${m[1]}:${m[2]}`, days, enabled: true, call: flags.has('call') ? true : flags.has('no-call') ? false : prev?.call === true, prepare: prev?.prepare })
+  const rano = value('rano') !== null ? value('rano').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean) : prev?.rano ?? []
+  const unknown = rano.filter((t) => !RANO_TOPICS[t])
+  if (unknown.length) {
+    console.error(`Neznáme témy: ${unknown.join(', ')}. Možnosti: ${Object.keys(RANO_TOPICS).join(', ')}`)
+    process.exit(1)
+  }
+  const alarm = parseAlarm({ time: `${m[1]}:${m[2]}`, days, enabled: true, call: flags.has('call') ? true : flags.has('no-call') ? false : prev?.call === true, prepare: prev?.prepare, rano })
   writeAlarm(alarm)
   const reg = await register()
   log(`nastavený ${alarm.time} ${alarm.days}`)

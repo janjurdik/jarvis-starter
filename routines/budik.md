@@ -5,6 +5,13 @@ hlas: 4 až 7 krátkych viet, spolu najviac 90 slov, ktoré Jarvis povie hneď p
 ---
 Priprav ranné budenie na dnešok ({{dnes}}). Jarvis ho povie nahlas, keď o chvíľu zazvoní budík. Pracuj s pamäťou v priečinku `memory/` podľa CLAUDE.md.
 
+Najprv si prečítaj `config/jarvis.json`, pole `alarm.rano`. Je to zoznam tém, ktoré si používateľ vybral, v poradí, v akom ich chce počuť
+(`spanok`, `pocasie`, `den`, `ulohy`, `posta`, `skola`, `trening`, `ludia`, `noc`, `svet`, `peniaze`, `citat`; popis má `node scripts/alarm.mjs topics`).
+Keď zoznam nie je prázdny, povedz len tieto témy v tomto poradí. Mimo neho pridaj len niečo naozaj súrne (termín dnes, stretnutie do hodiny).
+Keď je prázdny, drž sa bodov nižšie. `svet`: tri najdôležitejšie správy dňa z webu, každá jednou vetou. `trening`: plán z `memory/ciele/` alebo `memory/poznamky/`.
+`skola`: hodiny, testy a odovzdávky dnes z `memory/kalendar.md`, `memory/ulohy.md` a `memory/skola/`. `peniaze`: čo sa dnes obnovuje alebo je splatné.
+`citat`: jedna krátka myšlienka, ktorá sedí k jeho cieľom, s autorom.
+
 Čo zisti:
 1. Spánok: pole `spanok` v dnešnom alebo včerajšom zázname v `memory/dennik/`. Ak máš pripojený konektor s dátami o spánku (hodinky, zdravie), pozri aj ten. Keď spánok nikde nie je, vôbec ho nespomínaj a nič neodhaduj.
 2. Počasie v meste používateľa na dnes (vyhľadaj na webe).

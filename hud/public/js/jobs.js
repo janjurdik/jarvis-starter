@@ -12,7 +12,6 @@ import { icon } from './icons.js'
 import { esc, plural } from './format.js'
 
 const WINDOW_MS = 2 * 3600_000
-const MAX_ROWS = 4
 const ACTIVE = new Set(['queued', 'running', 'needs_ok'])
 const APPROVE = 'Schvaľujem, pokračuj presne podľa návrhu.'
 const STATUS_TEXT = { queued: 'v poradí', running: 'beží', needs_ok: 'čaká na súhlas', done: 'hotovo', error: 'chyba', stopped: 'zastavená' }
@@ -45,12 +44,9 @@ function clockTime(ms) {
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-export function createJobs({ api, ui = null, onChange, capture = false, clock = () => Date.now() }) {
+export function createJobs({ api, ui = null, onChange, onFinished = null, capture = false, clock = () => Date.now() }) {
   const section = document.getElementById('mod-jobs')
-  const list = document.getElementById('jobs')
-  const more = document.getElementById('jobs-more')
   const jobs = new Map()
-  const rows = new Map()
   const view = capture ? null : createView()
 
   const ts = (v) => (typeof v === 'number' ? (v < 1e12 ? v * 1000 : v) : v ? Date.parse(v) : NaN)
@@ -59,6 +55,8 @@ export function createJobs({ api, ui = null, onChange, capture = false, clock = 
     if (!job?.id) return
     const prev = jobs.get(job.id) ?? {}
     jobs.set(job.id, { ...prev, ...job })
+    // Úloha práve skončila (živo, nie pri načítaní): výsledok sa ukáže v strede plochy.
+    if (ACTIVE.has(prev.status) && (job.status === 'done' || job.status === 'needs_ok')) onFinished?.(jobs.get(job.id))
     render()
     view?.jobChanged(job.id)
     onChange?.()
@@ -77,58 +75,12 @@ export function createJobs({ api, ui = null, onChange, capture = false, clock = 
       .sort((a, b) => (ACTIVE.has(b.status) - ACTIVE.has(a.status)) || (ts(b.startedAt) || 0) - (ts(a.startedAt) || 0))
   }
 
-  function rowHtml(j, nowMs) {
-    const start = ts(j.startedAt)
-    const end = ts(j.endedAt)
-    const run = Number.isFinite(start) ? elapsed((Number.isFinite(end) ? end : nowMs) - start) : ''
-    const step = j.status === 'needs_ok' ? j.needsOk || j.step || 'Čaká na váš súhlas' : j.step || STATUS_TEXT[j.status] || ''
-    const quick = ACTIVE.has(j.status)
-      ? '<span class="jb-quick">' +
-        (j.status === 'needs_ok' ? `<button type="button" class="jb-q jb-q-ok" data-act="ok" title="Schváliť" aria-label="Schváliť">${icon('check')}</button>` : '') +
-        `<button type="button" class="jb-q" data-act="stop" title="Zastaviť úlohu" aria-label="Zastaviť úlohu">${icon('stop')}</button></span>`
-      : ''
-    return (
-      `<button type="button" class="jb-head" data-act="open" title="Otvoriť priebeh úlohy">${statusIcon(j.status)}` +
-      `<span class="jb-main"><span class="jb-title">${esc(j.title || 'Úloha')}</span><span class="jb-step" data-step="${esc(step)}">${esc(step)}</span></span>` +
-      `<span class="jb-time">${esc(run)}</span></button>${quick}`
-    )
-  }
-
-  /** Prekreslí sekciu. Pri tikaní času sa mení len text času (žiadny layout okrem neho). */
+  /**
+   * Zoznam úloh na ploche už nie je: beh ukazuje čip „X úloh beží" a hotová úloha sa ukáže v strede
+   * (reveal.js). Sekcia v paneli ostáva skrytá, detail úlohy je v okne úlohy.
+   */
   function render() {
-    const nowMs = clock()
-    const all = visible(nowMs)
-    if (section.hidden !== !all.length) section.hidden = !all.length
-    const shown = all.slice(0, MAX_ROWS)
-    const keep = new Set(shown.map((j) => j.id))
-    for (const [id, row] of rows) {
-      if (!keep.has(id)) {
-        row.remove()
-        rows.delete(id)
-      }
-    }
-    shown.forEach((j, i) => {
-      let row = rows.get(j.id)
-      if (!row) {
-        row = document.createElement('li')
-        row.dataset.id = j.id
-        rows.set(j.id, row)
-      }
-      if (list.children[i] !== row) list.insertBefore(row, list.children[i] ?? null)
-      const cls = `jb st-${j.status}${j.status === 'needs_ok' ? ' q2' : ACTIVE.has(j.status) ? ' q1' : ''}`
-      if (row._cls !== cls) row.className = row._cls = cls
-      const html = rowHtml(j, nowMs)
-      if (row._html === html) return
-      // Nový krok vpláva (plynulý prechod), ostatné zmeny sa len prepíšu.
-      const prevStep = row._step
-      row.innerHTML = row._html = html
-      const stepEl = row.querySelector('.jb-step')
-      row._step = stepEl?.dataset.step
-      if (prevStep !== undefined && prevStep !== row._step && !capture) stepEl?.classList.add('step-in')
-    })
-    const rest = all.length - shown.length
-    const text = rest > 0 ? `+ ${rest} ${plural(rest, 'staršia úloha', 'staršie úlohy', 'starších úloh')}` : ''
-    if (more.textContent !== text) more.textContent = text
+    if (!section.hidden) section.hidden = true
   }
 
   /** Stop and approve, shared by the row and the open job. */
@@ -144,14 +96,6 @@ export function createJobs({ api, ui = null, onChange, capture = false, clock = 
       return false
     }
   }
-
-  list.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-act]')
-    const row = e.target.closest('.jb')
-    if (!btn || !row) return
-    if (btn.dataset.act === 'open') return view?.open(row.dataset.id)
-    act(row.dataset.id, btn.dataset.act, btn)
-  })
 
   // ── an open job ──
   function createView() {

@@ -5,15 +5,17 @@
  *   npm run autostart -- install            turn it on
  *   npm run autostart -- install --dry-run  only show what would be written
  *   npm run autostart -- status
- *   npm run autostart -- remove             turn it off
+ *   npm run autostart -- remove             turn it off (and remember it, so `ensure` leaves it off)
+ *   npm run autostart -- ensure             turn it on unless it is on already or the user turned it off;
+ *                                           scripts/hud.mjs runs this, so Jarvis starts after every login
  *
  * macOS: a launchd agent that runs `node scripts/hud.mjs` at login.
  * Windows: a small script in your Startup folder that does the same (no admin rights needed).
  */
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
-import { IS_MAC, IS_WIN, LABEL, LOG_DIR, REPO, has, parseArgs, sh } from './lib.mjs'
+import { DATA_DIR, IS_MAC, IS_WIN, LABEL, LOG_DIR, REPO, has, parseArgs, sh } from './lib.mjs'
 
 const { flags, rest } = parseArgs()
 const action = rest[0] ?? 'status'
@@ -23,6 +25,9 @@ const SCRIPT = join(REPO, 'scripts', 'hud.mjs')
 const MAC_LABEL = `${LABEL}.hud`
 const MAC_FILE = join(homedir(), 'Library', 'LaunchAgents', `${MAC_LABEL}.plist`)
 const WIN_FILE = join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Jarvis HUD.vbs')
+
+/** Written by `remove`: the user does not want Jarvis to start at login, `ensure` respects it. */
+const OFF_FILE = join(DATA_DIR, 'autostart-off')
 
 const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
@@ -58,7 +63,17 @@ if (!IS_MAC && !IS_WIN) {
 const file = IS_MAC ? MAC_FILE : WIN_FILE
 const content = IS_MAC ? macPlist() : winVbs()
 
-if (action === 'install') {
+if (action === 'ensure') {
+  if (has(file) || existsSync(OFF_FILE)) process.exit(0)
+  if (dry) {
+    console.log(`Zapol by som spúšťanie po prihlásení: ${file}`)
+    process.exit(0)
+  }
+  mkdirSync(dirname(file), { recursive: true })
+  mkdirSync(LOG_DIR, { recursive: true })
+  writeFileSync(file, content)
+  console.log('Jarvis sa odteraz zapne sám po každom zapnutí počítača (vypnúť: npm run autostart -- remove).')
+} else if (action === 'install') {
   if (dry) {
     console.log(`Nič nezapisujem (--dry-run). Zapísal by som ${file}:\n\n${content}`)
     process.exit(0)
@@ -67,6 +82,7 @@ if (action === 'install') {
   mkdirSync(LOG_DIR, { recursive: true })
   if (IS_MAC) await sh('/bin/launchctl', ['bootout', `gui/${userInfo().uid}/${MAC_LABEL}`])
   writeFileSync(file, content)
+  rmSync(OFF_FILE, { force: true })
   // Registered for the next login. The HUD is not restarted now (start it with: npm run hud).
   console.log(`Hotovo. HUD sa po prihlásení spustí sám.\n  ${file}`)
 } else if (action === 'remove') {
@@ -74,6 +90,8 @@ if (action === 'install') {
   else {
     if (IS_MAC) await sh('/bin/launchctl', ['bootout', `gui/${userInfo().uid}/${MAC_LABEL}`])
     rmSync(file, { force: true })
+    mkdirSync(DATA_DIR, { recursive: true })
+    writeFileSync(OFF_FILE, `${new Date().toISOString()}\n`)
     console.log('Automatické spúšťanie je vypnuté.')
   }
 } else {

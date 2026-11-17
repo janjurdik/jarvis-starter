@@ -10,6 +10,7 @@ import { FOG, SNOISE } from './glsl.js'
 import { COLOR, glowTexture, ringTexture } from './heart.js'
 import { ADDITIVE, circlePoints, holoLine, holoSurface, loopSegments, nodeUniforms, polySegments, segmentsGeometry } from './holo.js'
 import { Ramp, clamp } from './util.js'
+import { buildApps } from './apps.js'
 
 const TAU = Math.PI * 2
 
@@ -1019,6 +1020,7 @@ function buildBody(ctx) {
 }
 
 const BUILDERS = {
+  appky: buildApps,
   spravy: buildBubbles,
   fotky: buildPhotos,
   udalosti: buildSpiral,

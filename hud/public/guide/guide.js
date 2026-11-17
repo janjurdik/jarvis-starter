@@ -6,6 +6,8 @@
 
 import { Scene, icon } from './scene.js'
 import { GUIDES, AFTER } from './guides.js'
+import { APPS } from '/apps/catalog.js'
+import { appColor, appSvg, isDark } from '/apps/glyph.js'
 
 const KEY = 'jarvis.guide.v1'
 const PREFS = 'jarvis.guide.prefs'
@@ -98,7 +100,19 @@ function stateLine(src, long) {
 
 // ── small html pieces ───────────────────────────────────────────────────────
 
-const glyph = (mono) => `<span class="glyph" aria-hidden="true"><b${mono.length > 2 ? ' class="is-3"' : ''}>${esc(mono)}</b></span>`
+/** The app that a guide source belongs to (same id first), for its real icon and colour. */
+const appOf = (id) => APPS.find((a) => a.id === id) ?? APPS.find((a) => a.guide === id) ?? null
+
+/** Round mark of a source: the app's own icon in its colour, letters only when the app has none. */
+function glyph(src, alias = null) {
+  const a = appOf(alias?.id ?? src.id) ?? appOf(src.id)
+  if (a) {
+    const hex = appColor(a)
+    return `<span class="glyph is-brand${isDark(hex) ? ' is-dark' : ''}" style="--c:${hex}" aria-hidden="true">${appSvg(a, 'glyph-mark')}</span>`
+  }
+  const mono = alias?.mono ?? src.mono
+  return `<span class="glyph" aria-hidden="true"><b${mono.length > 2 ? ' class="is-3"' : ''}>${esc(mono)}</b></span>`
+}
 const devices = (src) => src.devices.map((d) => icon(DEVICE[d])).join('')
 
 function stateButton(src) {
@@ -113,7 +127,7 @@ function tile(src, alias) {
   const name = alias?.name ?? src.name
   return `<article class="tile" data-src="${src.id}">
     <a class="tile-a" href="#${src.id}">
-      ${glyph(alias?.mono ?? src.mono)}
+      ${glyph(src, alias)}
       <strong>${esc(name)}</strong>
       <span class="tile-g">${esc(alias?.gives ?? src.gives)}</span>
       <span class="tile-m">
@@ -128,22 +142,29 @@ function tile(src, alias) {
 
 // ── overview ────────────────────────────────────────────────────────────────
 
+/** Guide sources of the apps the user picked in Tvoje appky, in the order of the catalog. Empty = show everything. */
+let mine = []
+let showAll = false
+
 function overview() {
-  const first = meta.start.map((id, i) => {
+  const own = !showAll && mine.length ? new Set(mine) : null
+  const start = own ? mine.slice(0, 3) : meta.start
+  const first = start.map((id, i) => {
     const s = byId.get(id)
-    return `<a class="first-c" href="#${s.id}"><span class="first-n" aria-hidden="true">${i + 1}</span><strong>${esc(s.name)}</strong><span>${esc(s.why ?? s.gives)}</span><em>${icon('clock')}${esc(s.time)}</em></a>`
+    return `<a class="first-c" href="#${s.id}">${glyph(s)}<strong>${esc(s.name)}</strong><span>${esc(s.why ?? s.gives)}</span><em>${icon('clock')}${esc(s.time)}</em></a>`
   })
   const groups = meta.groups.map((g) => {
-    const tiles = g.tiles.map((id) => {
+    const tiles = g.tiles.filter((id) => !own || own.has(id)).map((id) => {
       const src = byId.get(id)
       return tile(src, src.group === g.id ? null : src.also?.find((a) => a.group === g.id))
     })
+    if (!tiles.length) return ''
     return `<section class="sec" aria-labelledby="g-${g.id}"><div class="sec-h"><h2 id="g-${g.id}">${esc(g.name)}</h2><span>${tiles.length} ${tiles.length === 1 ? 'zdroj' : tiles.length < 5 ? 'zdroje' : 'zdrojov'}</span></div><div class="tiles">${tiles.join('')}</div></section>`
   })
   app.innerHTML = `<div class="view wrap">
     <section class="hero">
       <div>
-        <span class="eyebrow">Sprievodca exportmi</span>
+        <span class="eyebrow">Kópia tvojich dát</span>
         <h1 id="h">Čo všetko mi vieš dať</h1>
         <p class="lead">Čím viac o tebe viem, tým viac ti pomôžem. Každá appka ti vie vydať tvoje vlastné dáta. Ukážem ti krok za krokom, kde na to kliknúť.</p>
       </div>
@@ -154,7 +175,7 @@ function overview() {
       </div>
     </section>
     <section class="sec" aria-labelledby="g-first">
-      <div class="sec-h"><h2 id="g-first">Začni týmito tromi</h2><span>najviac úžitku za najmenej práce</span></div>
+      <div class="sec-h"><h2 id="g-first">${own ? 'Z tvojich appiek začni týmito' : 'Začni týmito tromi'}</h2><span>${own ? `${mine.length} ${mine.length === 1 ? 'zdroj' : mine.length < 5 ? 'zdroje' : 'zdrojov'} z Tvojich appiek · <a href="#" data-all>ukázať všetky</a>` : mine.length ? '<a href="#" data-mine>len moje appky</a>' : 'najviac úžitku za najmenej práce'}</span></div>
       <div class="first">${first.join('')}</div>
       <p class="live">${icon('plug')}<span>Mail a kalendár sa neexportujú. <b>Pripojíš ich v Claude cez Konektory</b> a Jarvis ich potom číta naživo.</span></p>
     </section>
@@ -235,7 +256,7 @@ function guide(src, variantId, stepNo) {
     <a class="back" href="#">${icon('left')}Všetky zdroje</a>
     <div class="g-top">
     <header class="g-head">
-      ${glyph(src.mono)}
+      ${glyph(src)}
       <h1 id="h" tabindex="-1">${esc(src.name)}</h1>
       <p class="lead">${esc(src.gives)}</p>
       <div class="g-meta">
@@ -304,7 +325,7 @@ function guide(src, variantId, stepNo) {
     </div>
     <nav class="more" aria-label="Ďalšie zdroje">
       <a class="btn" href="#">${icon('left')}Všetky zdroje</a>
-      <a class="more-n" href="#${nextSrc.id}">${glyph(nextSrc.mono)}<span><small>Ďalší zdroj</small><strong>${esc(nextSrc.name)}</strong></span>${icon('right')}</a>
+      <a class="more-n" href="#${nextSrc.id}">${glyph(nextSrc)}<span><small>Ďalší zdroj</small><strong>${esc(nextSrc.name)}</strong></span>${icon('right')}</a>
     </nav>
   </div>`
   document.title = `${src.name} · Sprievodca exportmi`
@@ -479,7 +500,23 @@ async function init() {
     return
   }
   byId = new Map(meta.sources.map((s) => [s.id, s]))
+  try {
+    // Tvoje appky (data/apps.json): only the sources of apps the user picked, the rest one click away.
+    const picked = new Set((await (await fetch('/api/apps', { cache: 'no-store' })).json()).picked ?? [])
+    mine = [...new Set(APPS.filter((a) => picked.has(a.id) && a.how === 'export' && byId.has(a.guide)).map((a) => a.guide))]
+  } catch {
+    mine = []
+  }
   route()
 }
+
+app.addEventListener('click', (e) => {
+  const all = e.target.closest('[data-all]')
+  const own = e.target.closest('[data-mine]')
+  if (!all && !own) return
+  e.preventDefault()
+  showAll = Boolean(all)
+  overview()
+})
 
 init()
