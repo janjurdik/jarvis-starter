@@ -38,7 +38,7 @@ import { BRAIN_DIR, DATA_DIR, REPO, clean, errMsg, isLoopback, log, readJson, re
 import { STT_ENGINE, sttLocal, sttState, stopStt, transcribeAudio, warmStt } from './server/stt.mjs'
 import { getWeather } from './server/weather.mjs'
 import { routeInner } from './server/inner.mjs'
-import { initImports, loadImports, resolveAttachments, routeImportGet, routeImportPost, stopImports } from './server/imports.mjs'
+import { initImports, loadImports, resolveAttachments, routeImportGet, routeImportPost } from './server/imports.mjs'
 import { startUpdateWatch, updateInfo } from './server/updates.mjs'
 import { callProblems } from './server/call.mjs'
 import { getApps, saveApps } from './server/apps.mjs'
@@ -869,7 +869,6 @@ function shutdown(signal) {
   log('hud', `koniec (${signal})`)
   brain?.stop()
   stopAllJobs()
-  stopImports()
   stopVideo()
   stopMic()
   stopTts()

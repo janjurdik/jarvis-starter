@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
- * Importer of data exports into Jarvis's memory. Everything stays on this computer.
+ * Import of the user's own data into Jarvis's memory. Everything stays on this computer.
  *
- *   node scripts/import.mjs detect <path> [--json]
- *   node scripts/import.mjs inspect <path> [--json]        a map of an export nobody wrote a parser for
+ *   node scripts/import.mjs detect <path> [--json]         a copy of data from an app, or an ordinary file
+ *   node scripts/import.mjs inspect <path> [<more parts>] [--json]   what is in it and what its files look like
  *   node scripts/import.mjs ingest <file.jsonl> --source <id> [--name "App"] [--json]
- *   node scripts/import.mjs run <path> [<more parts>] [--source x] [--me "Full Name"] [--progress] [--json]
  *   node scripts/import.mjs people [--all] [--json]
  *   node scripts/import.mjs apply <decisions.json> [--json]
  *   node scripts/import.mjs list [--json]
@@ -14,22 +13,22 @@
  *   node scripts/import.mjs steam [--dir <Steam folder>] [--json]
  *   node scripts/import.mjs file <path> [--json]
  *
- * A few common exports are read directly (Instagram, Facebook / Messenger, WhatsApp, Discord,
- * Telegram, ChatGPT, Claude, Spotify, Apple Music, Google Takeout). Anything else, and any of
- * those whose format changed, goes the general way: `inspect` shows the agent what the export
- * looks like, he maps it and loads it with `ingest`. The original is only read, never changed.
+ * There is no parser per app. `inspect` shows the agent what an export looks like, he works out
+ * the format, writes the messages out in one plain shape and loads them with `ingest`. The
+ * original is only read, never changed.
  */
 import './lib.mjs'
 import { readFile } from 'node:fs/promises'
 import { openAndDetect } from './import/detect.mjs'
 import { ingestMessages, inspectExport } from './import/generic.mjs'
 import { applyDecisions, buildCandidates } from './import/people.mjs'
-import { importFile, listImports, runImport } from './import/run.mjs'
+import { importFile } from './import/attach.mjs'
 import { formatHits, search, thread } from './import/search.mjs'
 import { importSteam } from './import/steam.mjs'
-import { SOURCE_NAME, UserError, day, fmtInt, localStamp, oneLine, plural } from './import/util.mjs'
+import { listImports } from './import/store.mjs'
+import { UserError, day, fmtInt, localStamp, oneLine, plural } from './import/util.mjs'
 
-const VALUE_FLAGS = new Set(['source', 'me', 'person', 'from', 'to', 'limit', 'around', 'dir', 'name'])
+const VALUE_FLAGS = new Set(['source', 'person', 'from', 'to', 'limit', 'around', 'dir', 'name'])
 
 function parse(argv) {
   const flags = {}
@@ -56,9 +55,8 @@ const print = (obj) => process.stdout.write(`${JSON.stringify(obj)}\n`)
 
 const HELP = `Import údajov do pamäte Jarvisa
 
-  node scripts/import.mjs detect <cesta>          zistí, čo je to za export
-  node scripts/import.mjs run <cesta>             načíta export do archívu (voľby: --source, --me "Meno", --progress)
-  node scripts/import.mjs inspect <cesta>         ukáže, čo v exporte je a ako vyzerajú jeho súbory (pre neznámy formát)
+  node scripts/import.mjs detect <cesta>          kópia dát z appky, alebo obyčajný súbor
+  node scripts/import.mjs inspect <cesta>         ukáže, čo v kópii dát je a ako vyzerajú jej súbory
   node scripts/import.mjs ingest <súbor.jsonl> --source <id> [--name "Appka"]   načíta správy v jednotnom tvare
   node scripts/import.mjs people                  ľudia z konverzácií, ktorí čakajú na potvrdenie (--all aj tí s pár správami)
   node scripts/import.mjs apply <rozhodnutia.json> zapíše potvrdených ľudí do pamäte
@@ -77,11 +75,6 @@ async function main() {
       const { src, det } = await openAndDetect(args[0])
       await src.close()
       return { ok: true, ...det }
-    }
-    case 'run': {
-      if (!args[0]) throw new UserError('Chýba cesta k exportu.')
-      const emit = flags.progress ? print : null
-      return runImport(args.length > 1 ? args : args[0], { source: typeof flags.source === 'string' ? flags.source.toLowerCase() : null, me: typeof flags.me === 'string' ? flags.me : null, emit })
     }
     case 'inspect': {
       if (!args[0]) throw new UserError('Chýba cesta k exportu.')
@@ -133,7 +126,7 @@ function human(res) {
   const out = []
   switch (command) {
     case 'detect':
-      out.push(res.label, `Zdroj: ${SOURCE_NAME[res.source] ?? res.source} · istota ${Math.round(res.confidence * 100)} %`)
+      out.push(res.label, res.source === 'export' ? 'Ďalší krok: node scripts/import.mjs inspect <cesta>' : 'Obyčajný súbor: node scripts/import.mjs file <cesta> ho uloží do príloh.')
       break
     case 'inspect':
       out.push(`${res.files} súborov, ${Math.round(res.bytes / 1e6)} MB`)
@@ -143,13 +136,6 @@ function human(res) {
       break
     case 'ingest':
       out.push(res.summary)
-      if (res.candidates) out.push('Ďalší krok: node scripts/import.mjs people')
-      break
-    case 'run':
-      out.push(res.summary)
-      if (res.me) out.push(`Ty v konverzáciách: ${res.me}`)
-      for (const n of res.notes ?? []) out.push(`Poznámka: ${n}`)
-      for (const w of res.warnings ?? []) out.push(`Pozor: ${w}`)
       if (res.candidates) out.push('Ďalší krok: node scripts/import.mjs people')
       break
     case 'people':
@@ -192,11 +178,11 @@ try {
     if (json) print({ ok: false, error: command ? `Neznámy príkaz: ${command}` : 'Chýba príkaz.' })
     else console.log(HELP)
     process.exitCode = command ? 1 : 0
-  } else if (json || flags.progress) print(res)
+  } else if (json) print(res)
   else console.log(human(res))
 } catch (err) {
   const message = err instanceof UserError || err?.user ? err.message : `Import zlyhal: ${err?.message ?? err}`
-  if (json || flags.progress) print({ ok: false, error: message })
+  if (json) print({ ok: false, error: message })
   else console.error(message)
   process.exitCode = 1
 }

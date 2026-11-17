@@ -13,7 +13,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, readdir, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { writeFileAtomic } from '../../hud/server/util.mjs'
-import { ARCHIVE_DIR, readJson, safeId, shortHash, writeJson } from './util.mjs'
+import { ARCHIVE_DIR, SOURCE_NAME, readJson, safeId, shortHash, writeJson } from './util.mjs'
 
 export const INDEX_FILE = join(ARCHIVE_DIR, 'index.json')
 export const IDENTITY_FILE = join(ARCHIVE_DIR, 'identity.json')
@@ -289,4 +289,24 @@ export async function recordImport(entry) {
   index.push(entry)
   await writeJson(INDEX_FILE, index)
   return index
+}
+
+/** `import.mjs list`: imports so far and what the archive holds per source. */
+export async function listImports() {
+  const imports = await loadIndex()
+  const sources = []
+  for (const source of await archivedSources()) {
+    const threads = await loadThreads(source)
+    if (!threads.length) continue
+    const firsts = threads.map((t) => t.first).sort()
+    const lasts = threads.map((t) => t.last).sort()
+    sources.push({ source, name: SOURCE_NAME[source] ?? source, threads: threads.length, messages: threads.reduce((s, t) => s + t.count, 0), from: firsts[0], to: lasts[lasts.length - 1] })
+  }
+  return {
+    ok: true,
+    imports,
+    sources,
+    totals: { threads: sources.reduce((s, x) => s + x.threads, 0), messages: sources.reduce((s, x) => s + x.messages, 0) },
+    archiveDir: ARCHIVE_DIR,
+  }
 }

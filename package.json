@@ -1,6 +1,6 @@
 {
   "name": "jarvis-starter",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "type": "module",
   "description": "Jarvis: osobný AI asistent s vlastnou pamäťou, HUD na ploche a rutinami. Základ, ktorý si každý dostavia po svojom, na Claude alebo ChatGPT.",

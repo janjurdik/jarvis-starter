@@ -332,12 +332,9 @@ export function createDrop({ api, ui, onSend, onReview, desktop = false }) {
   }
 
   function handleResult(res) {
-    if (res?.kind === 'export' && res.import) {
-      applyImport(res.import)
-      ui.toast(`${esc(res.import.label)} · pozerám sa na to`, { iconName: 'archive', ms: 3200 })
-    } else if (res?.kind === 'job') {
-      // An export in a format nobody prepared for: Jarvis reads it himself in the background.
-      ui.toast('Tento formát vidím prvýkrát. Čítam si ho a čo je dôležité, uložím do pamäte.', { iconName: 'memory', ms: 7000 })
+    if (res?.kind === 'job') {
+      // A copy of data from an app: Jarvis reads its format himself in the background.
+      ui.toast('Čítam si tvoje dáta. Čo je dôležité, uložím do pamäte a dám vedieť.', { iconName: 'memory', ms: 7000 })
     } else if (res?.kind === 'file' && res.attachment) {
       if (attachments.length >= MAX_ATTACH) ui.toast(`Naraz najviac ${MAX_ATTACH} príloh.`, { kind: 'warn', iconName: 'clip' })
       else if (!attachments.some((a) => a.rel === res.attachment.rel)) attachments.push({ rel: res.attachment.rel, name: res.attachment.name, type: res.attachment.type })

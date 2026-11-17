@@ -165,11 +165,11 @@ Na úpravy, pri ktorých chce vidieť každý krok, je pohodlnejšie otvoriť te
 
 Najviac o človeku vedia appky, ktoré používa roky. Každá mu vie dať kópiu jeho dát.
 
-1. Súbor alebo priečinok, ktorý ti dá (alebo ho pretiahne do okna Jarvisa): `node scripts/import.mjs detect "<cesta>" --json`.
-2. Pár bežných exportov sa načíta rovno: `node scripts/import.mjs run "<cesta>" --json` (originál nemení).
-3. **Všetko ostatné, aj známy export, ktorému sa zmenil formát, si prečítaš sám.** `node scripts/import.mjs inspect "<cesta>" --json` ti ukáže, čo v ňom je a ako vyzerajú súbory vnútri. Zisti z toho formát. Správy vypíš skriptom do súboru `.jsonl` v jednom tvare, jeden objekt na riadok:
+1. Pre appky nie sú pripravené žiadne čítačky. Formát si zakaždým prečítaš sám, preto je jedno, z ktorej appky dáta sú a či sa ich formát medzičasom zmenil.
+2. Súbor alebo priečinok, ktorý ti dá (alebo ho pretiahne do okna Jarvisa): `node scripts/import.mjs inspect "<cesta>" --json` ti ukáže, čo v ňom je a ako vyzerajú súbory vnútri. Zisti z toho, z akej appky to je a v akom formáte. Originál nemeň.
+3. Správy vypíš vlastným skriptom do súboru `.jsonl` v jednom tvare, jeden objekt na riadok:
    `{ "thread": "id rozhovoru", "title": "Jana Nováková", "kind": "dm", "from": "Jana Nováková", "me": false, "at": "2024-05-01T10:00:00Z", "text": "Ahoj" }`
-   a načítaj ich: `node scripts/import.mjs ingest <súbor.jsonl> --source <id> --name "<Názov appky>"`. Odvtedy sa v nich dá hľadať ako vo všetkom ostatnom. Čo nie sú správy (história počúvania, pozerania, príspevky, nákupy), zhrň rovno do poznámok v pamäti (`memory/hudba/`, `memory/zdroje/`, kam to patrí).
+   (`me: true` sú jeho vlastné správy) a načítaj ich: `node scripts/import.mjs ingest <súbor.jsonl> --source <id> --name "<Názov appky>"`. Odvtedy sa v nich dá hľadať ako vo všetkom ostatnom. Pri veľkom exporte čítaj súbory po častiach, nie celé do pamäte. Čo nie sú správy (história počúvania, pozerania, príspevky, nákupy), zhrň rovno do poznámok v pamäti (`memory/hudba/`, `memory/zdroje/`, kam to patrí).
 4. Po správach: `node scripts/import.mjs people --json` navrhne ľudí z rozhovorov. Na ploche ich potvrdí klikaním, tu v rozhovore mu ukáž najsilnejších desať až pätnásť a rozhodnutia zapíš cez `apply`. Potom podľa `routines/import-analyza.md` doplň ku každému, kto to je a čo ich spája.
 5. Ako sa ku kópii dát dostať, ukazuje sprievodca `http://localhost:4545/guide/` (port je v `node scripts/hud.mjs --info`). Väčšina exportov príde až o hodiny či dni: nech o ne požiada hneď a ty mu daj do úloh pripomienku.
 

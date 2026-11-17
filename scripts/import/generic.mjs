@@ -1,8 +1,7 @@
 // Import of anything, without a parser written in advance.
 //
-// Jarvis does not ship a parser for every app in the world. When the user hands over a copy of
-// their data that the importer does not recognise (or whose format changed), the agent looks at
-// it, understands the format and maps it himself:
+// Jarvis does not ship a parser per app. When the user hands over a copy of their data, the agent
+// looks at it, works out the format and maps it himself:
 //
 //   inspect <path>          a map of the export: folders, file types and short samples of the
 //                           files that most likely hold the content, so the format can be read
@@ -21,7 +20,7 @@ import { extname } from 'node:path'
 import { createInterface } from 'node:readline'
 import { buildCandidates, refreshLinked } from './people.mjs'
 import { openSource } from './source.mjs'
-import { createStore, recordImport } from './store.mjs'
+import { createStore, loadIdentity, recordImport, saveIdentity } from './store.mjs'
 import { ARCHIVE_DIR, CHAT_SOURCES, SOURCE_NAME, UserError, day, fmtInt, plural, readJson, writeJson } from './util.mjs'
 import { join } from 'node:path'
 
@@ -158,6 +157,16 @@ export async function ingestMessages(file, { source, name = null } = {}) {
     await writeJson(SOURCES_FILE, all)
     SOURCE_NAME[id] = label
     if (!CHAT_SOURCES.includes(id)) CHAT_SOURCES.push(id)
+  }
+  // Names the user goes by in this app, so the people review never offers the user to himself.
+  const mine = [...new Set([...threads.values()].map((e) => e.self).filter((n) => n && n !== 'ja'))]
+  if (mine.length) {
+    const identity = await loadIdentity()
+    const fresh = mine.filter((n) => !identity.me.includes(n))
+    if (fresh.length) {
+      identity.me.push(...fresh)
+      await saveIdentity(identity)
+    }
   }
   const store = await createStore(id, { entries: [], has: () => false, get: () => null })
   for (const [thread, e] of threads) {

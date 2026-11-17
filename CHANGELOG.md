@@ -2,6 +2,13 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.4.1 (2026-11-18)
+
+- **Dáta z appiek číta Jarvis sám.** Čítačky napísané vopred pre Instagram, Messenger, WhatsApp, Discord, Telegram, ChatGPT,
+  Claude, Spotify, Apple Music a Google Takeout sú preč. Pretiahneš do okna kópiu dát z ktorejkoľvek appky, Jarvis si na
+  pozadí pozrie jej formát, správy načíta a zvyšok zhrnie do pamäte. Funguje to rovnako pre appku, ktorú nikto nepredvídal,
+  aj keď známa appka zmení formát. To, čo si už načítal, ostáva.
+
 ## 1.4.0 (2026-11-18)
 
 Jarvis už nie je hotový systém, ale základ, ktorý si každý dostavia po svojom. Základ je pošta, úlohy, kalendár, pamäť,

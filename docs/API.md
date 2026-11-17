@@ -111,8 +111,9 @@ change is broadcast as SSE `settings`.
 
 Dropped files are streamed to `data/inbox/<id>/<name>` (never held in memory), then `scripts/import.mjs detect`
 says what they are. An ordinary file is copied to `memory/prilohy/<YYYY-MM>/` and comes back as an attachment for
-the chat. A data export (Instagram, WhatsApp, ChatGPT, …) is imported in the background, one at a time, and ends
-with the people review. Nothing that was uploaded is ever opened or run by the server.
+the chat. A copy of data from an app (a folder, an archive, a big data file) goes to a background job: there is no
+parser per app, the agent reads the format himself and loads the messages with `scripts/import.mjs ingest`. People
+found in them wait for the review. Nothing that was uploaded is ever opened or run by the server.
 
 | Method and path | What it does |
 |---|---|

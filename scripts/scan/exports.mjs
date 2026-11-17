@@ -1,12 +1,10 @@
 /**
  * Probe "exports": data exports the person already downloaded from other services (Instagram,
  * WhatsApp, ChatGPT, Google Takeout…). Detection reads file names and the file list of a zip,
- * never the content. When scripts/import/detect.mjs exists, its detectExport() has the last word.
+ * never the content. It only tells the person what was found; reading the export is the agent's job.
  */
 import { stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
-import { REPO } from '../lib.mjs'
 import { ago, countFiles, day, exists, isOffline, list, mapLimit, mb, plain, readHead, sizeText, sk, some, tilde, zipNames } from './util.mjs'
 
 export const SOURCES = {
@@ -65,41 +63,6 @@ export function guessExport(name, inner = []) {
   return null
 }
 
-let detector
-/** detectExport() from the import module, when another part of Jarvis provides it. */
-async function externalDetector() {
-  if (detector !== undefined) return detector
-  detector = null
-  const file = join(REPO, 'scripts', 'import', 'detect.mjs')
-  if (exists(file)) {
-    try {
-      const mod = await import(pathToFileURL(file).href)
-      if (typeof mod.detectExport === 'function') detector = mod.detectExport
-    } catch {
-      detector = null
-    }
-  }
-  return detector
-}
-
-async function detect(path, name, inner, askExternal = true) {
-  const own = guessExport(name, inner)
-  const external = askExternal ? await externalDetector() : null
-  if (external) {
-    try {
-      const res = await Promise.race([Promise.resolve(external(path)), new Promise((done) => setTimeout(() => done(null), 5000))])
-      // the import module names two sources differently and also answers for ordinary files
-      const source = { applemusic: 'apple' }[res?.source] ?? res?.source
-      const confidence = Number(res?.confidence)
-      if (source === 'steam' && confidence >= 0.5) return { source: 'unknown', confidence, note: 'Steam', label: res.label }
-      if (source && source !== 'unknown' && SOURCES[source] && confidence >= (own?.confidence ?? 0)) return { source, confidence, note: own?.note, label: res.label }
-    } catch {
-      // the import module is still being written: fall back to the names
-    }
-  }
-  return own
-}
-
 /** Names inside a folder, two levels deep, as relative paths (folders end with a slash). */
 async function folderNames(dir) {
   const out = []
@@ -129,19 +92,16 @@ export async function exportsProbe(ctx) {
     } catch {
       return
     }
-    found.set(path, { path, source: hit.source, sizeMB, modified: day(modified), confidence: hit.confidence, kind, ...(hit.note ? { note: hit.note } : {}), ...(hit.label ? { label: hit.label } : {}), modifiedMs: modified })
+    found.set(path, { path, source: hit.source, sizeMB, modified: day(modified), confidence: hit.confidence, kind, ...(hit.note ? { note: hit.note } : {}), modifiedMs: modified })
   }
 
   await ctx.step('zips', async () => {
     const zips = index.zips.filter((z) => z.depth <= 4).slice(0, 400)
-    let asked = 0
     await mapLimit(zips, 8, async (z) => {
       // peeking into a zip costs a few kilobytes of reading, so every zip in reach gets a look
       // (unless it only lives in the cloud: then its name has to do)
       const inner = isOffline(z.path) ? [] : (zipNames(z.path) ?? [])
-      // the import module may open the file, so it only sees likely exports and a few shallow zips
-      const askExternal = !isOffline(z.path) && Date.now() < ctx.deadline - 8000 && (Boolean(guessExport(z.name, inner)) || (z.depth <= 2 && asked++ < 40))
-      await add(z.path, 'zip', await detect(z.path, z.name, inner, askExternal))
+      await add(z.path, 'zip', guessExport(z.name, inner))
     })
   })
 
@@ -157,7 +117,7 @@ export async function exportsProbe(ctx) {
       const inner = await folderNames(path)
       const head = inner.includes('result.json') && !isOffline(join(path, 'result.json')) ? (readHead(join(path, 'result.json'), 400) ?? '') : ''
       const extra = /"(chats|personal_information|contacts|about)"/.test(head) ? ['chats/'] : []
-      await add(path, 'folder', await detect(path, basename(path), [...inner, ...extra]))
+      await add(path, 'folder', guessExport(basename(path), [...inner, ...extra]))
     })
   })
 
