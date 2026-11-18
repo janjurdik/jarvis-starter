@@ -53,8 +53,10 @@
   --pad: 1.6rem;
 }
 
-/* Jedna mierka podľa kratšej strany: 1512 × 982 → 16 px, 1920 × 1080 → 17,6 px, 2560 × 1440 → 23,5 px. */
-html { font-size: clamp(16px, min(1.058vw, 1.63vh), 26px); }
+/* Jedna mierka podľa kratšej strany: 1512 × 982 → 16 px, 1920 × 1080 → 17,6 px, 2560 × 1440 → 23,5 px.
+   Menšie obrazovky sa zmenšia rovnako (1440 × 900 → 14,7 px, 1366 × 768 → 13,5 px), nie že sa to isté
+   natlačí do menšieho priestoru: inak preteká text z dosiek a orby sa v strede prekrývajú. */
+html { font-size: clamp(13.5px, min(1.058vw, 1.63vh), 26px); }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
@@ -116,7 +118,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .stage {
   position: fixed;
   inset: 0;
-  perspective: 1400px;
+  /* In rem, so the tilt of the panes looks the same on every screen and never reaches the command bar. */
+  perspective: 87.5rem;
   perspective-origin: 50% 46%;
   pointer-events: none;
   z-index: 10;
@@ -330,7 +333,7 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
 
 .today-top {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) minmax(6.4rem, max-content);
   grid-template-areas: 'time art' 'date meta';
   align-items: end;
   column-gap: 0.5rem;
@@ -347,13 +350,14 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
   filter: drop-shadow(0 0 1.2rem rgba(127, 243, 255, 0.28));
 }
 .hero-hm .colon { -webkit-text-fill-color: rgba(234, 251, 255, 0.5); margin: 0 0.02em; }
-.today-date { grid-area: date; margin-top: 0.75rem; font: 500 1rem/1.2 var(--sans); color: var(--t2); white-space: nowrap; }
+.today-date { grid-area: date; min-width: 0; margin-top: 0.75rem; font: 500 1rem/1.2 var(--sans); color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .today-date::first-letter { text-transform: uppercase; }
 .wx-art { grid-area: art; justify-self: end; width: 6.4rem; height: 6.4rem; margin: -1.2rem -0.55rem -0.6rem 0; }
-.wx-meta { grid-area: meta; justify-self: end; display: flex; align-items: baseline; gap: 0.45rem; white-space: nowrap; }
+/* Teplota nad popisom, oboje zarovnané k ikone: dlhý popis („zamračené, slabý dážď · Bratislava") sa skráti, nikdy nevyjde z dosky. */
+.wx-meta { grid-area: meta; justify-self: end; min-width: 0; max-width: 8.5rem; display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; white-space: nowrap; }
 .wx-temp { font: 300 1.6rem/1 var(--sans); letter-spacing: -0.02em; color: var(--t1); }
 .wx-temp sup { font-size: 0.875rem; vertical-align: 0.75em; margin-left: 0.08em; color: var(--t2); }
-.wx-text { font: 500 0.875rem/1.2 var(--sans); color: var(--t3); }
+.wx-text { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font: 500 0.875rem/1.2 var(--sans); color: var(--t3); }
 
 /* Spánok: prstenec skóre, dĺžka, týždeň. */
 .sleep { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 1.1rem; margin-top: 1.35rem; }
@@ -692,6 +696,8 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
 #labels { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 .nl { position: absolute; left: 0; top: 0; will-change: transform, opacity; transition: opacity 0.5s ease; }
 body.capture .nl { transition: none; }
+.nl-in { transition: opacity 0.35s ease; }
+.nl.is-crowded:not(.is-hover):not(.is-focus) .nl-in { opacity: 0; }
 .nl-in {
   position: absolute;
   left: 0;
@@ -748,11 +754,13 @@ body.inner-open #labels .nl-in { pointer-events: none; }
   flex-direction: column;
   align-items: center;
   z-index: 20;
+  container: voice / inline-size;
 }
 
 .subtitle {
   margin: 0;
   width: 100%;
+  max-width: 64rem;
   min-height: 2.5em;
   display: flex;
   flex-direction: column;
@@ -778,6 +786,7 @@ body.capture .subtitle .w { transition: none; }
 .cmd {
   position: relative;
   width: 100%;
+  max-width: 60rem;
   height: 4rem;
   display: flex;
   align-items: center;
@@ -862,6 +871,10 @@ body[data-voice='listening'] .cmd-wave { opacity: 1; }
 .key kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 1.75rem; height: 1.5rem; padding: 0 0.45rem; border-radius: 0.45rem; background: var(--fill-2); font: 500 0.8125rem/1 var(--sans); color: var(--t1); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.35); }
 .key.stop kbd { background: rgba(127, 243, 255, 0.16); color: var(--white); }
 .key[hidden] { display: none; }
+/* Úzky pruh: nápoveda klávesov by ukrojila z poľa na písanie („Povedz Jarvi…"), radšej ustúpi. */
+@container voice (max-width: 36rem) {
+  .keys { display: none; }
+}
 
 .toast {
   position: fixed;
@@ -1062,6 +1075,7 @@ body.scene .keys, body.capture .keys { display: none; }
 .jb-run .jb-dot { fill: var(--ice); }
 .jb-run { animation: spin 1.6s linear infinite; filter: drop-shadow(0 0 0.3em rgba(127, 243, 255, 0.6)); }
 .jb-ok { color: var(--amber); filter: drop-shadow(0 0 0.3em rgba(255, 178, 92, 0.65)); }
+.jb-ask { color: var(--ice); filter: drop-shadow(0 0 0.3em rgba(127, 243, 255, 0.65)); }
 .jb-err { color: var(--red); filter: drop-shadow(0 0 0.3em rgba(255, 90, 78, 0.6)); }
 .jb-stop { color: var(--t3); filter: none; }
 .jb-main { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
@@ -1121,6 +1135,9 @@ body.job-open .toast { z-index: 48; }
 .jv-tools { flex: none; display: flex; align-items: center; gap: 0.5rem; }
 .jv-ask { flex: none; display: flex; align-items: flex-start; gap: 0.6rem; margin: 0; padding: 0.8rem 1rem; border-radius: 1.1rem; background: rgba(255, 178, 92, 0.1); font: 500 0.9375rem/1.4 var(--sans); color: var(--t1); }
 .jv-ask .ic { flex: none; width: 1.15rem; height: 1.15rem; margin-top: 0.1rem; color: var(--amber); }
+.jv-ask b { display: block; margin-bottom: 0.2rem; font: 600 0.8125rem/1.2 var(--sans); color: var(--amber); }
+.jv-ask.is-q { background: rgba(127, 243, 255, 0.08); }
+.jv-ask.is-q .ic, .jv-ask.is-q b { color: var(--ice); }
 .jv-body {
   flex: 1 1 auto;
   min-height: 0;

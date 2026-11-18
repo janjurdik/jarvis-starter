@@ -165,13 +165,13 @@ serveMcp({
         const r = await hud('job_list', {})
         if (r.isError) return r
         return r.jobs.length
-          ? r.jobs.slice(0, 12).map((j) => `${j.id} „${j.title}" ${j.status} · ${j.step ?? ''}${j.needsOk ? ` · čaká na súhlas: ${j.needsOk}` : ''}${j.summary ? ` · ${j.summary.slice(0, 200)}` : ''}`).join('\n')
+          ? r.jobs.slice(0, 12).map((j) => `${j.id} „${j.title}" ${j.status} · ${j.step ?? ''}${j.needsOk ? ` · ${j.wait === 'question' ? 'čaká na odpoveď na otázku' : 'čaká na súhlas'}: ${j.needsOk}` : ''}${j.summary ? ` · ${j.summary.slice(0, 200)}` : ''}`).join('\n')
           : 'Žiadne úlohy.'
       },
     },
     {
       name: 'agent_reply',
-      description: 'Pokračuje v skončenej úlohe tou istou session: doplnenie, oprava alebo schválenie. Keď úloha čaká na súhlas (needs_ok) a používateľ povie „pošli to" alebo „súhlasím", pošli jasné schválenie, napr. "Schválené: pošli presne pripravené znenie."',
+      description: 'Pokračuje v skončenej úlohe tou istou session: odpoveď na jej otázku, doplnenie, oprava alebo schválenie. Keď čaká na odpoveď na otázku, pošli používateľovu odpoveď celú, s tým, čo z rozhovoru vyplýva (napr. "Používateľ odpovedal: účet sa volá @kaviaren.sk."). Keď čaká na súhlas a používateľ povie „pošli to" alebo „súhlasím", pošli jasné schválenie, napr. "Schválené: pošli presne pripravené znenie." Keď chce zmenu, pošli tú zmenu.',
       inputSchema: { type: 'object', properties: { id: { type: 'string' }, text: { type: 'string' } }, required: ['id', 'text'] },
       handler: async ({ id, text }) => {
         const r = await hud('job_reply', { id, text })

@@ -69,8 +69,10 @@
 .st-voices { grid-row: span 2; }
 .st-quiet { grid-column: 1 / -1; }
 
-.st-field { display: block; margin-top: 0.85rem; }
-.st-field:first-of-type { margin-top: 0; }
+/* Every field keeps its distance from the one above; only the first one under the heading starts right away.
+   (:first-of-type counted labels and divs apart, so „Meno" stuck to the language pills above it.) */
+.st-field { display: block; margin-top: 1rem; }
+.st-sec > h3 + .st-field, .st-sec > .st-field:first-child, .st-pair + .st-field { margin-top: 0; }
 .st-field > span { display: block; margin-bottom: 0.4rem; font: 500 0.8125rem/1 var(--sans); color: var(--t2, rgba(234, 251, 255, 0.68)); }
 .st-field input[type='text'], .st-field input[type='password'], .st-field input[type='tel'], .st-field input[type='date'], .st-inline {
   width: 100%;

@@ -26,7 +26,7 @@ import { CodexBrain } from './server/brain-codex.mjs'
 import { aiProvider } from './server/provider.mjs'
 import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onVoiceChange, sayText, sendChat, setVoice, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
 import { CONFIG_FILE, getConfig } from './server/config.mjs'
-import { createJob, initJobs, jobDetail, jobFile, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob } from './server/jobs.mjs'
+import { createJob, initJobs, jobDetail, jobFile, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob, waitNudge } from './server/jobs.mjs'
 import { normalizeCard } from './server/cards.mjs'
 import { FILES, MEMORY_DIR, getIndex, stats } from './server/memory/index.mjs'
 import { attachMic, micStats, micStatus, micWorkerState, onVoice, setMicWake, stopMic, wakeAvailable } from './server/mic.mjs'
@@ -49,7 +49,7 @@ import { applyCall, applySettings, brainSettings, initSettings, previewVoice, se
 import { routeVideoGet, routeVideoPost, stopVideo } from './server/video.mjs'
 import { changeOrbs, getOrbs } from './server/orbs.mjs'
 import { getSetup, noteSetup, setupContextNote } from './server/setup.mjs'
-import { FIRST_RUN_TEXT } from './server/persona.mjs'
+import { FIRST_RUN_TEXT, addressOf } from './server/persona.mjs'
 
 const ROOT = import.meta.dirname
 const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
@@ -825,7 +825,25 @@ async function jobAction(body) {
   }
 }
 
-const STATUS_SK = { done: 'hotová', needs_ok: 'čaká na súhlas', error: 'zlyhala' }
+/** A job's state in Jarvis's own words: the jobs are his hands, he is the one who asks and waits. */
+const jobState = (job) =>
+  job.status === 'done' ? 'hotovo' : job.status === 'needs_ok' ? (job.wait === 'question' ? 'mám otázku' : 'čakám na súhlas') : 'nepodarilo sa'
+
+/** What Jarvis says about a finished job when the voice brain cannot speak for himself (no brain, mock). */
+function jobLine(job) {
+  const { address } = addressOf()
+  const call = address ? `${address[0].toUpperCase()}${address.slice(1)}, ` : ''
+  if (job.status === 'needs_ok') {
+    const raw = String(job.needsOk ?? '').trim()
+    // After the address the question goes on in lower case ("Pane, ako sa…"), a name or an acronym stays as it is.
+    const q = call && /^\p{Lu}\p{Ll}/u.test(raw) ? `${raw[0].toLowerCase()}${raw.slice(1)}` : raw
+    return job.wait === 'question' ? `${call}${q}` : `${call}mám pripravené: ${q.replace(/[.?!]\s*$/, '')}. Môžem?`
+  }
+  if (job.status === 'done') return job.say || `Hotovo: ${job.title}.`
+  return `${call}${job.title} sa mi nepodarilo. ${job.say ?? ''}`.trim()
+}
+/** The voice brain can take a turn of its own right now. */
+const brainCanAsk = () => Boolean(brain) && !MOCK_ALL && brain.status().state === 'ready' && clientCount() > 0
 const announceQueue = []
 let announcing = false
 /** Announcements (finished jobs, routines) wait until Jarvis stops talking and no turn or listening runs. */
@@ -845,15 +863,29 @@ async function drainAnnounce() {
         continue
       }
       const title = job.title
-      const lead = job.status === 'done' ? `Úloha ${title} je hotová.` : job.status === 'needs_ok' ? `Úloha ${title} čaká na váš súhlas.` : `Úloha ${title} zlyhala.`
+      // A job that needs him: Jarvis himself asks, in his own words and with the address from the settings.
+      if (job.status === 'needs_ok' && !silent && !hush && brainCanAsk()) {
+        sendHud({ type: 'alert', text: `${jobState(job)[0].toUpperCase()}${jobState(job).slice(1)} · ${title}`, icon: 'alarm', say: null, heard: null, node: 'projekty', source: 'jarvis' })
+        systemNotify({ title: `Jarvis · ${jobState(job)}`, body: job.needsOk ?? title, job: job.id, quiet: hush })
+        pushSnapshot('úloha').catch(() => {})
+        try {
+          sendChat({ text: waitNudge(job), via: 'text', hidden: true })
+          // The question is a turn of its own: the next announcement waits until it is said.
+          await new Promise((r) => setTimeout(r, 1500))
+          continue
+        } catch (err) {
+          log('jobs', errMsg(err))
+        }
+      }
+      const wait = job.status === 'needs_ok'
       const res = normalizeCard(
         {
           kind: 'text',
-          title: `Úloha: ${title}`,
-          icon: job.status === 'done' ? 'check' : job.status === 'needs_ok' ? 'alarm' : 'shield',
+          title: wait ? `${jobState(job)[0].toUpperCase()}${jobState(job).slice(1)}: ${title}` : title,
+          icon: job.status === 'done' ? 'check' : wait ? 'alarm' : 'shield',
           node: 'projekty',
-          accent: job.status === 'done' ? 'ice' : job.status === 'needs_ok' ? 'amber' : 'red',
-          text: [job.summary && job.summary.length > 300 ? `${job.summary.slice(0, 297).trimEnd()}…` : job.summary, job.needsOk ? `Čaká na súhlas: ${job.needsOk}` : null].filter(Boolean).join(' · ') || lead,
+          accent: job.status === 'done' ? 'ice' : wait ? 'amber' : 'red',
+          text: (wait ? job.needsOk : job.summary && job.summary.length > 300 ? `${job.summary.slice(0, 297).trimEnd()}…` : job.summary) || jobLine(job),
           caption: job.cost?.ms ? `${Math.round(job.cost.ms / 1000)} s, ${job.cost.turns} krokov` : null,
         },
         `c-${job.id}-${Date.now().toString(36)}`,
@@ -862,18 +894,18 @@ async function drainAnnounce() {
         send('chat', { turn: `job-${job.id}`, phase: 'card', card: res.card, job: job.id })
         send('chat', { turn: `job-${job.id}`, phase: 'done', text: '', ms: 0, stopped: false })
       }
-      sendHud({ type: job.status === 'done' ? 'done' : 'alert', text: `Úloha ${title} · ${STATUS_SK[job.status] ?? job.status}`, icon: job.status === 'done' ? 'check' : 'alarm', say: null, heard: null, node: 'projekty', source: 'jarvis' })
+      sendHud({ type: job.status === 'done' ? 'done' : 'alert', text: `${title} · ${jobState(job)}`, icon: job.status === 'done' ? 'check' : 'alarm', say: null, heard: null, node: 'projekty', source: 'jarvis' })
       pushSnapshot('úloha').catch(() => {})
       // A notification of the system as well: the desktop is under the windows, a toast there is easy to miss.
       systemNotify({
-        title: job.status === 'done' ? 'Jarvis · úloha je hotová' : job.status === 'needs_ok' ? 'Jarvis · čaká na tvoj súhlas' : 'Jarvis · úloha zlyhala',
-        body: [title, job.status === 'needs_ok' ? job.needsOk : (job.say ?? job.summary)].filter(Boolean).join(': '),
+        title: `Jarvis · ${jobState(job)}`,
+        body: [title, wait ? job.needsOk : (job.say ?? job.summary)].filter(Boolean).join(': '),
         job: job.id,
         quiet: hush,
       })
       if (!silent && !hush) {
-        // Only the short spoken line of the job is read, never the whole written result.
-        sayText(`${lead} ${job.say ?? ''}`.trim().slice(0, 420))
+        // Only the short spoken line is read, never the whole written result.
+        sayText(jobLine(job).slice(0, 420))
         await new Promise((r) => setTimeout(r, 1200))
       }
     }

@@ -38,7 +38,7 @@ export function createReveal({ onOpen, fileUrl = (u) => u }) {
     const web = arts.find((a) => a.kind === 'web')
     const img = arts.find((a) => a.kind === 'image')
     const waiting = job.status === 'needs_ok'
-    const badge = `<span class="rv-badge${waiting ? ' is-wait' : ''}">${icon(waiting ? 'hourglass' : 'check')}<span>${waiting ? 'Čaká na tvoje áno' : 'Hotovo'}</span></span>`
+    const badge = `<span class="rv-badge${waiting ? ' is-wait' : ''}">${icon(waiting ? 'hourglass' : 'check')}<span>${waiting ? (job.wait === 'question' ? 'Mám otázku' : 'Čakám na súhlas') : 'Hotovo'}</span></span>`
     const text = esc(waiting ? job.needsOk || job.summary || '' : job.summary || '')
     let media = ''
     let kind = 'text'

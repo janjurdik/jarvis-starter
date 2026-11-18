@@ -2,7 +2,7 @@
 // a GET /api/jobs. Prekresľuje sa len pri udalosti a raz za sekundu čas behu (pokoj plochy nebrzdí).
 //
 // job: {id, title, status: queued|running|needs_ok|done|error|stopped, step, steps[], startedAt, endedAt,
-//       summary, needsOk, cost: {turns, ms}}
+//       summary, needsOk, wait: question|approval (while needs_ok), cost: {turns, ms}}
 //
 // A row shows the current step and has its own stop button. A click on the row opens the job:
 // the assignment, the whole feed with times (SSE `job-feed` adds lines while it runs), the result
@@ -14,14 +14,17 @@ import { esc, plural } from './format.js'
 const WINDOW_MS = 2 * 3600_000
 const ACTIVE = new Set(['queued', 'running', 'needs_ok'])
 const APPROVE = 'Schvaľujem, pokračuj presne podľa návrhu.'
-const STATUS_TEXT = { queued: 'v poradí', running: 'beží', needs_ok: 'čaká na súhlas', done: 'hotovo', error: 'chyba', stopped: 'zastavená' }
+const STATUS_TEXT = { queued: 'v poradí', running: 'beží', needs_ok: 'čakám na súhlas', done: 'hotovo', error: 'chyba', stopped: 'zastavená' }
+/** What a job that stopped for the user waits for: a missing piece (question) or a yes to something going out (approval). */
+const isQuestion = (j) => j?.status === 'needs_ok' && j.wait === 'question'
+const statusText = (j) => (isQuestion(j) ? 'mám otázku' : STATUS_TEXT[j.status] ?? j.status)
 
 /** Ikona stavu: kruh, ktorý sa točí (beží), jantárový (súhlas), fajka, chyba, stop. */
-function statusIcon(status) {
+function statusIcon(status, wait = null) {
   if (status === 'running' || status === 'queued') {
     return `<svg class="jb-ic jb-run" viewBox="0 0 24 24" aria-hidden="true"><circle class="jb-track" cx="12" cy="12" r="8.6"/><path class="jb-arc" d="M12 3.4a8.6 8.6 0 0 1 8.6 8.6"/><circle class="jb-dot" cx="12" cy="12" r="2.2"/></svg>`
   }
-  if (status === 'needs_ok') return icon('hourglass', 'jb-ic jb-ok')
+  if (status === 'needs_ok') return wait === 'question' ? icon('info', 'jb-ic jb-ask') : icon('hourglass', 'jb-ic jb-ok')
   if (status === 'done') return icon('check', 'jb-ic jb-done')
   if (status === 'error') return icon('alarm', 'jb-ic jb-err')
   return icon('stop', 'jb-ic jb-stop')
@@ -146,7 +149,7 @@ export function createJobs({ api, ui = null, onChange, onFinished = null, captur
       const end = ts(j.endedAt)
       const run = Number.isFinite(start) ? elapsed((Number.isFinite(end) ? end : clock()) - start) : ''
       const steps = (detail?.feed ?? []).filter((e) => e.kind === 'step').length
-      return [STATUS_TEXT[j.status] ?? j.status, run, steps ? `${steps} ${plural(steps, 'krok', 'kroky', 'krokov')}` : ''].filter(Boolean).join(' · ')
+      return [statusText(j), run, steps ? `${steps} ${plural(steps, 'krok', 'kroky', 'krokov')}` : ''].filter(Boolean).join(' · ')
     }
 
     function render() {
@@ -158,22 +161,25 @@ export function createJobs({ api, ui = null, onChange, onFinished = null, captur
       const box = root.querySelector('.jv-feed')
       if (box) stick = box.scrollHeight - box.scrollTop - box.clientHeight < 40
       const task = detail?.film ? '<p class="jv-muted">V režime natáčania je zadanie skryté.</p>' : detail?.task ? `<p>${esc(detail.task)}</p>` : ''
-      const canReply = Boolean(detail?.canReply) && !active
+      const waiting = j.status === 'needs_ok'
+      const question = isQuestion(j)
+      // A job that waits can be answered right here too: the answer to Jarvis's question, or what to change before it goes out.
+      const canReply = Boolean(detail?.canReply) && (!active || waiting)
       root.innerHTML =
         `<div class="jv-in st-${esc(j.status)}">` +
-        `<header class="jv-top">${statusIcon(j.status)}<div class="jv-h"><h2>${esc(j.title || 'Úloha')}</h2><p class="jv-sub">${esc(headSub(j))}</p></div>` +
+        `<header class="jv-top">${statusIcon(j.status, j.wait)}<div class="jv-h"><h2>${esc(j.title || 'Úloha')}</h2><p class="jv-sub">${esc(headSub(j))}</p></div>` +
         '<div class="jv-tools">' +
-        (j.status === 'needs_ok' ? `<button type="button" class="pv-btn is-main" data-act="ok">${icon('check')}<span>Schváliť</span></button>` : '') +
+        (waiting && !question ? `<button type="button" class="pv-btn is-main" data-act="ok">${icon('check')}<span>Schváliť</span></button>` : '') +
         (active ? `<button type="button" class="pv-btn" data-act="stop">${icon('stop')}<span>Zastaviť</span></button>` : '') +
         `<button type="button" class="pv-x" data-act="close" title="Zavrieť (Esc)" aria-label="Zavrieť">${icon('close')}</button></div></header>` +
-        (j.status === 'needs_ok' && j.needsOk ? `<p class="jv-ask">${icon('hourglass')}<span>${esc(j.needsOk)}</span></p>` : '') +
+        (waiting && j.needsOk ? `<p class="jv-ask${question ? ' is-q' : ''}">${icon(question ? 'info' : 'hourglass')}<span><b>${question ? 'Pýtam sa' : 'Čakám na súhlas'}</b>${esc(j.needsOk)}</span></p>` : '') +
         '<div class="jv-body">' +
         (task ? `<section class="jv-task"><h3>Zadanie</h3>${task}</section>` : '') +
         `<section class="jv-feed"><h3>Priebeh</h3>${error ? `<p class="jv-empty">${esc(`Priebeh sa nepodarilo načítať: ${error}`)}</p>` : detail ? feedHtml(detail.feed) : '<p class="jv-empty">Načítavam…</p>'}</section>` +
         '</div>' +
         (canReply
-          ? `<form class="jv-reply"><input class="jv-input" type="text" autocomplete="off" maxlength="4000" placeholder="${j.status === 'stopped' ? 'Pokračuj v úlohe: napíš, čo má dorobiť alebo zmeniť' : 'Doplň alebo oprav túto úlohu'}"><button type="submit" class="pv-btn is-main"${sending ? ' disabled' : ''}>${icon('send')}<span>Poslať</span></button></form>`
-          : active && j.status !== 'needs_ok'
+          ? `<form class="jv-reply"><input class="jv-input" type="text" autocomplete="off" maxlength="4000" placeholder="${question ? 'Odpoveď…' : waiting ? 'Alebo napíšte, čo zmeniť…' : j.status === 'stopped' ? 'Čo ešte dorobiť alebo zmeniť…' : 'Čo doplniť alebo opraviť…'}"><button type="submit" class="pv-btn${question || !waiting ? ' is-main' : ''}"${sending ? ' disabled' : ''}>${icon('send')}<span>${question ? 'Odpovedať' : 'Poslať'}</span></button></form>`
+          : active && !waiting
             ? '<p class="jv-foot">Kým úloha beží, dá sa zastaviť. Zastavenú alebo hotovú vieš odtiaľto doplniť a pustiť ďalej.</p>'
             : '') +
         '</div>'
@@ -192,7 +198,7 @@ export function createJobs({ api, ui = null, onChange, onFinished = null, captur
       if (!text || sending || !id) return
       sending = true
       try {
-        await api.jobReply(id, text)
+        await api.jobReply(id, isQuestion(job()) ? `Odpoveď používateľa: ${text}` : text)
         input.value = ''
         if (detail) detail.canReply = false
       } catch (err) {
@@ -312,6 +318,10 @@ export function createJobs({ api, ui = null, onChange, onFinished = null, captur
     get waiting() {
       return [...jobs.values()].filter((j) => j.status === 'needs_ok').length
     },
+    /** Of those, the ones that wait for an answer to a question, not for a yes. */
+    get asking() {
+      return [...jobs.values()].filter(isQuestion).length
+    },
   }
 }
 
@@ -320,7 +330,8 @@ export function demoJobs(apply, { capture = false } = {}) {
   const t0 = Date.now()
   const steps = ['Čítam zadanie', 'Hľadám: ceny leteniek', 'Čítam web', 'Porovnávam možnosti', 'Píšem zhrnutie.md']
   apply({ id: 'demo-done', title: 'Rešerš: darčeky na Vianoce', status: 'done', step: 'Hotovo', steps: ['Hľadám zdroje', 'Čítam 12 článkov', 'Píšem zhrnutie do pamäte'], startedAt: t0 - 46 * 60_000, endedAt: t0 - 31 * 60_000, summary: 'Zhrnutie je v pamäti, 5 tipov a 3 odporúčania.', cost: { turns: 18, ms: 900_000 } })
-  apply({ id: 'demo-ok', title: 'Mail prenajímateľovi', status: 'needs_ok', step: 'Návrh je pripravený', needsOk: 'Poslať pripravený mail?', steps: ['Čítam poznámky', 'Píšem návrh mailu'], startedAt: t0 - 7 * 60_000, summary: 'Návrh mailu je pripravený, čaká na schválenie.', cost: { turns: 9, ms: 420_000 } })
+  apply({ id: 'demo-ok', title: 'Mail prenajímateľovi', status: 'needs_ok', wait: 'approval', step: 'Čakám na súhlas', needsOk: 'Mail prenajímateľovi o oprave kotla, poslať?', steps: ['Čítam poznámky', 'Píšem návrh mailu'], startedAt: t0 - 7 * 60_000, summary: 'Návrh mailu je pripravený.', cost: { turns: 9, ms: 420_000 } })
+  apply({ id: 'demo-ask', title: 'Nájsť rozhovor na Instagrame', status: 'needs_ok', wait: 'question', step: 'Pýtam sa', needsOk: 'Ako sa ten účet volá presne? Možno prepis hlasu skomolil meno.', steps: ['Hľadám v správach', 'Hľadám v archíve'], startedAt: t0 - 5 * 60_000, summary: 'Konverzáciu som v správach nenašiel.', cost: { turns: 7, ms: 300_000 } })
   let i = 2
   const run = { id: 'demo-run', title: 'Plán výletu na víkend', status: 'running', step: steps[i], steps: steps.slice(0, i + 1), startedAt: t0 - 3 * 60_000 - 12_000, cost: { turns: 6, ms: 192_000 } }
   apply(run)

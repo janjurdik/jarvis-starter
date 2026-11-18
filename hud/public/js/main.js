@@ -1267,8 +1267,9 @@ async function main() {
     api,
     ui,
     capture: CAPTURE,
-    onFinished: (job) => reveal?.show(job),
-    onChange: () => paint('jobs', () => ui.renderJobsChip(jobs.active, jobs.waiting)),
+    // What waits for him is asked by Jarvis in the conversation; the center of the screen shows only results.
+    onFinished: (job) => job.status === 'done' && reveal?.show(job),
+    onChange: () => paint('jobs', () => ui.renderJobsChip(jobs.active, jobs.waiting, jobs.asking)),
   })
   chat = createChat({ onSend: (text, via) => send(text, via), capture: CAPTURE, fileUrl: api.fileUrl })
   if (!CAPTURE && !SCENE_ID) {

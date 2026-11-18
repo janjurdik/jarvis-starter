@@ -167,8 +167,9 @@ Všetko, čo ty. Úlohy na pozadí aj rutiny bežia s plným prístupom: súbory
 web a tvoje konektory (kalendár, mail…). Na nič sa nepýta, lebo pri tej práci nikto nesedí, kto by odpovedal.
 Žiadny obmedzený režim neexistuje a nič sa nenastavuje.
 
-Jedna vec platí vždy: ľuďom nič neposiela sám. Pripraví presné znenie, v HUD ohlási, že čaká na súhlas, a pošle,
-až keď povieš „pošli to" alebo klikneš na Schváliť. Pri konektoroch, ktoré vedia posielať (mail), si v nastaveniach
+Jedna vec platí vždy: ľuďom nič neposiela sám. Pripraví presné znenie, Jarvis ti povie, čo má pripravené a pre koho,
+a pošle to, až keď povieš „pošli to" alebo klikneš na Schváliť. Keď úlohe chýba informácia, ktorú nezistí sama,
+nepýta sa úloha: spýta sa ťa Jarvis v rozhovore a tvoju odpoveď jej odovzdá. Pri konektoroch, ktoré vedia posielať (mail), si v nastaveniach
 Claude môžeš navyše určiť, čo smú robiť bez potvrdenia.
 
 ## Úlohy: nahliadnuť a zastaviť

@@ -82,6 +82,9 @@ export function createUI({ capture }) {
   const scrollers = [document.getElementById('scroll-l'), document.getElementById('scroll-r')].filter(Boolean)
   function updateFade(sc) {
     if (capture) sc.scrollTop = 0
+    // The panes scroll only up and down. Focus or a trackpad swipe could shift a clipped pane sideways
+    // and cut off the start of the clock and the date.
+    if (sc.scrollLeft) sc.scrollLeft = 0
     const up = sc.scrollTop > 2
     const down = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 2
     if (sc._up !== up) sc.classList.toggle('can-up', (sc._up = up))
@@ -461,12 +464,17 @@ export function createUI({ capture }) {
     setChip('film', chip.film, { cls: film ? 'is-on' : 'is-off', html: `${icon('film')}<span>Natáčanie</span>` })
   }
 
-  /** Čip „2 úlohy bežia" v lište, jantárový keď niektorá čaká na súhlas. */
-  function renderJobsChip(active, waiting) {
-    const text = waiting
-      ? `${waiting} ${plural(waiting, 'úloha čaká', 'úlohy čakajú', 'úloh čaká')} na súhlas`
-      : `${active} ${plural(active, 'úloha beží', 'úlohy bežia', 'úloh beží')}`
-    setChip('jobs', chip.jobs, { hidden: !active, cls: waiting ? 'is-warn' : 'is-busy', html: `${icon(waiting ? 'hourglass' : 'projekty')}<span>${text}</span>`, title: 'Úlohy Jarvisa na pozadí, klik otvorí priebeh' })
+  /**
+   * Čip „2 úlohy bežia" v lište, jantárový keď Jarvis na niečo čaká. Úlohy sú jeho ruky:
+   * keď treba odpoveď alebo súhlas, pýta sa on („Mám otázku", „Čakám na súhlas").
+   */
+  function renderJobsChip(active, waiting, asking = 0) {
+    const text = asking
+      ? asking > 1 ? `Mám ${asking} ${plural(asking, 'otázku', 'otázky', 'otázok')}` : 'Mám otázku'
+      : waiting
+        ? 'Čakám na súhlas'
+        : `${active} ${plural(active, 'úloha beží', 'úlohy bežia', 'úloh beží')}`
+    setChip('jobs', chip.jobs, { hidden: !active, cls: waiting ? 'is-warn' : 'is-busy', html: `${icon(asking ? 'info' : waiting ? 'hourglass' : 'projekty')}<span>${text}</span>`, title: 'Úlohy Jarvisa na pozadí, klik otvorí priebeh' })
   }
 
   // ── LOG ──
@@ -562,13 +570,31 @@ export function createUI({ capture }) {
       const outside = bounds && !isFocus && (y < bounds.top || y > bounds.bottom)
       const op = (p.visible === false || outside ? 0 : dim ? 0.28 : 1).toFixed(2)
       if (node._op !== op) node.style.opacity = node._op = op
-      const cls = `nl${hot || busy ? ' is-hot' : ''}${busy ? ' is-busy' : ''}${isFocus ? ' is-focus' : ''}${hover === p.id ? ' is-hover' : ''}`
+      const cls = `nl${hot || busy ? ' is-hot' : ''}${busy ? ' is-busy' : ''}${isFocus ? ' is-focus' : ''}${hover === p.id ? ' is-hover' : ''}${node._crowd ? ' is-crowded' : ''}`
       if (node._cls !== cls) {
         node.className = node._cls = cls
         node._h = undefined
       }
       const cap = isFocus ? caption ?? '' : ''
       if (node._capText !== cap) node._cap.textContent = node._capText = cap
+    }
+    // A few times a second: the label of a moon that lands on a planet's label steps back (it shows on hover).
+    if (++crowdTick % 20 === 0) markCrowded()
+  }
+
+  let crowdTick = 0
+  function markCrowded() {
+    const boxes = []
+    for (const node of labelEls.values()) {
+      if (node.dataset.minor || node._op === '0.00') continue
+      const r = node.firstElementChild?.getBoundingClientRect()
+      if (r?.width) boxes.push(r)
+    }
+    for (const node of labelEls.values()) {
+      if (!node.dataset.minor) continue
+      const r = node.firstElementChild?.getBoundingClientRect()
+      const hit = Boolean(r?.width) && boxes.some((b) => r.left < b.right + 6 && r.right > b.left - 6 && r.top < b.bottom + 4 && r.bottom > b.top - 4)
+      node._crowd = hit
     }
   }
 

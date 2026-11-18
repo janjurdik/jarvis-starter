@@ -164,7 +164,10 @@ export async function createCore(canvas, opts = {}) {
     const radiusPx = Math.max(60, Math.min(zh * 0.43, zw * 0.36))
     const pxPerUnit = radiusPx / R.layout
     const dist = h / 2 / (pxPerUnit * TAN)
-    view = { w, h, dpr, zone, cx, cy, zw, zh, pxPerUnit, dist }
+    // Orbs grow and shrink with the free zone (about 640 × 620 px on a 14" MacBook, where they were drawn).
+    // At a fixed size a narrower zone packed them on top of each other.
+    const nodePx = NODE_PX * Math.min(1.1, Math.max(0.6, Math.min(zw / 640, zh / 620)))
+    view = { w, h, dpr, zone, cx, cy, zw, zh, pxPerUnit, dist, nodePx }
     applySize()
 
     camera.aspect = w / h
@@ -203,7 +206,7 @@ export async function createCore(canvas, opts = {}) {
     const t = (zPlane - homeCam.position.z) / dir.z
     n.pos.copy(homeCam.position).addScaledVector(dir, t)
     // Veľkosť planéty podľa významu (hlavné väčšie, mesiace menšie).
-    n.scale = (NODE_PX / pxPerUnit) * cur.size
+    n.scale = ((view.nodePx ?? NODE_PX) / pxPerUnit) * cur.size
     n.holder.position.copy(n.pos)
     n.holder.scale.setScalar(n.scale)
     // Spojnica: krivka od uzla k okraju jadra, mierne do boku.

@@ -198,7 +198,8 @@ export function overnightText(work = overnightWork()) {
   const state = { done: 'hotová', needs_ok: 'čaká na súhlas používateľa', error: 'zlyhala' }
   for (const j of work.jobs) {
     const detail = j.status === 'needs_ok' ? j.needsOk : j.summary
-    lines.push(`- úloha „${j.title}" (${state[j.status]}, skončila o ${hhmm(new Date(j.endedAt).getTime())})${detail ? `: ${detail.replace(/\s+/g, ' ').slice(0, 400)}` : ''}`)
+    const st = j.status === 'needs_ok' && j.wait === 'question' ? 'čaká na odpoveď používateľa na otázku' : state[j.status]
+    lines.push(`- úloha „${j.title}" (${st}, skončila o ${hhmm(new Date(j.endedAt).getTime())})${detail ? `: ${detail.replace(/\s+/g, ' ').slice(0, 400)}` : ''}`)
   }
   for (const r of work.inbox) lines.push(`- výsledok rutiny „${r.title}" v memory/${r.rel}`)
   return lines.join('\n')

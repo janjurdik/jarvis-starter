@@ -2,6 +2,20 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.7.1 (2026-11-18)
+
+- **Pýta sa Jarvis, nie úloha.** Keď práca na pozadí potrebuje od teba informáciu, spýta sa ťa Jarvis sám, hlasom
+  a v rozhovore, s najlepším tipom („Na Instagrame som ho nenašiel. Ako sa ten účet volá presne?"). Odpovieš mu
+  normálne a on pokračuje. Súhlas pred odoslaním mailu či správy je oddelený od otázok: otázka má pole na odpoveď,
+  nie tlačidlo Schváliť.
+- **Oslovenie a vykanie platia presne podľa Nastavení.** Stará poznámka v pamäti (napríklad z prvého nastavenia)
+  už neprebije, čo si nastavil neskôr, a riadia sa tým aj vety z úloh na pozadí. Meno vždy v tvare z Nastavení,
+  nikdy zdrobnenina.
+- **HUD sedí na každej obrazovke.** Menšie notebooky (1280 až 1470 px) dostanú celé rozloženie proporčne zmenšené,
+  namiesto natlačeného. Počasie už nevyteká z panelu, orby v strede sa neprekrývajú, pole „Povedz Jarvisovi…" sa
+  nezúži na pár písmen, na širokých monitoroch je príkazový riadok rozumne široký a v Nastaveniach majú polia
+  medzi sebou rovnaké medzery.
+
 ## 1.7.0 (2026-11-18)
 
 - **Jarvis sa ozve sám, keď na tom záleží.** Na Nový rok, Štedrý deň, Veľkú noc, na tvoje narodeniny a meniny
