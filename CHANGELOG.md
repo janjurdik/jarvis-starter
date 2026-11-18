@@ -2,6 +2,16 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.4.2 (2026-11-18)
+
+- **Klik na appku ju otvorí, neodpojí.** V mape Tvoje appky klik ukáže kartu appky: čo z nej Jarvis má, v akom je stave
+  a ďalší krok (pripojiť, ukázať postup, čo s ňou vie). Prvý klik ju zároveň pridá. Odobrať sa dá len na karte cez
+  „Už nepoužívam".
+- **Úlohy a Kalendár sú usporiadané.** Namiesto rozhádzaných bodov sú vnútri stĺpce s riadkami. Úlohy podľa termínu
+  (po termíne, dnes, do týždňa, neskôr), alebo podľa sekcií tvojho zoznamu, keď termíny nepoužívaš. Kalendár ako Dnes,
+  Zajtra, Tento týždeň a Neskôr.
+- **Hry majú obrázky.** Obal zo Steamu alebo ikona hry priamo z tvojho počítača. Nič sa nesťahuje.
+
 ## 1.4.1 (2026-11-18)
 
 - **Dáta z appiek číta Jarvis sám.** Čítačky napísané vopred pre Instagram, Messenger, WhatsApp, Discord, Telegram, ChatGPT,

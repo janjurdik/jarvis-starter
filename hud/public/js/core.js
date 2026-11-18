@@ -571,6 +571,7 @@ export async function createCore(canvas, opts = {}) {
     item: inner.item,
     highlight: inner.highlight,
     labels: (max) => (inn.phase === 'in' ? inner.labels(max) : []),
+    rowLabels: (max) => (inn.phase === 'in' ? inner.rowLabels(max) : []),
     groupLabels: () => (inn.phase === 'in' ? inner.groupLabels() : []),
     flyToGroup: inner.flyToGroup,
     flyHome: inner.flyHome,

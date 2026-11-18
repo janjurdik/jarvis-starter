@@ -1,5 +1,5 @@
 // Tvoje appky: the inside of the orb. Every app floats in space as a glass disc with its real
-// icon, grouped into constellations (Správy, Mail a kalendár, …). A click takes an app into
+// icon, grouped into constellations (Správy, Mail a kalendár, …). A click opens an app and takes it into
 // Jarvis: it lights up amber and a thread of light connects it to the core. The whole map fits
 // the free zone, the wheel flies closer, a click on a constellation name flies to it.
 //
@@ -140,7 +140,7 @@ export function createAppsWorld({ core, canvas = document.querySelector('canvas'
       <div class="aw-tray-list" role="list"></div>
       <form class="aw-own"><input type="text" maxlength="40" placeholder="Iná appka? Napíš ju" aria-label="Pridať vlastnú appku"><button type="submit" aria-label="Pridať">${icon('plus')}</button></form>
     </footer>
-    <div class="aw-hint"><span>klik</span> pridá alebo odoberie · <span>koliesko</span> priblíži · <span>ťahaj</span> rozhliadni sa · <kbd>Esc</kbd> späť</div>`
+    <div class="aw-hint"><span>klik</span> otvorí appku · <span>koliesko</span> priblíži · <span>ťahaj</span> rozhliadni sa · <kbd>Esc</kbd> späť</div>`
   document.body.append(root)
   const el = {
     sub: root.querySelector('.aw-sub'),
@@ -325,19 +325,24 @@ export function createAppsWorld({ core, canvas = document.querySelector('canvas'
               : a.how === 'file'
                 ? `Pretiahni mi sem do okna ${a.file}.`
                 : 'Na toto nemám hotovú cestu. Povedz mi a nejakú nájdem: konektor, export alebo vlastný kód.'
-    const act =
+    const live = (a.how === 'connector' || a.how === 'garmin') && state.connected.has(a.id)
+    const ask = (label, say, quiet = false) => `<button type="button" class="aw-btn${quiet ? ' is-quiet' : ''}" data-ask="${esc(say)}">${esc(label)}</button>`
+    // One main step that moves the app forward, and one way to shape what Jarvis does with it.
+    const main =
       a.how === 'export'
         ? `<a class="aw-btn" href="/guide/#${encodeURIComponent(a.guide)}" target="_blank" rel="noopener">Ukázať, ako na to</a>`
-        : (a.how === 'connector' || a.how === 'garmin') && state.connected.has(a.id)
-          ? ''
-          : a.how === 'auto' || a.how === 'file'
+        : live || a.how === 'auto'
+          ? ask('Čo s tým vieš?', `Čo všetko vieš robiť s ${a.name}? Navrhni mi tri veci a nastav tú, ktorú vyberiem.`)
+          : a.how === 'file'
             ? ''
-            : `<button type="button" class="aw-btn" data-ask="${esc(a.how === 'connector' || a.how === 'garmin' ? `Pripoj mi ${a.name}.` : `Používam ${a.name}. Vymysli, ako ju napojiť, a napoj ju.`)}">Napojiť s Jarvisom</button>`
+            : ask(a.how === 'connector' || a.how === 'garmin' ? 'Pripojiť' : 'Napojiť s Jarvisom', a.how === 'connector' || a.how === 'garmin' ? `Pripoj mi ${a.name}.` : `Používam ${a.name}. Vymysli, ako ju napojiť, a napoj ju.`)
+    const more = live || a.how === 'auto' ? ask('Ukáž, čo vidíš', `Ukáž mi, čo práve vidíš v ${a.name}.`, true) : ''
     el.card.innerHTML = `<button type="button" class="aw-x" aria-label="Zavrieť">×</button>
       <div class="aw-card-top" style="--c:${isDark(hex) ? '#cfe3e8' : hex}"><span class="aw-card-mark">${appSvg(a, 'aw-card-svg')}</span><div><b>${esc(a.name)}</b><span class="aw-how is-${st.tone}">${esc(picked ? st.text : how.name.toLowerCase())}</span></div></div>
       <p class="aw-card-gives">${esc(a.gives)}</p>
       <p class="aw-card-next">${esc(next)}</p>
-      <div class="aw-card-acts">${picked ? act : `<button type="button" class="aw-btn" data-add="${esc(a.id)}">Pridať do Jarvisa</button>`}${picked ? `<button type="button" class="aw-btn is-quiet" data-drop="${esc(a.id)}">Odobrať</button>` : ''}</div>`
+      <div class="aw-card-acts">${picked ? main + more : `<button type="button" class="aw-btn" data-add="${esc(a.id)}">Pridať do Jarvisa</button>`}</div>
+      ${picked ? `<button type="button" class="aw-drop" data-drop="${esc(a.id)}">Už nepoužívam</button>` : ''}`
     el.card.hidden = false
     const i = idxOf(a.id)
     if (i >= 0) inner.highlight(i, 'sel')
@@ -597,9 +602,10 @@ export function createAppsWorld({ core, canvas = document.querySelector('canvas'
     const i = inner.pick(e.clientX, e.clientY)
     const it = i > 0 ? inner.item(i) : null
     if (!it) return showCard(null)
-    // Picking stays fast: one click in, one click out. The detail opens from the tray below.
-    toggle(it.id)
-    if (sel && sel !== it.id) showCard(null)
+    // A click opens the app: what it gives, how it stands and the next step. The first click also
+    // takes it into Jarvis. Nothing leaves by a click on the map, only by "Už nepoužívam" in its card.
+    if (!state.picked.has(it.id)) toggle(it.id, true)
+    showCard(it.id)
   })
   canvas.addEventListener('dblclick', (e) => {
     if (!open || inner.state().phase !== 'in') return

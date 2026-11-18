@@ -6,6 +6,7 @@
  *   GET /api/inner                 item counts for planet labels
  *   GET /api/inner/:node           { title, color, layout, groups, items: [{ id, t, s, imp, g, y, links, r, k }] }
  *   GET /api/inner/:node/:id       item detail for the inspector
+ *   GET /api/inner-art?game=Name   the picture of a game from this computer (hud/server/game-art.mjs)
  *
  * Privacy: in filming mode 403 (inner worlds cannot be entered).
  */
@@ -13,7 +14,9 @@ import { chatStats, readDay } from './chatlog.mjs'
 import { getConfig } from './config.mjs'
 import { calendarRange } from './memory/calendar.mjs'
 import { FOLDERS, STATUS_LABEL, checkboxes, dayStats, firstParagraph, getIndex, inFolder, ofKind, plain, section, slugify, statusOf, todos } from './memory/index.mjs'
+import { gameArt } from './game-art.mjs'
 import { customOrb, getOrbState, orbContent } from './orbs.mjs'
+import { sendStored } from './upload.mjs'
 import { addDays, errMsg, isoDay, sendJson } from './util.mjs'
 
 /** Planets with fixed art in the 3D world. Extra memory folders reuse the art of a known moon when the name matches. */
@@ -21,13 +24,13 @@ export const PLANETS = {
   ludia: { title: 'Ľudia', color: '#7ff3ff', layout: 'cluster' },
   projekty: { title: 'Projekty', color: '#7ff3ff', layout: 'cluster' },
   questy: { title: 'Ciele', color: '#ffb25c', layout: 'cluster' },
-  kalendar: { title: 'Kalendár', color: '#ffb25c', layout: 'cluster' },
+  kalendar: { title: 'Kalendár', color: '#ffb25c', layout: 'board' },
   rutiny: { title: 'Rutiny', color: '#7ff3ff', layout: 'cluster' },
   udalosti: { title: 'Denník', color: '#7ff3ff', layout: 'years' },
   spravy: { title: 'Rozhovory', color: '#5fe6ff', layout: 'years' },
   fotky: { title: 'Poznámky', color: '#9fd8ff', layout: 'cluster' },
   spanok: { title: 'Spánok', color: '#7fb8ff', layout: 'years' },
-  ulohy: { title: 'Úlohy', color: '#ffb25c', layout: 'cluster' },
+  ulohy: { title: 'Úlohy', color: '#ffb25c', layout: 'board' },
   posta: { title: 'Pošta', color: '#7ff3ff', layout: 'cluster' },
 }
 /** Optional collections: a folder with this name in memory/ shows up as a small moon. */
@@ -50,6 +53,7 @@ const norm = (values) => {
 const cut = (s, n) => (String(s ?? '').length > n ? `${String(s).slice(0, n - 1)}…` : String(s ?? ''))
 const shortDay = (day) => `${Number(day.slice(8))}. ${Number(day.slice(5, 7))}. ${day.slice(0, 4)}`
 const yearFrac = (day) => Number(day.slice(0, 4)) + (Number(day.slice(5, 7)) - 1) / 12 + Number(day.slice(8)) / 372
+const WEEKDAYS = ['Nedeľa', 'Pondelok', 'Utorok', 'Streda', 'Štvrtok', 'Piatok', 'Sobota']
 const MONTHS = ['január', 'február', 'marec', 'apríl', 'máj', 'jún', 'júl', 'august', 'september', 'október', 'november', 'december']
 const fmtMin = (m) => `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')} min`
 
@@ -151,42 +155,61 @@ const WORLDS = {
     }))
     return { items, groups: [...new Set(items.map((i) => i.g))].sort().map((key) => ({ key, label: key })) }
   },
+  // A board in four columns: today, tomorrow, the rest of the week and what comes after it. The
+  // weekly timetable (the same thing at the same hour every week) is left out of the last one.
   kalendar: async () => {
     const today = isoDay()
-    const events = await calendarRange(today, addDays(today, 60))
-    const items = events.map((e, i) => {
-      const days = Math.round((new Date(`${e.day}T12:00:00`) - new Date(`${today}T12:00:00`)) / 86_400_000)
-      return {
+    const events = await calendarRange(today, addDays(today, 30))
+    const weekly = new Map()
+    for (const e of events) {
+      const k = `${new Date(`${e.day}T12:00:00`).getDay()}|${e.time ?? ''}|${e.title}`
+      weekly.set(k, (weekly.get(k) ?? 0) + 1)
+    }
+    const items = []
+    events.forEach((e, i) => {
+      const d = new Date(`${e.day}T12:00:00`)
+      const days = Math.round((d - new Date(`${today}T12:00:00`)) / 86_400_000)
+      if (days >= 7 && weekly.get(`${d.getDay()}|${e.time ?? ''}|${e.title}`) >= 3) return
+      const date = `${d.getDate()}. ${d.getMonth() + 1}.`
+      const near = days <= 1
+      items.push({
         id: `e:${e.day}:${i}`,
-        t: e.title,
-        s: `${shortDay(e.day)}${e.time ? ` · ${e.time}` : ''}${e.place ? ` · ${e.place}` : ''}`,
+        t: near && e.time ? `${e.time} ${e.title}` : e.title,
+        s: [near ? null : days < 7 ? `${WEEKDAYS[d.getDay()]} ${date}` : date, near ? null : e.time, e.place].filter(Boolean).join(' · ') || (e.time ? null : 'celý deň'),
         img: null,
-        imp: Math.max(0.08, 1 - days / 45),
-        g: MONTHS[Number(e.day.slice(5, 7)) - 1],
+        imp: Math.max(0.08, 1 - days / 30),
+        g: days <= 0 ? 'Dnes' : days === 1 ? 'Zajtra' : days < 7 ? 'Tento týždeň' : 'Neskôr',
         k: 'event',
         ev: e,
-      }
+      })
     })
-    return { items, groups: [...new Set(items.map((i) => i.g))].map((key) => ({ key, label: key })) }
+    return { items, groups: ['Dnes', 'Zajtra', 'Tento týždeň', 'Neskôr'].filter((k) => items.some((i) => i.g === k)).map((key) => ({ key, label: key })) }
   },
   rutiny: () => {
     const items = getConfig().routines.map((r) => ({ id: `r:${r.id}`, t: r.title, s: `${r.time} · ${r.enabled ? 'zapnutá' : 'vypnutá'}`, img: null, imp: r.enabled ? 0.8 : 0.3, g: r.enabled ? 'zapnuté' : 'vypnuté', k: 'routine' }))
     return { items, groups: [...new Set(items.map((i) => i.g))].map((key) => ({ key, label: key })) }
   },
+  // A board: by term when most tasks have one (overdue first), otherwise by the sections of the task file.
   ulohy: async () => {
-    const list = (await todos()).filter((t) => !t.done)
     const today = isoDay()
-    const items = list.map((t, i) => ({
-      id: `t:${i}`,
+    const week = addDays(today, 7)
+    const list = (await todos()).filter((t) => !t.done).map((t, i) => ({ ...t, i }))
+    const byTerm = list.length > 0 && list.filter((t) => t.due).length * 2 >= list.length
+    const term = (t) => (!t.due ? 'Bez termínu' : t.due < today ? 'Po termíne' : t.due === today ? 'Dnes' : t.due <= week ? 'Do týždňa' : 'Neskôr')
+    const order = ['Po termíne', 'Dnes', 'Do týždňa', 'Neskôr', 'Bez termínu']
+    const sorted = [...list].sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999') || a.i - b.i)
+    const items = sorted.map((t) => ({
+      id: `t:${t.i}`,
       t: cut(t.text, 60),
-      s: [t.group, t.due ? `do ${shortDay(t.due)}` : null].filter(Boolean).join(' · ') || null,
+      s: [byTerm ? t.group : null, t.due ? (t.due < today ? `mešká od ${shortDay(t.due)}` : t.due === today ? (byTerm ? null : 'dnes') : `do ${shortDay(t.due)}`) : null].filter(Boolean).join(' · ') || null,
       img: null,
       imp: t.due ? (t.due <= today ? 1 : Math.max(0.3, 1 - (new Date(t.due) - new Date(today)) / (30 * 864e5))) : 0.25,
-      g: t.group ?? 'Úlohy',
+      g: byTerm ? term(t) : (t.group ?? 'Úlohy'),
       k: 'todo',
       full: t.text,
     }))
-    return { items, groups: [...new Set(items.map((i) => i.g))].map((key) => ({ key, label: key })) }
+    const keys = byTerm ? order.filter((k) => items.some((i) => i.g === k)) : [...new Set(list.map((t) => t.group ?? 'Úlohy'))]
+    return { items, groups: keys.map((key) => ({ key, label: key })) }
   },
 }
 
@@ -202,6 +225,8 @@ async function world(node) {
   if (!build) return null
   const meta = PLANETS[node] ?? (EXTRA[node] ? { ...EXTRA[node], layout: 'cluster' } : { title: custom.label, color: custom.color, layout: 'cluster' })
   const w = await build(ix)
+  // Games get the cover or the icon this computer already has.
+  if (node === 'hry') for (const it of w.items) if (await gameArt(it.t)) it.img = `/api/inner-art?game=${encodeURIComponent(it.t)}&w=256`
   // What Jarvis wrote for this orb (data/orbs/<id>.json): its own items and the component panel.
   const content = orbContent(node)
   if (content?.items) {
@@ -321,6 +346,11 @@ export async function innerCounts() {
 
 export async function routeInner(req, res, url, { film }) {
   const path = url.pathname
+  if (path === '/api/inner-art') {
+    const file = film ? null : await gameArt(url.searchParams.get('game'))
+    if (!file || !(await sendStored(req, res, file, { imagesOnly: true }))) sendJson(res, 404, { ok: false, error: 'obrázok nie je' })
+    return true
+  }
   if (path !== '/api/inner' && !path.startsWith('/api/inner/')) return false
   if (film) {
     sendJson(res, 403, { ok: false, error: 'režim natáčania', film: true })

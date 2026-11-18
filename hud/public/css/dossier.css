@@ -88,6 +88,31 @@
 .dz-year[hidden] { display: none; }
 .dz-year:hover { color: var(--amber, #ffb25c); }
 
+/* Board (Úlohy, Kalendár): a name on every row, right of its dot, and a title over every column. */
+.dz-tag.is-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12em;
+  padding: 0.1rem 0.3rem;
+  line-height: 1.2;
+  text-align: left;
+}
+.dz-tag.is-row b, .dz-tag.is-row i { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dz-tag.is-row b { font-weight: 500; }
+.dz-tag.is-row i { font-style: normal; font-size: 0.82em; color: var(--t3, rgba(234, 251, 255, 0.5)); }
+.dz-tag.is-row:hover i, .dz-tag.is-row.is-sel i { color: inherit; opacity: 0.75; }
+.dz-tag.is-row.is-tight i { display: none; }
+.dz-tag.is-row[hidden] { display: none; }
+.dz-year.is-col {
+  font: 600 1.05rem/1.1 var(--sans);
+  letter-spacing: 0;
+  color: var(--t1, rgba(234, 251, 255, 0.95));
+  text-shadow: 0 0 0.5rem rgba(2, 5, 7, 1);
+  transform-origin: 0 100%;
+  padding-left: 0;
+}
+
 .dz-tip {
   position: absolute;
   left: 0;

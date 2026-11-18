@@ -32,6 +32,8 @@ const TITLE = {
 const PREFIX = {}
 const FLY_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'])
 const LABELS = 16
+/** A board (Úlohy, Kalendár) names every row, not only the most important items. */
+const ROW_LABELS = 72
 
 function injectCss() {
   if (document.getElementById('dossier-css')) return
@@ -144,7 +146,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     heroIn: root.querySelector('.dz-hero-in'),
     light: root.querySelector('.dz-light'),
   }
-  const tagPool = Array.from({ length: LABELS }, () => {
+  const tagPool = Array.from({ length: ROW_LABELS }, () => {
     const t = document.createElement('button')
     t.type = 'button'
     t.className = 'dz-tag'
@@ -153,7 +155,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     return t
   })
 
-  const yearPool = Array.from({ length: 8 }, () => {
+  const yearPool = Array.from({ length: 12 }, () => {
     const t = document.createElement('button')
     t.type = 'button'
     t.className = 'dz-year'
@@ -210,7 +212,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     el.comment.textContent = !d ? 'Vstupujem…' : !items.length && node === 'posta' && !d.panel ? 'Pošta ešte nie je pripojená. Povedz „pripoj mi poštu" a prevediem ťa tým.' : !items.length ? (d.panel ? '' : 'Zatiaľ je tu prázdno. Stačí povedať a začnem to sem zapisovať.') : `${nfmt(items.length)} ${items.length === 1 ? 'položka' : items.length < 5 && items.length > 1 ? 'položky' : 'položiek'}`
     // Časová os: najnovšie roky, klik preletí k ich galaxii. Inak skupiny ako legenda.
     const years = d?.layout === 'years'
-    const groups = years ? [...(d?.groups ?? [])].reverse().slice(0, 12) : (d?.groups ?? []).slice(0, 8)
+    const groups = years ? [...(d?.groups ?? [])].reverse().slice(0, 12) : d?.layout === 'board' ? [] : (d?.groups ?? []).slice(0, 8)
     el.legend.innerHTML = groups.length > 1 ? groups.map((g) => (years ? `<button type="button" data-key="${esc(g.key)}">${esc(g.label ?? g.key)}</button>` : `<span>${esc(g.label ?? g.key)}</span>`)).join('') : ''
   }
 
@@ -224,6 +226,8 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
       data = d
       header(d)
       renderKit(d)
+      // A board is fitted under the header and above the hint, like a page.
+      if (d.layout === 'board') d.insets = { top: 122, bottom: 40 }
       inner.setData(d)
       // A world that is still being computed is retried a few times.
       if (d.pending && tries++ < 8) retry = setTimeout(() => open && node === id && loadWorld(id), 5000)
@@ -407,13 +411,15 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
         continue
       }
       if (t._key !== g.key) t.textContent = t._key = g.key
+      if (t._left !== g.left) t.classList.toggle('is-col', (t._left = g.left))
       t.hidden = false
-      const fs = Math.max(0.8, Math.min(2.2, 260 / g.depth))
-      const tf = `translate3d(${g.x.toFixed(1)}px,${g.y.toFixed(1)}px,0) translate(-50%,-100%) scale(${fs.toFixed(2)})`
+      const fs = g.left ? Math.max(0.72, Math.min(1.15, 190 / g.depth)) : Math.max(0.8, Math.min(2.2, 260 / g.depth))
+      const tf = `translate3d(${g.x.toFixed(1)}px,${g.y.toFixed(1)}px,0) translate(${g.left ? '0' : '-50%'},-100%) scale(${fs.toFixed(2)})`
       if (t._tf !== tf) t.style.transform = t._tf = tf
     }
-    const list = inner.labels(LABELS)
     const w = inner.world()
+    const board = w?.data?.layout === 'board'
+    const list = board ? inner.rowLabels(ROW_LABELS) : inner.labels(LABELS)
     for (let k = 0; k < tagPool.length; k++) {
       const t = tagPool[k]
       const l = list[k]
@@ -421,18 +427,37 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
         if (!t.hidden) t.hidden = true
         continue
       }
-      if (t._i !== l.i) {
+      const key = `${node}|${l.i}|${board ? 'r' : 't'}|${l.item.t}`
+      if (t._key !== key) {
+        t._key = key
         t._i = l.i
-        t.textContent = l.item.t
-        t.classList.toggle('is-sel', l.i === w?.sel)
+        t.classList.toggle('is-row', board)
+        if (board) t.innerHTML = `<b>${esc(l.item.t)}</b>${l.item.s ? `<i>${esc(l.item.s)}</i>` : ''}`
+        else t.textContent = l.item.t
+        if (!board) t.style.maxWidth = t.style.fontSize = ''
       }
-      t.classList.toggle('is-sel', l.i === w?.sel)
+      t.classList.toggle('is-sel', l.i === w?.sel || (board && l.i === w?.hover))
       t.hidden = false
-      const tf = `translate3d(${l.x.toFixed(1)}px,${(l.y + l.r + 6).toFixed(1)}px,0) translateX(-50%)`
+      let tf
+      if (board) {
+        // The name sits right of its dot and shrinks with the row when the camera pulls back.
+        const mw = `${Math.max(48, l.w).toFixed(0)}px`
+        if (t._mw !== mw) t.style.maxWidth = t._mw = mw
+        const fs = `${Math.max(0.64, Math.min(0.94, l.row / 42)).toFixed(2)}rem`
+        if (t._fs !== fs) t.style.fontSize = t._fs = fs
+        // Rows too close for two lines keep only the name.
+        const tight = l.row < 30
+        if (t._tight !== tight) t.classList.toggle('is-tight', (t._tight = tight))
+        tf = `translate3d(${l.x.toFixed(1)}px,${l.y.toFixed(1)}px,0) translateY(-50%)`
+      } else {
+        t._mw = t._fs = null
+        tf = `translate3d(${l.x.toFixed(1)}px,${(l.y + l.r + 6).toFixed(1)}px,0) translateX(-50%)`
+      }
       if (t._tf !== tf) t.style.transform = t._tf = tf
     }
     // Hover: názov a jedna informácia pri položke.
-    const h = w && w.hover >= 0 && w.hover !== w.sel ? w.hover : -1
+    // On a board the row already carries the name, so the hover only lights it up.
+    const h = w && !board && w.hover >= 0 && w.hover !== w.sel ? w.hover : -1
     if (h < 0) {
       if (!el.tip.hidden) el.tip.hidden = true
     } else {
@@ -515,7 +540,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
   for (const t of tagPool)
     t.addEventListener('click', (e) => {
       e.stopPropagation()
-      if (Number.isInteger(t._i)) select(t._i, { fly: true })
+      if (Number.isInteger(t._i)) select(t._i, { fly: inner.world()?.data?.layout !== 'board' })
     })
   el.hero.querySelector('.dz-x').addEventListener('click', () => deselect())
   el.heroIn.addEventListener('click', (e) => {

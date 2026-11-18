@@ -349,6 +349,79 @@ export function createInner(renderer, U) {
   const ATLAS_BOTTOM = 152
   let atlasBox = null
 
+  /**
+   * Board: every group is a column of rows facing the camera, like a tidy list. Made for things
+   * that have an order (tasks by term, the calendar by day): the first item is on top, nothing
+   * overlaps and every row keeps room for its name right of its dot. A long column continues
+   * beside itself, and the columns wrap into bands so the board is as big as the free zone allows.
+   */
+  const BOARD = { col: 52, row: 7.2, head: 10, gapX: 7, gapY: 10, rows: 10, dot: 2.3 }
+  let boardCol = BOARD.col
+  function layoutBoard(items, groups, insets) {
+    const byGroup = new Map(groups.map((g) => [g.key, []]))
+    items.forEach((it, i) => {
+      if (!byGroup.has(it.g)) byGroup.set(it.g, [])
+      byGroup.get(it.g).push(i)
+    })
+    const cols = [...byGroup]
+      .filter(([, list]) => list.length)
+      .map(([key, list]) => {
+        const sub = Math.ceil(list.length / BOARD.rows)
+        return { key, list, w: sub * BOARD.col, h: BOARD.head + Math.min(list.length, BOARD.rows) * BOARD.row }
+      })
+    const pos = new Array(items.length)
+    yearCenters = []
+    if (!cols.length) {
+      atlasBox = { w: BOARD.col * 2 + BOARD.gapX, h: BOARD.row * 8, content: 0 }
+      return pos
+    }
+    const zone = view.zone
+    const zw = Math.max(200, (zone ? zone.right - zone.left : view.w) - 56)
+    const zh = Math.max(120, (zone ? zone.bottom - zone.top : view.h) - (insets?.top ?? ATLAS_TOP) - (insets?.bottom ?? ATLAS_BOTTOM))
+    const total = cols.reduce((a, c) => a + c.w + BOARD.gapX, 0)
+    let best = null
+    for (let n = 1; n <= Math.min(3, cols.length); n++) {
+      const bands = [[]]
+      let w = 0
+      for (const c of cols) {
+        const band = bands.at(-1)
+        if (band.length && bands.length < n && w + (c.w + BOARD.gapX) / 2 > total / n) {
+          bands.push([c])
+          w = c.w + BOARD.gapX
+        } else {
+          band.push(c)
+          w += c.w + BOARD.gapX
+        }
+      }
+      const W = Math.max(...bands.map((b) => b.reduce((a, c) => a + c.w, 0) + BOARD.gapX * (b.length - 1)))
+      const H = bands.reduce((a, b) => a + Math.max(...b.map((c) => c.h)), 0) + BOARD.gapY * (bands.length - 1)
+      const scale = Math.min(zw / W, zh / H)
+      if (!best || scale > best.scale + 0.01) best = { bands, W, H, scale }
+    }
+    // When the height decides the size, the columns spread over the spare width: more room for names.
+    const wide = Math.max(1, Math.min(1.9, zw / best.scale / Math.max(best.W, BOARD.col * 2 + BOARD.gapX)))
+    boardCol = BOARD.col * wide
+    let y = best.H / 2
+    for (const band of best.bands) {
+      const bh = Math.max(...band.map((c) => c.h))
+      let x = (-best.W * wide) / 2
+      for (const c of band) {
+        c.w *= wide
+        c.list.forEach((i, k) => {
+          const sub = Math.floor(k / BOARD.rows)
+          const r = k % BOARD.rows
+          pos[i] = new THREE.Vector3(x + sub * boardCol + BOARD.dot, y - BOARD.head - r * BOARD.row - BOARD.row / 2, 0)
+        })
+        yearCenters.push({ key: c.key, c: new THREE.Vector3(x + c.w / 2, y - c.h / 2, 0), R: Math.max(c.w, c.h) / 2, head: new THREE.Vector3(x, y - BOARD.head * 0.42, 0) })
+        x += c.w + BOARD.gapX * wide
+      }
+      y -= bh + BOARD.gapY
+    }
+    // A board of a few short columns is not blown up to fill the window: its rows keep a readable size.
+    atlasBox = { w: Math.max(best.W, BOARD.col * 2 + BOARD.gapX) * wide, h: Math.max(best.H, BOARD.row * 8), content: best.H }
+    return pos
+  }
+
   // ── krajina tela ──
   const METRICS = [
     { key: 'sleep', label: 'Spánok', color: '#7fb8ff', norm: (v) => clamp((v ?? 0) / 600) },
@@ -417,7 +490,7 @@ export function createInner(renderer, U) {
       landscape = buildLandscape(items)
       pos = landscape.pos
       root.add(landscape.mesh)
-    } else pos = data.layout === 'years' ? layoutYears(items) : data.layout === 'atlas' ? layoutAtlas(items, groups, data.insets) : layoutCluster(items, groups)
+    } else pos = data.layout === 'years' ? layoutYears(items) : data.layout === 'atlas' ? layoutAtlas(items, groups, data.insets) : data.layout === 'board' ? layoutBoard(items, groups, data.insets) : layoutCluster(items, groups)
 
     const n = items.length
     const P = new Float32Array(n * 3)
@@ -435,7 +508,7 @@ export function createInner(renderer, U) {
       else if (groupIndex.size <= 1 || data.layout === 'atlas') col.copy(accent)
       else col.set(PALETTE[groupIndex.get(it.g) % PALETTE.length])
       C.set([col.r, col.g, col.b], i * 3)
-      const size = data.layout === 'atlas' ? (it.size ?? HIVE.size) : data.layout === 'landscape' ? (it.k === 'day' ? 0.35 : 1.6) : data.layout === 'years' ? (it.img ? 2.6 + 3 * imp : 0.9 + 2.5 * imp) : 0.9 + 6.5 * Math.pow(imp, 1.4)
+      const size = data.layout === 'atlas' ? (it.size ?? HIVE.size) : data.layout === 'board' ? BOARD.dot * (0.8 + 0.5 * imp) : data.layout === 'landscape' ? (it.k === 'day' ? 0.35 : 1.6) : data.layout === 'years' ? (it.img ? 2.6 + 3 * imp : 0.9 + 2.5 * imp) : 0.9 + 6.5 * Math.pow(imp, 1.4)
       if (it.color) col.set(it.color)
       I.set([size, imp, it.img ? 1 : 0, 0], i * 4)
       round[i] = it.r ? 1 : 0
@@ -494,7 +567,7 @@ export function createInner(renderer, U) {
     // Mierka pohybu: pri časovej osi podľa veľkosti jedného roka, nie celej osi.
     const scale = yearCenters.length ? Math.max(20, yearCenters.reduce((a, g) => a + g.R, 0) / yearCenters.length) * 2.2 : landscape ? landscape.width / 3 : radius
     const colorAttr = cards.geometry.attributes.aColor
-    world = { data, items, P, I, C, C0: C.slice(), tile, round, glow, cards, links, pairs, hot, infoAttr, tileAttr, colorAttr, center, radius, scale: data.layout === 'atlas' ? 60 : scale, landscape, atlas: data.layout === 'atlas' ? atlasBox : null, idIndex, sel: -1, hover: -1, marks: new Uint8Array(n), dim: null }
+    world = { data, items, P, I, C, C0: C.slice(), tile, round, glow, cards, links, pairs, hot, infoAttr, tileAttr, colorAttr, center, radius, scale: data.layout === 'atlas' || data.layout === 'board' ? 60 : scale, landscape, atlas: data.layout === 'atlas' || data.layout === 'board' ? atlasBox : null, board: data.layout === 'board', idIndex, sel: -1, hover: -1, marks: new Uint8Array(n), dim: null }
     bgUniforms.uProj.value = 900
     queueImages()
     return world
@@ -723,7 +796,9 @@ export function createInner(renderer, U) {
       const fitH = ((world.atlas.h / 2) * uProj.value) / Math.max(60, (zh - top - bottom) / 2)
       const d = Math.max(fitW, fitH, 60)
       // The usable part of the zone sits a little lower than its middle: lift the camera's aim to match.
-      const lift = (((top - bottom) / 2) * d) / uProj.value
+      let lift = (((top - bottom) / 2) * d) / uProj.value
+      // A board hangs from the top of its zone like a page; a short one does not float in the middle.
+      if (world.board) lift -= (Math.max(0, zh - top - bottom - (world.atlas.content * uProj.value) / d) / 2) * (d / uProj.value) * 0.9
       start.set(0, lift, d)
       c.set(0, lift, 0)
       world.home = { pos: start.clone(), dist: d }
@@ -920,19 +995,20 @@ export function createInner(renderer, U) {
   function groupLabels() {
     const out = []
     for (const g of [...yearCenters, ...landAnchors]) {
-      v.copy(g.c).setY(g.c.y + g.R * 0.82 + 3).applyMatrix4(camera.matrixWorldInverse)
+      if (g.head) v.copy(g.head).applyMatrix4(camera.matrixWorldInverse)
+      else v.copy(g.c).setY(g.c.y + g.R * 0.82 + 3).applyMatrix4(camera.matrixWorldInverse)
       const depth = -v.z
       if (depth < 2) continue
       v.applyMatrix4(camera.projectionMatrix)
       const x = ((v.x + 1) / 2) * view.w
       const y = ((1 - v.y) / 2) * view.h
       const z = view.zone
-      if (z && (x < z.left + 40 || x > z.right - 40 || y < z.top + 150 || y > z.bottom - 60)) continue
-      out.push({ key: g.key, x, y, depth })
+      if (z && (x < z.left + (g.head ? 8 : 40) || x > z.right - 40 || y < z.top + (g.head ? 110 : 150) || y > z.bottom - (g.head ? 30 : 60))) continue
+      out.push({ key: g.key, x, y, depth, left: Boolean(g.head) })
     }
     out.sort((a, b) => a.depth - b.depth)
     const kept = []
-    for (const o of out) if (kept.length < 8 && !kept.some((k) => Math.abs(k.x - o.x) < 90 && Math.abs(k.y - o.y) < 40)) kept.push(o)
+    for (const o of out) if (kept.length < 12 && !kept.some((k) => Math.abs(k.x - o.x) < 90 && Math.abs(k.y - o.y) < (o.left ? 14 : 40))) kept.push(o)
     return kept
   }
 
@@ -972,6 +1048,20 @@ export function createInner(renderer, U) {
     return kept.map((o) => ({ ...o, item: world.items[o.i] }))
   }
 
+  /** Board rows: every item in view, with the place and the room for its name right of its dot. */
+  function rowLabels(max = 72) {
+    if (!world?.board) return []
+    const out = []
+    const z = view.zone
+    for (let i = 0; i < world.items.length && out.length < max; i++) {
+      const s = screenOf(i)
+      if (!s) continue
+      if (z && (s.x < z.left + 8 || s.x > z.right - 40 || s.y < z.top + 120 || s.y > z.bottom - 24)) continue
+      out.push({ i, x: s.x + s.r + 9, y: s.y, r: s.r, w: (boardCol * uProj.value) / s.depth - s.r * 2 - 26, row: (BOARD.row * uProj.value) / s.depth, item: world.items[i] })
+    }
+    return out
+  }
+
   return {
     scene,
     camera,
@@ -987,6 +1077,7 @@ export function createInner(renderer, U) {
     pick,
     highlight,
     labels,
+    rowLabels,
     groupLabels,
     flyToGroup,
     flyHome,
