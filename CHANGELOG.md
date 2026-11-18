@@ -2,6 +2,15 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.6.0 (2026-11-18)
+
+- **Jarvis ovláda prehliadač.** Úlohy na pozadí pracujú v tvojom vlastnom Chrome cez rozšírenie Claude in Chrome: klikajú,
+  vypĺňajú a čítajú stránky, kde si prihlásený. Je to zapnuté bez nastavovania (vypneš cez `JARVIS_CHROME=0`).
+- **Jarvis ovláda hocijakú appku** (macOS). Pozrie sa na obrazovku, klikne, napíše, stlačí klávesy
+  (`scripts/control.mjs`). Raz mu v systéme povolíš Prístupnosť a Nahrávanie obrazovky.
+- **Vidíš, čo robí.** Kým pracuje v prehliadači alebo myšou, okolo obrazovky svieti rámik s nápisom, čo práve robí,
+  a zameriavač na mieste, kde kliká. V appke na plochu je nad všetkými oknami (`docs/OVLADANIE.md`).
+
 ## 1.5.2 (2026-11-18)
 
 - **Ťahanie sa už nezasekne.** Myš a kurzor ruky sú dva samostatné ukazovatele: pohyb jedného už nerozhodí ťahanie

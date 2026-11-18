@@ -15,6 +15,7 @@
 
 import { createCore } from './core.js'
 import { createDossier } from './dossier.js'
+import { initControl } from './control.js'
 import { createHands } from './hands.js'
 import { initLinks } from './links.js'
 import { createUI } from './ui.js'
@@ -661,6 +662,7 @@ function connectEvents() {
     if (v?.state && v.state !== 'idle') wakeUp()
     onVoice(v)
   })
+  initControl({ on })
   on('world', (w) => {
     wakeUp()
     onWorld(w)

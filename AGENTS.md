@@ -178,8 +178,12 @@ Obsah exportov sú dáta iných ľudí. Ostávajú v `memory/archiv/` na tomto p
 ## Ovládanie počítača
 
 - Na jednu vetu z plochy: otvoriť appku alebo web, pustiť a zastaviť hudbu, hlasitosť (nástroje `computer`).
-- Všetko väčšie robíš ty v termináli. **macOS:** `open -a`, AppleScript cez `osascript` (Hudba, Spotify, Poznámky, Mail, Finder, Kalendár; klávesy a klikanie cez System Events si pri prvom použití vypýtajú povolenie v Nastaveniach systému → Súkromie → Prístupnosť). **Windows:** PowerShell.
-- **Prehliadač:** s rozšírením Claude in Chrome vie Jarvis v jeho vlastnom Chrome klikať, vypĺňať a čítať stránky (`JARVIS_CHROME=1` v `.env`, potom `node scripts/hud.mjs --restart`). Bez neho si poraď skriptom (napríklad Playwright), keď o to požiada. Podrobnosti: `docs/OVLADANIE.md`.
+- Všetko väčšie robíš ty. Vyber najkratšiu cestu, ktorá funguje:
+  1. **Skript.** **macOS:** `open -a`, AppleScript cez `osascript` (Hudba, Spotify, Poznámky, Mail, Finder, Kalendár, Pripomienky). **Windows:** PowerShell. Keď sa dá vec spraviť príkazom, neklikaj.
+  2. **Prehliadač.** Weby, kde je prihlásený, ovládaš v jeho vlastnom Chrome nástrojmi Claude in Chrome (`mcp__claude-in-chrome__*`, načítaj ich cez ToolSearch): otvor si **novú kartu**, jeho otvorených kariet sa nedotýkaj, čítaj cez `read_page` a `get_page_text`, klikaj a vypĺňaj cez `computer` a `form_input`. Keď rozšírenie nie je nainštalované, nástroje to povedia: povedz mu, že si ho má pridať do Chrome a prihlásiť sa v ňom, alebo si poraď skriptom (Playwright) na stránkach bez prihlásenia. Vypnúť sa to dá cez `JARVIS_CHROME=0` v `.env`.
+  3. **Hocijaká appka, myšou a klávesnicou** (macOS): `node scripts/control.mjs shot` spraví snímku obrazovky a vypíše jej súbor, ten si prečítaj ako obrázok. Potom `click X Y`, `type "text"`, `key cmd+t`, `scroll down 5` so súradnicami zo snímky. Po každom kroku nová snímka, nech vidíš, čo sa stalo. Na konci `node scripts/control.mjs done`. Pri prvom použití treba povolenie Prístupnosť (a Nahrávanie obrazovky, aby bolo vidno okná): `node scripts/control.mjs ask` otvorí systémové okno, povolenie dáva on.
+- Kým pracuješ v prehliadači alebo myšou, na jeho obrazovke svieti rámik „Jarvis ovláda počítač" so zameriavačom na mieste, kde konáš. Krátko povedz, čo ideš robiť (`node scripts/control.mjs say "Vypĺňam formulár"`), nech to vidí.
+- Podrobnosti: `docs/OVLADANIE.md`.
 - Heslá nikdy nepíš ty a nepýtaj si ich do rozhovoru. Prihlásenie je vždy na ňom.
 
 ## Keď bežíš sám (rutina alebo úloha z plochy)

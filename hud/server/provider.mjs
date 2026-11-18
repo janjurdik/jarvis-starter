@@ -56,7 +56,8 @@ export const PROVIDERS = {
         ...(model ? ['--model', model] : []),
         ...extraArgs(),
         // The user's own Chrome (extension Claude in Chrome) for jobs that have to click through a web page.
-        ...(process.env.JARVIS_CHROME === '1' ? ['--chrome'] : []),
+        // On by default: without the extension the tools simply say so. JARVIS_CHROME=0 turns it off.
+        ...(process.env.JARVIS_CHROME === '0' ? [] : ['--chrome']),
         '--permission-mode', 'bypassPermissions',
         ...(MEMORY_EXTERNAL ? ['--add-dir', MEMORY_DIR] : []),
         ...(contextFile ? ['--append-system-prompt-file', contextFile] : []),

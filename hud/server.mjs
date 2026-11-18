@@ -574,6 +574,14 @@ async function routePost(req, res, path) {
       return sendJson(res, err.status ?? 500, { ok: false, error: err.message })
     }
   }
+  if (path === '/api/control') {
+    // Jarvis is working the mouse, the keyboard or the browser (scripts/control.mjs): the desktop shows
+    // a frame around the screen and a reticle where he acts. Only from this computer.
+    if (!isLocal(req)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
+    const num = (v) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Math.round(Number(v)) : null)
+    send('control', { on: body.on !== false, label: clean(body.label, 60) || null, x: num(body.x), y: num(body.y), click: body.click === true })
+    return sendJson(res, 200, { ok: true })
+  }
   if (path === '/api/open-url') {
     // A link clicked in the desktop app, which is one window without tabs: it opens in the default
     // browser. Only for a click made on this computer, and only web addresses.
@@ -836,6 +844,7 @@ async function drainAnnounce() {
 
 initJobs({
   send,
+  control: (c) => send('control', c),
   isFilm: () => state.film,
   persist: PRIMARY,
   announce: (job, { silent }) => {

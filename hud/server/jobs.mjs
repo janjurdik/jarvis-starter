@@ -227,6 +227,9 @@ const short = (s, n) => {
   return t.length > n ? `${t.slice(0, n - 1)}…` : t
 }
 
+/** What Jarvis is doing in the user's Chrome, in words. */
+const BROWSER_STEP = { navigate: 'Otváram stránku', computer: 'Klikám v prehliadači', browser_batch: 'Klikám v prehliadači', form_input: 'Vypĺňam formulár', read_page: 'Čítam stránku', get_page_text: 'Čítam stránku', find: 'Hľadám na stránke', tabs_create_mcp: 'Otváram novú kartu', tabs_context_mcp: 'Pozerám karty', tabs_close_mcp: 'Zatváram kartu', file_upload: 'Nahrávam súbor' }
+
 export function stepLabel(name, input = {}, film = false) {
   const file = input.file_path || input.path || input.notebook_path
   const base = file ? basename(String(file)) : ''
@@ -256,6 +259,7 @@ export function stepLabel(name, input = {}, film = false) {
     case 'Skill':
       return short(`Skill ${input.skill ?? ''}`, 80)
     default:
+      if (name.startsWith('mcp__claude-in-chrome__')) return BROWSER_STEP[name.split('__')[2]] ?? 'Pracujem v prehliadači'
       if (name.startsWith('mcp__')) {
         const [, server, tool] = name.split('__')
         return film ? 'Používam nástroj' : short(`${server.replace(/^claude\.ai /, '')}: ${tool}`, 80)
@@ -378,6 +382,8 @@ async function startProcess(j) {
         said = ''
         j.cost.turns = (j.cost.turns ?? 0) + (provider.id === 'claude' ? 0 : 1)
         addStep(j, stepLabel(ev.name, ev.input ?? {}, opts.isFilm()), stepLabel(ev.name, ev.input ?? {}, true))
+        // Working in the user's browser: the desktop shows a frame, so it is plain who is clicking.
+        if (ev.name.startsWith('mcp__claude-in-chrome__')) opts.control?.({ on: true, label: BROWSER_STEP[ev.name.split('__')[2]] ?? 'Pracujem v prehliadači' })
       } else if (ev.type === 'text') {
         lastText = ev.text
         said = ev.text

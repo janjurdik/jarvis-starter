@@ -24,10 +24,31 @@ podľa dátumu", „nájdi v Poznámkach všetko o dovolenke", „vyplň ten for
 
 ## Prehliadač
 
-- **S rozšírením Claude in Chrome** vie Jarvis pracovať v tvojom vlastnom Chrome: klikať, vypĺňať a čítať stránky, na
-  ktorých si prihlásený. Nainštaluj rozšírenie, prihlás sa v ňom a do `.env` pridaj `JARVIS_CHROME=1`, potom
-  `node scripts/hud.mjs --restart`. Platí pre Claude; úlohy na pozadí potom dostanú prehliadač k dispozícii.
-- **Bez neho** si Jarvis na požiadanie poradí skriptom (napríklad Playwright), čo je dobré na stránky bez prihlásenia.
+Jarvis pracuje v tvojom vlastnom Chrome: kliká, vypĺňa a číta stránky, na ktorých si prihlásený. Stačí mať v Chrome
+rozšírenie **Claude in Chrome** a byť v ňom prihlásený. Povieš napríklad „objednaj mi to isté čo minule" alebo „nájdi
+mi v Gmaile faktúru a stiahni ju". Otvorí si vlastnú kartu, tvojich otvorených sa nedotkne.
+
+- Platí pre Claude. Vypnúť sa to dá riadkom `JARVIS_CHROME=0` v `.env`.
+- Bez rozšírenia si Jarvis poradí skriptom, čo stačí na stránky bez prihlásenia.
+
+## Hocijaká appka, myšou a klávesnicou
+
+Na macOS vie Jarvis ovládať aj appky, ktoré sa nedajú skriptovať: pozrie sa na obrazovku, klikne, napíše, stlačí klávesy.
+Robí to úloha na pozadí príkazmi `node scripts/control.mjs` (snímka, klik, písanie, klávesy, posúvanie).
+
+Potrebuje dve povolenia, ktoré dávaš raz ty, v Nastaveniach systému → Súkromie a bezpečnosť:
+
+- **Prístupnosť**: aby smel hýbať myšou a písať. Bez neho sa nestane nič.
+- **Nahrávanie obrazovky a zvuku**: aby na snímke videl okná aplikácií, nie len plochu.
+
+Povoľ ich programu, v ktorom Jarvis beží (v zozname je ako node, Terminál alebo Jarvis HUD). `node scripts/control.mjs ask`
+otvorí správne okno a `node scripts/control.mjs status` povie, čo ešte chýba.
+
+## Vidíš, čo robí
+
+Kým Jarvis pracuje v prehliadači alebo myšou, okolo obrazovky svieti rámik s nápisom, čo práve robí, a na mieste,
+kde kliká, je zameriavač. V appke na plochu je rámik nad všetkými oknami, v prehliadači vnútri okna Jarvisa.
+Rámik zhasne pár sekúnd po poslednom kroku. Úlohu zastavíš kedykoľvek v jej karte na ploche.
 
 ## Čo nerobí
 

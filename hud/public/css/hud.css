@@ -1259,3 +1259,16 @@ body.job-open .toast { z-index: 48; }
 }
 .gv-x:hover, .gv-x:focus-visible, .gv-x.hand-hot { background: rgba(95, 230, 255, 0.22); outline: 0; }
 .gv-sheet iframe { flex: 1; min-height: 0; width: 100%; border: 0; background: #050d13; }
+
+
+/* ── Jarvis is working the computer (js/control.js) ───────────────────── */
+
+.ctl { position: fixed; inset: 0; z-index: 95; pointer-events: none; box-shadow: inset 0 0 0 2px rgba(127, 243, 255, 0.75), inset 0 0 2.4rem rgba(95, 230, 255, 0.35); animation: ctl-breathe 1.5s ease-in-out infinite alternate; }
+.ctl[hidden] { display: none; }
+.ctl-k { position: absolute; width: 2.4rem; height: 2.4rem; border: 0 solid #7ff3ff; filter: drop-shadow(0 0 0.5rem rgba(95, 230, 255, 0.9)); }
+.ctl-k.k1 { left: 0.7rem; top: 0.7rem; border-width: 3px 0 0 3px; border-top-left-radius: 0.5rem; }
+.ctl-k.k2 { right: 0.7rem; top: 0.7rem; border-width: 3px 3px 0 0; border-top-right-radius: 0.5rem; }
+.ctl-k.k3 { right: 0.7rem; bottom: 0.7rem; border-width: 0 3px 3px 0; border-bottom-right-radius: 0.5rem; }
+.ctl-k.k4 { left: 0.7rem; bottom: 0.7rem; border-width: 0 0 3px 3px; border-bottom-left-radius: 0.5rem; }
+.ctl-pill { position: absolute; left: 50%; top: calc(var(--safe-top, 0px) + 1.1rem); transform: translateX(-50%); padding: 0.6rem 1.2rem; border-radius: 1.4rem; background: rgba(5, 15, 20, 0.92); box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.6), 0 0 1.6rem rgba(95, 230, 255, 0.35); font: 600 0.9375rem/1 var(--sans); color: var(--white, #eafbff); white-space: nowrap; }
+@keyframes ctl-breathe { to { box-shadow: inset 0 0 0 2px rgba(127, 243, 255, 0.4), inset 0 0 1.2rem rgba(95, 230, 255, 0.18); } }

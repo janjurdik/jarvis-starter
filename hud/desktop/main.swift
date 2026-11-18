@@ -100,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   var web: HUDWebView!
   var statusLabel: NSTextField!
   var statusItem: NSStatusItem!
+  let control = ControlOverlay()
   var hotKeyRef: EventHotKeyRef?
   var signalSource: DispatchSourceSignal?
 
@@ -588,6 +589,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     case "raise": raise()
     case "ready": pushInsets(force: true)
     case "log": log("stránka: \(body["text"] ?? "")")
+    case "control":
+      // Jarvis is working the mouse, the keyboard or the browser: show where, above every window.
+      let num = { (k: String) -> CGFloat? in (body[k] as? NSNumber).map { CGFloat(truncating: $0) } }
+      control.update(on: (body["on"] as? Bool) ?? true, label: body["label"] as? String, x: num("x"), y: num("y"), click: (body["click"] as? Bool) ?? false)
     default: break
     }
   }
@@ -723,6 +728,220 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       try? png.write(to: CACHE_DIR.appendingPathComponent("snapshot.png"))
       log("snímka uložená")
     }
+  }
+}
+
+// MARK: Rámik nad všetkými oknami, keď Jarvis ovláda počítač
+
+/// A frame around the screen, a label and a reticle where Jarvis acts, drawn above every window.
+/// It never takes a click and stays out of screenshots, so the agent does not see itself.
+@MainActor
+final class ControlOverlay {
+  private var window: NSWindow?
+  private let frameLayer = CAShapeLayer()
+  private let corners = CAShapeLayer()
+  private let reticle = CALayer()
+  private let pill = CAShapeLayer()
+  private let text = CATextLayer()
+  private var hideTimer: Timer?
+  private let ice = NSColor(srgbRed: 0.5, green: 0.953, blue: 1, alpha: 1)
+  private let amber = NSColor(srgbRed: 1, green: 0.698, blue: 0.361, alpha: 1)
+  /// Tests keep the overlay in screenshots to look at it.
+  var inScreenshots = false
+
+  private func build(_ screen: NSScreen) -> NSWindow {
+    let w = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+    w.isOpaque = false
+    w.backgroundColor = .clear
+    w.hasShadow = false
+    w.ignoresMouseEvents = true
+    w.isReleasedWhenClosed = false
+    w.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.screenSaverWindow)))
+    w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+    if !inScreenshots { w.sharingType = .none }
+    let view = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
+    view.wantsLayer = true
+    w.contentView = view
+    guard let root = view.layer else { return w }
+    let b = view.bounds
+
+    frameLayer.path = CGPath(roundedRect: b.insetBy(dx: 5, dy: 5), cornerWidth: 16, cornerHeight: 16, transform: nil)
+    frameLayer.fillColor = nil
+    frameLayer.strokeColor = ice.withAlphaComponent(0.8).cgColor
+    frameLayer.lineWidth = 3
+    glow(frameLayer, ice, 16)
+    let breathe = CABasicAnimation(keyPath: "opacity")
+    breathe.fromValue = 1
+    breathe.toValue = 0.45
+    breathe.duration = 1.5
+    breathe.autoreverses = true
+    breathe.repeatCount = .infinity
+    frameLayer.add(breathe, forKey: "breathe")
+    root.addSublayer(frameLayer)
+
+    // Corner brackets, like the frame of a viewfinder.
+    let p = CGMutablePath()
+    let m: CGFloat = 14
+    let l: CGFloat = 46
+    for (x, y, dx, dy) in [(m, m, 1.0, 1.0), (b.width - m, m, -1.0, 1.0), (b.width - m, b.height - m, -1.0, -1.0), (m, b.height - m, 1.0, -1.0)] {
+      p.move(to: CGPoint(x: x + l * dx, y: y))
+      p.addLine(to: CGPoint(x: x, y: y))
+      p.addLine(to: CGPoint(x: x, y: y + l * dy))
+    }
+    corners.path = p
+    corners.fillColor = nil
+    corners.strokeColor = ice.cgColor
+    corners.lineWidth = 3.5
+    corners.lineCap = .round
+    corners.lineJoin = .round
+    glow(corners, ice, 10)
+    root.addSublayer(corners)
+
+    pill.fillColor = NSColor(srgbRed: 0.02, green: 0.06, blue: 0.08, alpha: 0.9).cgColor
+    pill.strokeColor = ice.withAlphaComponent(0.6).cgColor
+    pill.lineWidth = 1
+    glow(pill, ice, 12)
+    root.addSublayer(pill)
+    text.fontSize = 15
+    text.font = NSFont.systemFont(ofSize: 15, weight: .semibold)
+    text.foregroundColor = NSColor(srgbRed: 0.92, green: 0.98, blue: 1, alpha: 1).cgColor
+    text.alignmentMode = .center
+    text.contentsScale = screen.backingScaleFactor
+    root.addSublayer(text)
+
+    // The reticle: a turning dashed ring, four ticks and a dot.
+    reticle.bounds = CGRect(x: 0, y: 0, width: 96, height: 96)
+    reticle.isHidden = true
+    let c = CGPoint(x: 48, y: 48)
+    let ring = CAShapeLayer()
+    ring.frame = reticle.bounds
+    ring.path = CGPath(ellipseIn: CGRect(x: 48 - 30, y: 48 - 30, width: 60, height: 60), transform: nil)
+    ring.fillColor = nil
+    ring.strokeColor = ice.cgColor
+    ring.lineWidth = 2.2
+    ring.lineDashPattern = [4, 7]
+    glow(ring, ice, 8)
+    let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+    spin.fromValue = 0
+    spin.toValue = Double.pi * 2
+    spin.duration = 7
+    spin.repeatCount = .infinity
+    ring.add(spin, forKey: "spin")
+    reticle.addSublayer(ring)
+    let inner = CAShapeLayer()
+    inner.path = CGPath(ellipseIn: CGRect(x: 48 - 19, y: 48 - 19, width: 38, height: 38), transform: nil)
+    inner.fillColor = ice.withAlphaComponent(0.1).cgColor
+    inner.strokeColor = ice.cgColor
+    inner.lineWidth = 2.6
+    glow(inner, ice, 10)
+    reticle.addSublayer(inner)
+    let ticks = CAShapeLayer()
+    let t = CGMutablePath()
+    for (dx, dy) in [(0.0, 1.0), (0.0, -1.0), (1.0, 0.0), (-1.0, 0.0)] {
+      t.move(to: CGPoint(x: c.x + 36 * dx, y: c.y + 36 * dy))
+      t.addLine(to: CGPoint(x: c.x + 44 * dx, y: c.y + 44 * dy))
+    }
+    ticks.path = t
+    ticks.strokeColor = ice.cgColor
+    ticks.lineWidth = 2
+    ticks.lineCap = .round
+    glow(ticks, ice, 6)
+    reticle.addSublayer(ticks)
+    let dot = CAShapeLayer()
+    dot.path = CGPath(ellipseIn: CGRect(x: 48 - 3.5, y: 48 - 3.5, width: 7, height: 7), transform: nil)
+    dot.fillColor = NSColor.white.cgColor
+    glow(dot, ice, 6)
+    reticle.addSublayer(dot)
+    root.addSublayer(reticle)
+    return w
+  }
+
+  private func glow(_ layer: CALayer, _ color: NSColor, _ radius: CGFloat) {
+    layer.shadowColor = color.cgColor
+    layer.shadowRadius = radius
+    layer.shadowOpacity = 0.9
+    layer.shadowOffset = .zero
+  }
+
+  /// x and y are points of the main screen from its top left corner (the way events are posted).
+  func update(on: Bool, label: String?, x: CGFloat?, y: CGFloat?, click: Bool) {
+    guard on, let screen = NSScreen.screens.first else { return hide() }
+    if window == nil || window?.frame != screen.frame {
+      window?.orderOut(nil)
+      window = build(screen)
+    }
+    guard let w = window, let root = w.contentView?.layer else { return }
+    let b = root.bounds
+    let line = "Jarvis · " + String((label ?? "").prefix(60)).trimmingCharacters(in: .whitespacesAndNewlines)
+    let shown = line.hasSuffix("· ") ? "Jarvis ovláda počítač" : line
+    let size = (shown as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 15, weight: .semibold)])
+    let pw = ceil(size.width) + 44
+    let ph: CGFloat = 38
+    let rect = CGRect(x: (b.width - pw) / 2, y: b.height - 58 - ph, width: pw, height: ph)
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    pill.path = CGPath(roundedRect: rect, cornerWidth: ph / 2, cornerHeight: ph / 2, transform: nil)
+    text.string = shown
+    text.frame = CGRect(x: rect.minX, y: rect.minY + (ph - 20) / 2 - 1, width: pw, height: 20)
+    CATransaction.commit()
+
+    if let x, let y {
+      let to = CGPoint(x: min(max(x, 0), b.width), y: b.height - min(max(y, 0), b.height))
+      if reticle.isHidden {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        reticle.position = to
+        reticle.isHidden = false
+        CATransaction.commit()
+      } else {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.3)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeInEaseOut))
+        reticle.position = to
+        CATransaction.commit()
+      }
+      if click { ripple(at: to, in: root) }
+    }
+    if !w.isVisible { log("rámik ovládania: zapnutý") }
+    w.orderFrontRegardless()
+    hideTimer?.invalidate()
+    hideTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { [weak self] _ in
+      Task { @MainActor in self?.hide() }
+    }
+  }
+
+  private func ripple(at p: CGPoint, in root: CALayer) {
+    let r = CAShapeLayer()
+    r.bounds = CGRect(x: 0, y: 0, width: 60, height: 60)
+    r.position = p
+    r.path = CGPath(ellipseIn: r.bounds.insetBy(dx: 2, dy: 2), transform: nil)
+    r.fillColor = nil
+    r.strokeColor = amber.cgColor
+    r.lineWidth = 3
+    glow(r, amber, 10)
+    root.addSublayer(r)
+    let grow = CABasicAnimation(keyPath: "transform.scale")
+    grow.fromValue = 0.3
+    grow.toValue = 2.2
+    let fade = CABasicAnimation(keyPath: "opacity")
+    fade.fromValue = 1
+    fade.toValue = 0
+    let g = CAAnimationGroup()
+    g.animations = [grow, fade]
+    g.duration = 0.5
+    g.timingFunction = CAMediaTimingFunction(name: .easeOut)
+    g.isRemovedOnCompletion = false
+    g.fillMode = .forwards
+    r.add(g, forKey: "ripple")
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) { r.removeFromSuperlayer() }
+  }
+
+  func hide() {
+    hideTimer?.invalidate()
+    hideTimer = nil
+    reticle.isHidden = true
+    if window?.isVisible == true { log("rámik ovládania: vypnutý") }
+    window?.orderOut(nil)
   }
 }
 
