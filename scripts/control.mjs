@@ -134,7 +134,9 @@ const readState = () => {
   }
 }
 
+const SETTINGS = 'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension'
 const PERMISSION = {
+  screen: 'Snímku obrazovky sa nepodarilo spraviť: chýba povolenie Nahrávanie obrazovky a zvuku. macOS: Nastavenia systému → Súkromie a bezpečnosť → Nahrávanie obrazovky a zvuku, zapni program, v ktorom Jarvis beží (node, Terminál alebo appku Jarvis HUD). Príkaz `node scripts/control.mjs ask` to okno otvorí.',
   accessibility: 'Chýba povolenie ovládať počítač. macOS: Nastavenia systému → Súkromie a bezpečnosť → Prístupnosť, zapni program, v ktorom Jarvis beží (node, Terminál alebo appku Jarvis HUD). Príkaz `node scripts/control.mjs ask` to okno otvorí.',
 }
 
@@ -158,11 +160,18 @@ async function main() {
     case 'status':
     case 'ask': {
       const s = jxa(command)
-      return print({ ...s, hint: s.control === false ? PERMISSION.accessibility : undefined, see: 'Keď na snímke vidíš len plochu bez okien iných aplikácií, chýba povolenie Nahrávanie obrazovky a zvuku (Nastavenia systému → Súkromie a bezpečnosť). Systém sa naň spýta pri prvej snímke.' })
+      // The picture needs a permission of its own. Trying once makes macOS list the program, and `ask` opens the right page.
+      const probe = spawnSync('/usr/sbin/screencapture', ['-x', '-m', '-t', 'jpg', join(DIR, 'probe.jpg')], { timeout: 15_000 })
+      s.see = probe.status === 0
+      if (command === 'ask') {
+        if (!s.see) spawnSync('/usr/bin/open', [`${SETTINGS}?Privacy_ScreenCapture`])
+        else if (s.control === false) spawnSync('/usr/bin/open', [`${SETTINGS}?Privacy_Accessibility`])
+      }
+      return print({ ...s, hint: s.control === false ? PERMISSION.accessibility : undefined, seeHint: s.see ? undefined : PERMISSION.screen })
     }
     case 'shot': {
       const cap = spawnSync('/usr/sbin/screencapture', ['-x', '-m', '-t', 'jpg', SHOT], { timeout: 15_000 })
-      if (cap.status !== 0) fail('Snímku obrazovky sa nepodarilo spraviť.')
+      if (cap.status !== 0) fail(PERMISSION.screen)
       spawnSync('/usr/bin/sips', ['-Z', String(SHOT_MAX), '-s', 'formatOptions', '72', SHOT], { timeout: 15_000 })
       const dims = spawnSync('/usr/bin/sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', SHOT], { encoding: 'utf8' }).stdout
       const width = Number(/pixelWidth: (\d+)/.exec(dims)?.[1])

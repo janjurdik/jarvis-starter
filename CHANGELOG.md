@@ -2,6 +2,11 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.6.1 (2026-11-18)
+
+- **Ovládanie appiek povie, ktoré povolenie chýba.** `node scripts/control.mjs status` ukáže zvlášť Prístupnosť
+  a Nahrávanie obrazovky, `ask` otvorí správnu stránku v Nastaveniach systému.
+
 ## 1.6.0 (2026-11-18)
 
 - **Jarvis ovláda prehliadač.** Úlohy na pozadí pracujú v tvojom vlastnom Chrome cez rozšírenie Claude in Chrome: klikajú,
