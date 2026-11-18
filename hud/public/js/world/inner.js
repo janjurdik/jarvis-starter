@@ -812,6 +812,8 @@ export function createInner(renderer, U) {
   }
 
   function look(dx, dy) {
+    // A board is a page, not a space: it stays where it was fitted, whatever the mouse or a hand does.
+    if (world?.board) return
     nav.tYaw += dx * 0.0032
     nav.tPitch = clamp(nav.tPitch - dy * 0.0026, -1.45, 1.45)
     nav.fly = null
@@ -822,13 +824,14 @@ export function createInner(renderer, U) {
   }
 
   function push(amount) {
+    if (world?.board) return
     camera.getWorldDirection(fwd)
     nav.vel.addScaledVector(fwd, amount * speedScale())
     nav.fly = null
   }
 
   function flyTo(i) {
-    if (!world || i < 0) return
+    if (!world || i < 0 || world.board) return
     const target = new THREE.Vector3(world.P[i * 3], world.P[i * 3 + 1], world.P[i * 3 + 2])
     const size = world.I[i * 4]
     const dir = target.clone().sub(camera.position).normalize()
@@ -853,7 +856,8 @@ export function createInner(renderer, U) {
       }
       if (k >= 1) nav.fly = null
     } else {
-      // Klávesy: W/S dopredu a dozadu, A/D do strán, Q/E dole a hore.
+      // Klávesy: W/S dopredu a dozadu, A/D do strán, Q/E dole a hore. (Tabuľa sa nehýbe.)
+      if (world?.board) nav.keys.clear()
       camera.getWorldDirection(fwd)
       right.crossVectors(fwd, up).normalize()
       const acc = 70 * speedScale() * dt
@@ -886,12 +890,20 @@ export function createInner(renderer, U) {
   const v = new THREE.Vector3()
   let view = { w: 1, h: 1, zone: null }
   function setSize(w, h, zone) {
+    const was = view.zone
     view = { w, h, zone }
     camera.aspect = w / h
     // Stred vnútra je stred voľnej plochy medzi panelmi, ako v hlavnom svete.
     if (zone) camera.setViewOffset(w, h, w / 2 - (zone.left + zone.right) / 2, h / 2 - (zone.top + zone.bottom) / 2, w, h)
     camera.updateProjectionMatrix()
     uProj.value = h / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))
+    // A board is laid out for the free zone it was given. When the zone changes (a pane folds, the
+    // window is resized, the zone only became known after the data), it is laid out and fitted again.
+    const moved = (a, b) => !a !== !b || (a && b && (Math.abs(a.left - b.left) > 2 || Math.abs(a.right - b.right) > 2 || Math.abs(a.top - b.top) > 2 || Math.abs(a.bottom - b.bottom) > 2))
+    if (world?.board && moved(was, zone)) {
+      build(world.data)
+      startPose(false)
+    }
   }
 
   /** Projekcia položky i do CSS px (alebo null mimo záberu). */
@@ -1003,7 +1015,7 @@ export function createInner(renderer, U) {
       const x = ((v.x + 1) / 2) * view.w
       const y = ((1 - v.y) / 2) * view.h
       const z = view.zone
-      if (z && (x < z.left + (g.head ? 8 : 40) || x > z.right - 40 || y < z.top + (g.head ? 110 : 150) || y > z.bottom - (g.head ? 30 : 60))) continue
+      if (z && (x < z.left + (g.head ? -4 : 40) || x > z.right - 40 || y < z.top + (g.head ? 60 : 150) || y > z.bottom - (g.head ? 10 : 60))) continue
       out.push({ key: g.key, x, y, depth, left: Boolean(g.head) })
     }
     out.sort((a, b) => a.depth - b.depth)
@@ -1014,7 +1026,7 @@ export function createInner(renderer, U) {
 
   function flyToGroup(key) {
     const g = yearCenters.find((x) => x.key === key)
-    if (!g) return
+    if (!g || world?.board) return
     const to = g.c.clone().add(new THREE.Vector3(0, 0, world?.atlas ? Math.max(30, g.R * 3.3) : g.R * 2.1))
     const dir = g.c.clone().sub(to).normalize()
     nav.vel.set(0, 0, 0)
@@ -1056,7 +1068,8 @@ export function createInner(renderer, U) {
     for (let i = 0; i < world.items.length && out.length < max; i++) {
       const s = screenOf(i)
       if (!s) continue
-      if (z && (s.x < z.left + 8 || s.x > z.right - 40 || s.y < z.top + 120 || s.y > z.bottom - 24)) continue
+      // Every row that is in the free zone keeps its name: a dot without a name says nothing.
+      if (z && (s.x < z.left - 4 || s.x > z.right - 30 || s.y < z.top + 60 || s.y > z.bottom - 6)) continue
       out.push({ i, x: s.x + s.r + 9, y: s.y, r: s.r, w: (boardCol * uProj.value) / s.depth - s.r * 2 - 26, row: (BOARD.row * uProj.value) / s.depth, item: world.items[i] })
     }
     return out

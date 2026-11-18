@@ -153,10 +153,13 @@
   -webkit-backdrop-filter: blur(10px);
   font: 600 1.0625rem/1 var(--sans);
   color: var(--white, #eafbff);
-  pointer-events: auto;
+  pointer-events: none;
   cursor: pointer;
-  transition: transform 0.16s, box-shadow 0.16s, background 0.16s;
+  opacity: 0;
+  transition: transform 0.16s, box-shadow 0.16s, background 0.16s, opacity 0.35s;
 }
+/* It appears with the inside of the planet, not during the flight in. */
+.is-in > .leave { opacity: 1; pointer-events: auto; }
 .leave svg { width: 1.3rem; height: 1.3rem; fill: none; stroke: #7ff3ff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .leave:hover, .leave:focus-visible, .leave.hand-hot { transform: translateX(-2px); background: rgba(95, 230, 255, 0.16); box-shadow: inset 0 0 0 1.5px rgba(127, 243, 255, 0.85), 0 0 2.4rem rgba(95, 230, 255, 0.35); outline: 0; }
 /* With hands it is the main control of the screen: bigger, so the cursor does not have to aim. */

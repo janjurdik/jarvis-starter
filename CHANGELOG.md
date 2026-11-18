@@ -2,6 +2,13 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.6.3 (2026-11-18)
+
+- **Úlohy a Kalendár stoja na mieste.** Tabuľa sa už nedá odtiahnuť ani priblížiť mimo obrazovky (myšou ani rukami),
+  vždy sa zmestí medzi panely a prepočíta sa, keď sa zmení okno. Každý riadok má pri bodke svoj text a každý stĺpec
+  nadpis.
+- Tlačidlo Opustiť sa ukáže až vnútri planéty, nie počas príletu.
+
 ## 1.6.2 (2026-11-18)
 
 - **Výsledky úloh ako oznámenia systému.** Keď úloha na pozadí skončí, čaká na tvoj súhlas alebo zlyhá, príde bežné

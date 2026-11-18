@@ -132,7 +132,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     <aside class="dz-hero" hidden><button type="button" class="dz-x" aria-label="Zavrieť detail">×</button><div class="dz-hero-in"></div></aside>
     <div class="dz-light" hidden><img alt=""></div>
     <button type="button" class="leave" aria-label="Opustiť"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6M4 12h16"/></svg>Opustiť</button>
-    <div class="dz-hint"><span>ťahaj</span> otáčanie · <span>koliesko / pinch</span> let · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · <span>dvojklik</span> priletieť · <kbd>Esc</kbd> späť</div>`
+    <div class="dz-hint"></div>`
   document.body.append(root)
   const el = {
     kicker: root.querySelector('.dz-kicker'),
@@ -206,7 +206,14 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     root.classList.toggle('has-kit', panel.length > 0)
   }
 
+  const HINT_SPACE = `<span>ťahaj</span> otáčanie · <span>koliesko / pinch</span> let · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · <span>dvojklik</span> priletieť · <kbd>Esc</kbd> späť`
+  /** A board stands still, so it only says what a click does. */
+  const HINT_BOARD = '<span>klik</span> otvorí položku · <kbd>Esc</kbd> späť'
+
   function header(d) {
+    const hint = d?.layout === 'board' ? HINT_BOARD : HINT_SPACE
+    const hintEl = root.querySelector('.dz-hint')
+    if (hintEl._html !== hint) hintEl.innerHTML = hintEl._html = hint
     el.kicker.textContent = 'Vnútro planéty'
     el.headline.textContent = d?.title ?? titleOf(node) ?? ''
     const items = d?.items ?? []
@@ -444,11 +451,11 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
         // The name sits right of its dot and shrinks with the row when the camera pulls back.
         const mw = `${Math.max(48, l.w).toFixed(0)}px`
         if (t._mw !== mw) t.style.maxWidth = t._mw = mw
-        const fs = `${Math.max(0.64, Math.min(0.94, l.row / 42)).toFixed(2)}rem`
-        if (t._fs !== fs) t.style.fontSize = t._fs = fs
-        // Rows too close for two lines keep only the name.
+        // Rows too close for two lines keep only the name, and the name may use the whole row.
         const tight = l.row < 30
         if (t._tight !== tight) t.classList.toggle('is-tight', (t._tight = tight))
+        const fs = `${Math.max(0.66, Math.min(0.94, l.row / (tight ? 27 : 42))).toFixed(2)}rem`
+        if (t._fs !== fs) t.style.fontSize = t._fs = fs
         tf = `translate3d(${l.x.toFixed(1)}px,${l.y.toFixed(1)}px,0) translateY(-50%)`
       } else {
         t._mw = t._fs = null
