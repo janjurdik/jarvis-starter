@@ -35,6 +35,8 @@ const PINCH_ON = 0.3
 const PINCH_OFF = 0.46
 /** A pinch has to travel this far (px) before it is a drag. Inside it the cursor holds still, so a click lands where it was aimed. */
 const DEAD = 30
+/** The hand is a pointer of its own, so the page can tell its drags from the mouse's (whose id is 1). */
+const HAND_POINTER = 7001
 const CLICKABLE = 'button, a[href], input, textarea, select, label, summary, [role="button"], [data-node], [data-ask], [data-act], [data-key], .chip'
 
 const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v))
@@ -174,7 +176,7 @@ export function createHands({ onState = () => {}, isHot = () => false } = {}) {
   // ── events: a hand is a mouse ──
   function fire(type, x, y, target, buttons = 0) {
     const t = target?.isConnected ? target : (document.elementFromPoint(x, y) ?? document.body)
-    const init = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, screenX: x, screenY: y, button: type === 'pointermove' ? -1 : 0, buttons, pointerId: 1, pointerType: 'mouse', isPrimary: true }
+    const init = { bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, screenX: x, screenY: y, button: type === 'pointermove' ? -1 : 0, buttons, pointerId: HAND_POINTER, pointerType: 'mouse', isPrimary: false }
     t.dispatchEvent(type === 'click' ? new MouseEvent('click', init) : new PointerEvent(type, init))
     return t
   }
@@ -194,7 +196,8 @@ export function createHands({ onState = () => {}, isHot = () => false } = {}) {
     const p = press
     press = null
     if (!p) return
-    if (p.dragging) fire('pointerup', p.px, p.py, p.target)
+    // The drag ends on the very element it started on, wherever the cursor is now: a press never stays down.
+    if (p.dragging) (p.target?.isConnected ? p.target : document.body).dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, composed: true, view: window, clientX: p.px, clientY: p.py, button: 0, buttons: 0, pointerId: HAND_POINTER, pointerType: 'mouse', isPrimary: false }))
     else if (click) {
       const t = fire('pointerdown', p.x, p.y, p.target, 1)
       fire('pointerup', p.x, p.y, t)
@@ -250,7 +253,14 @@ export function createHands({ onState = () => {}, isHot = () => false } = {}) {
       if (tr.seen !== now) continue
       tr.sx = tr.fx(clamp((tr.x - BOX.x0) / (BOX.x1 - BOX.x0)) * window.innerWidth, t)
       tr.sy = tr.fy(clamp((tr.y - BOX.y0) / (BOX.y1 - BOX.y0)) * window.innerHeight, t)
-      tr.pinch = tr.pinch ? tr.ratio < PINCH_OFF : tr.ratio < PINCH_ON
+      // A pinch has to hold for two frames in a row before it starts or ends: one shaky frame of the
+      // model must not click, nor drop a drag in the middle.
+      const want = tr.pinch ? tr.ratio < PINCH_OFF : tr.ratio < PINCH_ON
+      tr.flip = want === tr.pinch ? 0 : (tr.flip ?? 0) + 1
+      if (tr.flip >= 2) {
+        tr.pinch = want
+        tr.flip = 0
+      }
       tr.strength = clamp((0.95 - tr.ratio) / (0.95 - PINCH_ON))
     }
     gestures()

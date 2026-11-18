@@ -584,11 +584,11 @@ export function createAppsWorld({ core, canvas = document.querySelector('canvas'
   // ── input ──
   let press = null
   canvas.addEventListener('pointerdown', (e) => {
-    if (open) press = { x: e.clientX, y: e.clientY, moved: 0 }
+    if (open) press = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 }
   })
   window.addEventListener('pointermove', (e) => {
     if (!open) return
-    if (press) {
+    if (press && e.pointerId === press.id) {
       press.moved += Math.abs(e.clientX - press.x) + Math.abs(e.clientY - press.y)
       press.x = e.clientX
       press.y = e.clientY
@@ -597,6 +597,7 @@ export function createAppsWorld({ core, canvas = document.querySelector('canvas'
     inner.sway((e.clientX / window.innerWidth - 0.5) * 0.07, -(e.clientY / window.innerHeight - 0.5) * 0.045)
   })
   canvas.addEventListener('pointerup', (e) => {
+    if (press && e.pointerId !== press.id) return
     const p = press
     press = null
     if (!open || !p || p.moved >= 6 || inner.state().phase !== 'in') return

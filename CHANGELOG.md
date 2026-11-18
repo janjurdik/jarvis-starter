@@ -2,6 +2,12 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.5.2 (2026-11-18)
+
+- **Ťahanie sa už nezasekne.** Myš a kurzor ruky sú dva samostatné ukazovatele: pohyb jedného už nerozhodí ťahanie
+  druhého, takže svet po otáčaní rukou ani myšou neskáče. Štipnutie musí vydržať dva snímky, jeden roztrasený
+  snímok kamery už neklikne ani nepustí ťahanie.
+
 ## 1.5.1 (2026-11-18)
 
 - **„Ukázať, ako na to" funguje aj v appke na ploche.** Sprievodca, ako získať dáta z appky, sa otvorí priamo v Jarvisovi.

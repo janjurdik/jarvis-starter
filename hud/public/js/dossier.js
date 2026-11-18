@@ -481,9 +481,11 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
   let press = null
   canvas.addEventListener('pointerdown', (e) => {
     if (!open) return
-    press = { x: e.clientX, y: e.clientY, moved: 0 }
+    press = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 }
   })
   window.addEventListener('pointermove', (e) => {
+    // Only the pointer that pressed counts (the mouse and the hand cursor are two pointers).
+    if (press && e.pointerId !== press.id) return
     if (press) press.moved += Math.abs(e.clientX - press.x) + Math.abs(e.clientY - press.y)
     if (press) {
       press.x = e.clientX
@@ -491,6 +493,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     }
   })
   canvas.addEventListener('pointerup', (e) => {
+    if (press && e.pointerId !== press.id) return
     const p = press
     press = null
     if (!open || !p || p.moved >= 6 || inner.state().phase !== 'in') return

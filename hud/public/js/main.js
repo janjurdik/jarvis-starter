@@ -1104,11 +1104,14 @@ function bindControls() {
   })
   let drag = null
   canvas.addEventListener('pointerdown', (e) => {
-    drag = { x: e.clientX, y: e.clientY, moved: 0 }
-    // A press made by hand (hands.js) has no real pointer to capture.
+    // A drag belongs to the pointer that started it. The mouse and the hand cursor (hands.js) are two
+    // pointers: moves of one must never be read as steps of the other's drag.
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0 }
+    // A press made by hand has no real pointer to capture.
     if (e.isTrusted) canvas.setPointerCapture?.(e.pointerId)
   })
   canvas.addEventListener('pointerup', (e) => {
+    if (drag && e.pointerId !== drag.id) return
     // Vo vnútri planéty klik a dvojklik rieši dossier (výber položky, prelet k nej).
     if (dossier?.isOpen() || appsWorld?.isOpen()) {
       drag = null
@@ -1141,7 +1144,7 @@ function bindControls() {
     document.body.classList.remove('hide-cursor')
     hideLater()
     core.setPointer?.(e.clientX, e.clientY)
-    if (drag) {
+    if (drag && e.pointerId === drag.id) {
       const dx = e.clientX - drag.x
       const dy = e.clientY - drag.y
       drag.moved += Math.abs(dx) + Math.abs(dy)
@@ -1150,6 +1153,13 @@ function bindControls() {
       if (drag.moved > 6) core.drag?.(dx, dy)
     }
   })
+  // A drag never outlives its pointer: let go anywhere (over a panel, outside the window) ends it.
+  for (const type of ['pointerup', 'pointercancel']) {
+    window.addEventListener(type, (e) => {
+      if (drag && e.pointerId === drag.id && e.target !== canvas) drag = null
+    })
+  }
+  window.addEventListener('blur', () => (drag = null))
   document.addEventListener('pointerleave', () => core.setPointer?.(null, null))
   window.addEventListener('pointerdown', () => speech.unlock())
   hideLater()
