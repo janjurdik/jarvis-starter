@@ -39,6 +39,7 @@ import { STT_ENGINE, sttLocal, sttState, stopStt, transcribeAudio, warmStt } fro
 import { getWeather } from './server/weather.mjs'
 import { routeHands } from './server/hands.mjs'
 import { routeInner } from './server/inner.mjs'
+import { systemNotify } from './server/notify.mjs'
 import { initImports, loadImports, resolveAttachments, routeImportGet, routeImportPost } from './server/imports.mjs'
 import { startUpdateWatch, updateInfo } from './server/updates.mjs'
 import { callProblems } from './server/call.mjs'
@@ -831,6 +832,13 @@ async function drainAnnounce() {
       }
       sendHud({ type: job.status === 'done' ? 'done' : 'alert', text: `Úloha ${title} · ${STATUS_SK[job.status] ?? job.status}`, icon: job.status === 'done' ? 'check' : 'alarm', say: null, heard: null, node: 'projekty', source: 'jarvis' })
       pushSnapshot('úloha').catch(() => {})
+      // A notification of the system as well: the desktop is under the windows, a toast there is easy to miss.
+      systemNotify({
+        title: job.status === 'done' ? 'Jarvis · úloha je hotová' : job.status === 'needs_ok' ? 'Jarvis · čaká na tvoj súhlas' : 'Jarvis · úloha zlyhala',
+        body: [title, job.status === 'needs_ok' ? job.needsOk : (job.say ?? job.summary)].filter(Boolean).join(': '),
+        job: job.id,
+        quiet: hush,
+      })
       if (!silent && !hush) {
         // Only the short spoken line of the job is read, never the whole written result.
         sayText(`${lead} ${job.say ?? ''}`.trim().slice(0, 420))

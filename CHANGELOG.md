@@ -2,6 +2,12 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.6.2 (2026-11-18)
+
+- **Výsledky úloh ako oznámenia systému.** Keď úloha na pozadí skončí, čaká na tvoj súhlas alebo zlyhá, príde bežné
+  oznámenie (macOS, Windows), aj keď práve robíš niečo iné. V appke na plochu má meno Jarvisa a klik naň otvorí danú
+  úlohu. V tichých hodinách príde bez zvuku.
+
 ## 1.6.1 (2026-11-18)
 
 - **Ovládanie appiek povie, ktoré povolenie chýba.** `node scripts/control.mjs status` ukáže zvlášť Prístupnosť

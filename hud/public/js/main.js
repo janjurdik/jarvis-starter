@@ -663,6 +663,10 @@ function connectEvents() {
     onVoice(v)
   })
   initControl({ on })
+  // Results of jobs as notifications of the system: the desktop app shows them, a click opens the job.
+  on('notify', (n) => {
+    if (DESKTOP && typeof desk()?.post === 'function') desk().post({ type: 'notify', title: n?.title ?? 'Jarvis', body: n?.body ?? '', job: n?.job ?? null, quiet: n?.quiet === true })
+  })
   on('world', (w) => {
     wakeUp()
     onWorld(w)
@@ -954,6 +958,11 @@ function bindDesktop() {
     const d = e.detail ?? {}
     if (d.type === 'insets') requestAnimationFrame(layout)
     else if (d.type === 'raised') wakeUp()
+    else if (d.type === 'notify-open') {
+      // A click on a notification about a job: show that job.
+      wakeUp()
+      jobs?.open(typeof d.job === 'string' ? d.job : null)
+    }
     else if (d.type === 'hotkey') {
       wakeUp()
       if (d.phase === 'down') {

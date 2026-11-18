@@ -11,6 +11,7 @@
 
 import Carbon.HIToolbox
 import Cocoa
+import UserNotifications
 import WebKit
 
 // MARK: - Konfigurácia
@@ -589,6 +590,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     case "raise": raise()
     case "ready": pushInsets(force: true)
     case "log": log("stránka: \(body["text"] ?? "")")
+    case "notify":
+      // The result of a background job: a notification the user sees over any window.
+      let text = { (k: String, n: Int) -> String in String(((body[k] as? String) ?? "").prefix(n)) }
+      notifyUser(title: text("title", 80).isEmpty ? "Jarvis" : text("title", 80), body: text("body", 220), job: body["job"] as? String, quiet: (body["quiet"] as? Bool) ?? false)
     case "control":
       // Jarvis is working the mouse, the keyboard or the browser: show where, above every window.
       let num = { (k: String) -> CGFloat? in (body[k] as? NSNumber).map { CGFloat(truncating: $0) } }
@@ -728,6 +733,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       try? png.write(to: CACHE_DIR.appendingPathComponent("snapshot.png"))
       log("snímka uložená")
     }
+  }
+}
+
+// MARK: Oznámenia systému (výsledky úloh)
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+  /// A notification under the app's own name. Without the permission the system's scripting shows it instead.
+  func notifyUser(title: String, body: String, job: String?, quiet: Bool) {
+    let center = UNUserNotificationCenter.current()
+    center.delegate = self
+    center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+      guard granted else {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        p.arguments = ["-e", "on run argv", "-e", "display notification (item 2 of argv) with title (item 1 of argv)", "-e", "end run", title, body]
+        try? p.run()
+        return
+      }
+      let content = UNMutableNotificationContent()
+      content.title = title
+      content.body = body
+      if !quiet { content.sound = .default }
+      if let job { content.userInfo = ["job": job] }
+      UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+  }
+
+  /// Shown also while the HUD itself is in front.
+  nonisolated func userNotificationCenter(
+    _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([.banner, .list, .sound])
+  }
+
+  /// A click on the notification brings the HUD forward and opens the job it was about.
+  nonisolated func userNotificationCenter(
+    _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let raw = (response.notification.request.content.userInfo["job"] as? String) ?? ""
+    let job = String(raw.filter { $0.isLetter || $0.isNumber }.prefix(24))
+    Task { @MainActor in
+      self.raise()
+      self.js("window.dispatchEvent(new CustomEvent('jarvis-desktop', { detail: { type: 'notify-open', job: \(job.isEmpty ? "null" : "'\(job)'") } }))")
+    }
+    completionHandler()
   }
 }
 
