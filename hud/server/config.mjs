@@ -2,6 +2,7 @@
  * User configuration from config/jarvis.json (created by the onboarding, never committed).
  * Re-read when the file changes, so the HUD picks up edits without a restart.
  */
+import { execFileSync } from 'node:child_process'
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseAlarm } from './alarm.mjs'
@@ -10,6 +11,33 @@ import { isPitch, isRate, isVoiceId, langOf } from './voices.mjs'
 
 export const CONFIG_FILE = process.env.JARVIS_CONFIG || join(REPO, 'config', 'jarvis.json')
 export const EXAMPLE_FILE = join(REPO, 'config', 'jarvis.example.json')
+
+let systemLangCache = null
+/** 'cs' when the system speaks Czech or is set to Czechia, otherwise 'sk'. Read from the locale only. */
+export function systemLang(env = process.env) {
+  if (env === process.env && systemLangCache) return systemLangCache
+  const seen = [env.LC_ALL, env.LC_MESSAGES, env.LANG]
+  if (env === process.env) {
+    try {
+      seen.push(Intl.DateTimeFormat().resolvedOptions().locale)
+    } catch {
+      // no locale data: the environment has to do
+    }
+    // macOS keeps the language and the region in its own preferences, not in the environment.
+    if (process.platform === 'darwin') {
+      for (const key of ['AppleLocale', 'AppleLanguages']) {
+        try {
+          seen.push(...execFileSync('/usr/bin/defaults', ['read', '-g', key], { encoding: 'utf8', timeout: 1500, stdio: ['ignore', 'pipe', 'ignore'] }).split(/[\s",()]+/))
+        } catch {
+          // preference not set
+        }
+      }
+    }
+  }
+  const lang = seen.some((l) => /^cs(?![a-z])|[-_]CZ(?![a-z])/i.test(String(l ?? ''))) ? 'cs' : 'sk'
+  if (env === process.env) systemLangCache = lang
+  return lang
+}
 
 const DEFAULTS = {
   name: '',
@@ -93,7 +121,9 @@ export function getConfig() {
     dueAt: /^\d{1,2}:\d{2}$/.test(p.dueAt ?? '') ? p.dueAt.padStart(5, '0') : DEFAULTS.pulse.dueAt,
   }
   value.quiet = typeof raw.quiet === 'string' ? raw.quiet : DEFAULTS.quiet
-  value.language = langOf(raw.language)
+  // No language chosen yet: the one the computer is set to. Jarvis corrects it himself when the
+  // user turns out to speak the other one (persona.mjs).
+  value.language = langOf(raw.language ?? systemLang())
   // Everything else in Jarvis (and every worker it starts) reads the language from JARVIS_LANG.
   // Without the variable in .env, the config's language stands in for it.
   if (!ENV_LANG) {

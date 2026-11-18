@@ -104,6 +104,7 @@ export function createUI({ capture }) {
     `<span class="chip chip-model" id="chip-model" title="Model">${icon('model')}<span></span></span>`,
     `<button type="button" class="chip chip-wake" id="chip-voice" title="Hlas a počúvanie, klik zapne Hey Jarvis">${icon('speaker')}<span>Hlas</span></button>`,
     `<span class="chip chip-life" id="chip-life" title="Pamäť">${icon('pamat')}<span>Pamäť</span></span>`,
+    `<button type="button" class="chip chip-hands is-off" id="chip-hands" title="Ovládanie rukami cez kameru" aria-label="Ovládanie rukami" aria-pressed="false">${icon('kamera')}<span>Ruky</span></button>`,
     `<button type="button" class="chip chip-film" id="chip-film" title="Režim natáčania (N)">${icon('film')}<span>Natáčanie</span></button>`,
     `<button type="button" class="chip chip-set" id="chip-set" title="Nastavenia: hlas, oslovenie, počúvanie" aria-label="Nastavenia">${icon('sliders')}</button>`,
     `<button type="button" class="chip chip-jobs" id="chip-jobs" hidden>${icon('projekty')}<span></span></button>`,

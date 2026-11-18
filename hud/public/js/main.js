@@ -15,6 +15,7 @@
 
 import { createCore } from './core.js'
 import { createDossier } from './dossier.js'
+import { createHands } from './hands.js'
 import { createUI } from './ui.js'
 import { createChat } from './chat.js'
 import { createSpeech } from './speech.js'
@@ -1074,6 +1075,22 @@ function bindControls() {
   // Po kliknutí na čip alebo orb fokus preč, inak by medzerník „klikol" tlačidlo namiesto počúvania.
   for (const b of document.querySelectorAll('button')) b.addEventListener('mouseup', () => b.blur())
   document.getElementById('chip-film').addEventListener('click', () => setFilm(!film))
+  // Hand control: the camera chip opens the camera window and the hand cursor (hands.js).
+  const handsChip = document.getElementById('chip-hands')
+  const HANDS = { off: ['is-off', 'Ruky'], loading: ['is-warn', 'Ruky sa pripravujú'], on: ['is-on', 'Ruky'], blocked: ['is-err', 'Kamera zamietnutá'], error: ['is-err', 'Ruky nefungujú'] }
+  const hands = createHands({
+    isHot: (x, y) => !dossier?.isOpen() && !appsWorld?.isOpen() && Boolean(core.pick?.(x, y)),
+    onState: ({ state: s }) => {
+      const [cls, text] = HANDS[s] ?? HANDS.off
+      handsChip.classList.remove('is-off', 'is-on', 'is-warn', 'is-err')
+      handsChip.classList.add(cls)
+      handsChip.querySelector('span').textContent = text
+      handsChip.setAttribute('aria-pressed', String(s === 'on' || s === 'loading'))
+      if (s === 'on') ui.toast('Ovládanie rukami beží · štipni prstami a klikneš', { iconName: 'kamera', ms: 3600 })
+    },
+  })
+  handsChip.addEventListener('click', () => hands.toggle())
+  if (params.get('debug') === '1') window.__hands = hands
   document.getElementById('chip-jobs').addEventListener('click', () => jobs?.open())
   document.getElementById('chip-voice').addEventListener('click', toggleWake)
 
@@ -1085,7 +1102,8 @@ function bindControls() {
   let drag = null
   canvas.addEventListener('pointerdown', (e) => {
     drag = { x: e.clientX, y: e.clientY, moved: 0 }
-    canvas.setPointerCapture?.(e.pointerId)
+    // A press made by hand (hands.js) has no real pointer to capture.
+    if (e.isTrusted) canvas.setPointerCapture?.(e.pointerId)
   })
   canvas.addEventListener('pointerup', (e) => {
     // Vo vnútri planéty klik a dvojklik rieši dossier (výber položky, prelet k nej).

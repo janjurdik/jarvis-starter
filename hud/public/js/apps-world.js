@@ -120,6 +120,7 @@ export function createAppsWorld({ core, canvas = document.querySelector('canvas'
   root.className = 'aw'
   root.hidden = true
   root.innerHTML = `
+    <button type="button" class="leave" aria-label="Opustiť"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6M4 12h16"/></svg>Opustiť</button>
     <header class="aw-head">
       <div class="aw-title">Tvoje appky</div>
       <div class="aw-sub"></div>
@@ -684,6 +685,7 @@ export function createAppsWorld({ core, canvas = document.querySelector('canvas'
     if (i >= 0) inner.flyTo(i)
     showCard(c.dataset.id)
   })
+  root.querySelector('.leave').addEventListener('click', () => close())
   el.card.addEventListener('click', (e) => {
     const b = e.target.closest('button')
     if (!b) return

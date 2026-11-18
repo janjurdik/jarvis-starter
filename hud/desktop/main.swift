@@ -565,17 +565,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     load()
   }
 
-  // MARK: WKUIDelegate: mikrofón len pre vlastný HUD
+  // MARK: WKUIDelegate: mikrofón a kamera len pre vlastný HUD
 
   func webView(
     _ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
     initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
     decisionHandler: @escaping (WKPermissionDecision) -> Void
   ) {
-    // Only the HUD itself (its exact address, its main frame) may listen. Another local port is another program.
+    // Only the HUD itself (its exact address, its main frame) may listen and, for hand control, see.
+    // Another local port is another program. The page asks for the camera only after a click on its chip.
     let home = URL(string: HUD_ORIGIN)
     let own = (origin.host == "127.0.0.1" || origin.host == "localhost") && origin.port == (home?.port ?? 0)
-    decisionHandler(own && frame.isMainFrame && type == .microphone ? .grant : .deny)
+    decisionHandler(own && frame.isMainFrame ? .grant : .deny)
   }
 
   // MARK: Správy zo stránky

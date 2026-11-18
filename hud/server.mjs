@@ -37,6 +37,7 @@ import { pruneTtsCache, stopTts, ttsFileExists, ttsInfo, warmCommonPhrases } fro
 import { BRAIN_DIR, DATA_DIR, REPO, clean, errMsg, isLoopback, log, readJson, readRaw, sendJson, slug, writeFileAtomic } from './server/util.mjs'
 import { STT_ENGINE, sttLocal, sttState, stopStt, transcribeAudio, warmStt } from './server/stt.mjs'
 import { getWeather } from './server/weather.mjs'
+import { routeHands } from './server/hands.mjs'
 import { routeInner } from './server/inner.mjs'
 import { initImports, loadImports, resolveAttachments, routeImportGet, routeImportPost } from './server/imports.mjs'
 import { startUpdateWatch, updateInfo } from './server/updates.mjs'
@@ -79,6 +80,7 @@ const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
+  '.wasm': 'application/wasm',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.woff2': 'font/woff2',
@@ -101,6 +103,10 @@ const MIME = {
 /** Statické mounty: URL prefix → priečinok. Z node_modules len to, čo appka naozaj načíta. */
 const MOUNTS = [
   { prefix: '/vendor/three/', dir: join(MODULES_DIR, 'three'), allow: /^(build|examples\/jsm)\//, cache: true },
+  // Hand tracking (MediaPipe): the bundle and its WebAssembly, run in the page. The version is in the
+  // address (the same as in package.json and in public/js/hands.js), so a browser never mixes cached
+  // parts of two versions.
+  { prefix: '/vendor/mediapipe-0.10.35/', dir: join(MODULES_DIR, '@mediapipe', 'tasks-vision'), allow: /^(vision_bundle\.mjs|wasm\/vision_wasm(_nosimd)?_internal\.(js|wasm))$/, cache: true },
   { prefix: '/vendor/fonts/', dir: join(MODULES_DIR, '@fontsource', 'jetbrains-mono', 'files'), allow: /\.woff2$/, cache: true },
   { prefix: '/vendor/fontsource/', dir: join(MODULES_DIR, '@fontsource'), allow: /^[a-z0-9-]+\/files\/[^/]+\.woff2$/, cache: true },
   { prefix: '/', dir: PUBLIC_DIR, allow: /./, cache: false },
@@ -118,7 +124,8 @@ function importMapHash() {
 }
 const CSP = [
   "default-src 'self'",
-  `script-src 'self' ${importMapHash()}`.trim(),
+  // 'wasm-unsafe-eval' lets the hand tracking module compile its WebAssembly. It does not allow eval of text.
+  `script-src 'self' 'wasm-unsafe-eval' ${importMapHash()}`.trim(),
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
@@ -206,7 +213,7 @@ function allowRead(req, url) {
   if (isLocal(req)) return true
   return remoteTokenOk(req, url)
 }
-const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|settings|orbs|inner|setup|attachment|import|update|video)|tts\/)/
+const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|settings|orbs|inner|setup|attachment|import|update|video|hands)|tts\/)/
 
 async function serveFile(req, res, file, { cache, immutable = false }) {
   let info
@@ -694,6 +701,8 @@ async function route(req, res) {
   if (path === '/api/snapshot') return sendJson(res, 200, snapshotFor() ?? (await refreshSnapshot('prvé načítanie')) ?? {})
   // Inner worlds of the planets from the memory folder (server/inner.mjs), 403 in filming mode.
   if (await routeInner(req, res, url, { film: state.film })) return
+  // The model for hand control (server/hands.mjs).
+  if (await routeHands(req, res, url)) return
   // Attachments, import status and the people review (server/imports.mjs).
   if (await routeImportGet(req, res, url, { film: state.film })) return
   // Analysed videos: state, transcript and the file itself with range requests (server/video.mjs).

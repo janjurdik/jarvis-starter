@@ -26,6 +26,8 @@
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Jarvis sleduje tvoje ruky, keď si zapneš ovládanie rukami. Obraz spracúva len tvoj Mac a nikam sa neposiela.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Jarvis ťa počúva, keď držíš medzerník alebo ⌃⌥J, a pri zapnutom „Hey Jarvis“. Zvuk spracúva len tvoj Mac.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

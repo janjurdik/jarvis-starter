@@ -22,6 +22,7 @@ po počítači, aby ťa spoznal, spýta sa na to, čo nenájde, a spolu dotiahne
 ## Čo má každý Jarvis
 
 - **Hlas.** Podržíš medzerník a hovoríš, odpovedá nahlas. Reč rozpoznáva Whisper priamo v tvojom počítači (vyberie sa podľa jeho výkonu). Hlas, meno aj to, či je to on alebo ona, si nastavíš jednou vetou.
+- **Ruky.** Zapneš kameru a ovládaš ho rukami: kurzor ide za dlaňou, štipnutím klikneš. Obraz neopúšťa počítač ([docs/RUKY.md](docs/RUKY.md)).
 - **Budík.** „Zobuď ma o pol siedmej." Ráno zazvoní skladbou (môžeš mu dať vlastnú) a povie ti, ako si spal, aké je počasie, čo ťa čaká a čo spravil, kým si spal.
 - **Pamäť.** Obyčajné textové súbory v priečinku `memory/`: kto si, tvoji ľudia, projekty, ciele, denník. Zapisuje si sám, ty ich vieš kedykoľvek otvoriť.
 - **Pošta, kalendár, úlohy.** Triedi poštu a ozve sa len pri dôležitom, upozorní pred stretnutím, stráži termíny a pripomienky.

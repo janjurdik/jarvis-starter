@@ -160,6 +160,7 @@ export function createSettings({ onToast = () => {} } = {}) {
           <button type="button" class="st-persona${female ? '' : ' is-on'}" data-gender="male" aria-pressed="${!female}"><span class="st-face is-m" aria-hidden="true"><i></i><i></i><i></i></span><b>Muž</b><em>komorník</em></button>
           <button type="button" class="st-persona${female ? ' is-on' : ''}" data-gender="female" aria-pressed="${female}"><span class="st-face is-f" aria-hidden="true"><i></i><i></i><i></i></span><b>Žena</b><em>komorníčka</em></button>
         </div>
+        <div class="st-field"><span>Jazyk, ktorým hovorí a ktorému rozumie</span>${seg('language', [['sk', 'Slovenčina'], ['cs', 'Čeština']], lang, { disabled: d.languageLocked })}</div>
         <label class="st-field"><span>Meno</span><input type="text" data-text="assistant.name" maxlength="24" value="${esc(d.assistant.name)}" placeholder="Jarvis" spellcheck="false" autocomplete="off"></label>
       </section>
 
@@ -195,7 +196,6 @@ export function createSettings({ onToast = () => {} } = {}) {
         <p class="st-note${prep ? ' is-busy' : ''}">${sttLine}${stt.locked ? ' Voľbu drží súbor .env (JARVIS_STT).' : ''}</p>
         ${prep && Number.isFinite(prep.pct) ? `<div class="st-progress"><i style="width:${Math.max(2, Math.min(100, prep.pct))}%"></i></div>` : ''}
         <label class="st-switch${d.wake.available ? '' : ' is-off'}"><input type="checkbox" data-toggle="wake" ${d.wake.on ? 'checked' : ''} ${d.wake.available ? '' : 'disabled'}><i></i><span><b>Hey Jarvis</b><em>${d.wake.available ? 'Stačí ho osloviť, netreba držať medzerník.' : 'Potrebuje Whisper v počítači.'}</em></span></label>
-        <div class="st-field"><span>Jazyk</span>${seg('language', [['sk', 'Slovenčina'], ['cs', 'Čeština']], lang, { disabled: d.languageLocked })}</div>
       </section>
 
       <section class="st-sec st-quiet">

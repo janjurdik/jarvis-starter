@@ -134,6 +134,12 @@ const ICONS = {
     s: '<path d="M12 12c-1.8-2.4-3.3-3.8-5.2-3.8a3.8 3.8 0 0 0 0 7.6c1.9 0 3.4-1.4 5.2-3.8Zm0 0c1.8 2.4 3.3 3.8 5.2 3.8a3.8 3.8 0 0 0 0-7.6c-1.9 0-3.4 1.4-5.2 3.8Z"/>',
     l: '<circle cx="17.2" cy="12" r="1.6"/>',
   },
+  // A webcam: hand control from the camera.
+  kamera: {
+    d: '<rect x="3" y="5.5" width="18" height="12" rx="3"/>',
+    s: '<rect x="3" y="5.5" width="18" height="12" rx="3"/><path d="M8.5 20.5h7M12 17.5v3"/>',
+    l: '<circle cx="12" cy="11.5" r="2.6"/>',
+  },
   film: {
     d: '<rect x="2.5" y="6.5" width="13" height="11" rx="2.2"/>',
     s: '<rect x="2.5" y="6.5" width="13" height="11" rx="2.2"/><path d="m15.5 10.4 5-2.6v8.4l-5-2.6"/>',

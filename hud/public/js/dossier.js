@@ -131,6 +131,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     <div class="dz-tip" hidden><b></b><span></span></div>
     <aside class="dz-hero" hidden><button type="button" class="dz-x" aria-label="Zavrieť detail">×</button><div class="dz-hero-in"></div></aside>
     <div class="dz-light" hidden><img alt=""></div>
+    <button type="button" class="leave" aria-label="Opustiť"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6M4 12h16"/></svg>Opustiť</button>
     <div class="dz-hint"><span>ťahaj</span> otáčanie · <span>koliesko / pinch</span> let · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · <span>dvojklik</span> priletieť · <kbd>Esc</kbd> späť</div>`
   document.body.append(root)
   const el = {
@@ -543,6 +544,8 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
       if (Number.isInteger(t._i)) select(t._i, { fly: inner.world()?.data?.layout !== 'board' })
     })
   el.hero.querySelector('.dz-x').addEventListener('click', () => deselect())
+  // The big way out: one click leaves the planet, whatever is open inside it.
+  root.querySelector('.leave').addEventListener('click', () => close())
   el.heroIn.addEventListener('click', (e) => {
     const link = e.target.closest('.dz-link')
     if (link) return follow(link.dataset.node, link.dataset.id)

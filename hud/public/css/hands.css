@@ -1,0 +1,169 @@
+/* Hand control: the camera window, the hand cursor and the big way out of a portal. */
+
+/* ── the camera window ─────────────────────────────────────────────────── */
+
+.hcam {
+  position: fixed;
+  left: 1.75rem;
+  top: 40vh;
+  z-index: 70;
+  width: 17rem;
+  padding: 0.5rem;
+  border-radius: 1rem;
+  background: rgba(6, 14, 18, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.22), 0 1.2rem 3rem rgba(0, 0, 0, 0.55), 0 0 2.4rem rgba(95, 230, 255, 0.08);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  animation: hcam-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hcam[hidden] { display: none; }
+.hcam.is-moving { cursor: grabbing; box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.5), 0 1.6rem 3.6rem rgba(0, 0, 0, 0.6), 0 0 3rem rgba(95, 230, 255, 0.18); }
+@keyframes hcam-in { from { opacity: 0; transform: scale(0.94); } }
+
+.hcam-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.1rem 0.15rem 0.45rem 0.35rem; font: 500 0.8125rem/1 var(--sans); color: var(--t1, rgba(234, 251, 255, 0.95)); }
+.hcam-bar b { font-weight: 600; }
+.hcam-s { flex: 1; color: var(--t3, rgba(234, 251, 255, 0.5)); }
+.hcam.is-on .hcam-s { color: var(--ice, #7ff3ff); }
+.hcam-x {
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(127, 243, 255, 0.08);
+  font: 400 1.05rem/1 var(--sans);
+  color: var(--t2, rgba(234, 251, 255, 0.68));
+  cursor: pointer;
+}
+.hcam-x:hover, .hcam-x.hand-hot { background: rgba(255, 90, 78, 0.22); color: #fff; }
+
+.hcam-view { position: relative; aspect-ratio: 4 / 3; border-radius: 0.6rem; overflow: hidden; background: #03080b; }
+.hcam-view video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); filter: saturate(0.5) contrast(1.08) brightness(0.86); }
+.hcam-view canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* A cold wash and scan lines: the picture belongs to the HUD, not to a video call. */
+.hcam-view::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(95, 230, 255, 0.1), rgba(95, 230, 255, 0.02)), repeating-linear-gradient(0deg, rgba(2, 5, 7, 0.22) 0 1px, transparent 1px 3px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+.hcam-k { position: absolute; width: 0.85rem; height: 0.85rem; border: 0 solid rgba(127, 243, 255, 0.85); z-index: 2; }
+.hcam-k.k1 { left: 0.4rem; top: 0.4rem; border-width: 1.5px 0 0 1.5px; }
+.hcam-k.k2 { right: 0.4rem; top: 0.4rem; border-width: 1.5px 1.5px 0 0; }
+.hcam-k.k3 { right: 0.4rem; bottom: 0.4rem; border-width: 0 1.5px 1.5px 0; }
+.hcam-k.k4 { left: 0.4rem; bottom: 0.4rem; border-width: 0 0 1.5px 1.5px; }
+.hcam-wait {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  text-align: center;
+  font: 400 0.8125rem/1.4 var(--sans);
+  color: var(--t1, rgba(234, 251, 255, 0.95));
+  background: rgba(3, 8, 11, 0.72);
+}
+.hcam-wait[hidden] { display: none; }
+.hcam-hint { padding: 0.5rem 0.3rem 0.15rem; font: 400 0.6875rem/1.35 var(--sans); color: var(--t3, rgba(234, 251, 255, 0.5)); }
+.hcam-hint span { color: var(--t2, rgba(234, 251, 255, 0.72)); }
+
+/* ── the cursor ────────────────────────────────────────────────────────── */
+
+.hc-layer { position: fixed; inset: 0; z-index: 90; pointer-events: none; overflow: hidden; }
+.hc { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; --p: 0; }
+.hc[hidden] { display: none; }
+.hc svg {
+  position: absolute;
+  left: -3.25rem;
+  top: -3.25rem;
+  width: 6.5rem;
+  height: 6.5rem;
+  overflow: visible;
+  fill: none;
+  stroke: #7ff3ff;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 0.5rem rgba(95, 230, 255, 0.75));
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.hc-spin { transform-origin: 0 0; animation: hc-spin 9s linear infinite; }
+.hc-ring { stroke-width: 1.2; stroke-dasharray: 3 7; opacity: 0.85; }
+.hc-ticks { stroke-width: 1.6; opacity: 0.9; }
+.hc-brackets { stroke-width: 1.8; opacity: 0; transform-origin: 0 0; transform: scale(1.5); transition: opacity 0.15s, transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.hc-track { stroke-width: 3.2; stroke: rgba(127, 243, 255, 0.16); }
+/* The arc fills as thumb and forefinger close, like the press ring of a console sensor. */
+.hc-press { stroke-width: 3.2; stroke: #ffb25c; stroke-dasharray: 100; stroke-dashoffset: calc(100 - var(--p) * 100); transform: rotate(-90deg); transform-origin: 0 0; filter: drop-shadow(0 0 0.3rem rgba(255, 178, 92, 0.9)); }
+.hc-dot { fill: #eafbff; stroke: none; transition: r 0.12s; }
+@keyframes hc-spin { to { transform: rotate(360deg); } }
+
+.hc.is-hot .hc-brackets { opacity: 1; transform: scale(1); }
+.hc.is-hot .hc-ring { stroke-dasharray: none; }
+.hc.is-pinch svg { transform: scale(0.72); stroke: #ffb25c; filter: drop-shadow(0 0 0.6rem rgba(255, 178, 92, 0.9)); }
+.hc.is-pinch .hc-dot { fill: #ffb25c; r: 5.4px; }
+.hc.is-drag .hc-spin { animation-duration: 1.6s; }
+.hc.is-drag .hc-ring { stroke-dasharray: 14 8; stroke-width: 1.8; }
+.hc.is-zoom .hc-brackets { opacity: 1; transform: scale(1.15); }
+.hc.is-second svg { left: -2.4rem; top: -2.4rem; width: 4.8rem; height: 4.8rem; opacity: 0.8; }
+
+.hc-link { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.2s; }
+.hc-link.is-on { opacity: 1; }
+.hc-link line { stroke: #ffb25c; stroke-width: 1.4; stroke-dasharray: 2 9; stroke-linecap: round; filter: drop-shadow(0 0 0.35rem rgba(255, 178, 92, 0.9)); animation: hc-flow 0.7s linear infinite; }
+@keyframes hc-flow { to { stroke-dashoffset: -11; } }
+
+.hc-pulse {
+  position: absolute;
+  left: -1.6rem;
+  top: -1.6rem;
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px #ffb25c, 0 0 1.2rem rgba(255, 178, 92, 0.7);
+  animation: hc-pulse 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+@keyframes hc-pulse { from { scale: 0.4; opacity: 1; } to { scale: 2.1; opacity: 0; } }
+
+/* What the hand cursor is over answers it, the way :hover answers a mouse. */
+.hand-hot { outline: 1.5px solid rgba(127, 243, 255, 0.8); outline-offset: 2px; box-shadow: 0 0 1.4rem rgba(95, 230, 255, 0.35); }
+.chip-hands.is-on { background: rgba(95, 230, 255, 0.14); color: var(--white, #eafbff); }
+.chip-hands.is-on .ic { animation: breathe 2.4s ease-in-out infinite; }
+
+/* ── the way out of a portal ───────────────────────────────────────────── */
+
+.leave {
+  position: absolute;
+  top: calc(var(--safe-top, 0px) + 5.6rem);
+  left: calc(var(--safe-left, 0px) + var(--edge, 1.5rem) + var(--lw, 0px) + var(--gap, 1rem) + 0.5rem);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  height: 3.25rem;
+  padding: 0 1.4rem 0 1.05rem;
+  border: 0;
+  border-radius: 1.7rem;
+  background: rgba(8, 20, 26, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.4), 0 0 1.8rem rgba(95, 230, 255, 0.14);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font: 600 1.0625rem/1 var(--sans);
+  color: var(--white, #eafbff);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.16s, box-shadow 0.16s, background 0.16s;
+}
+.leave svg { width: 1.3rem; height: 1.3rem; fill: none; stroke: #7ff3ff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.leave:hover, .leave:focus-visible, .leave.hand-hot { transform: translateX(-2px); background: rgba(95, 230, 255, 0.16); box-shadow: inset 0 0 0 1.5px rgba(127, 243, 255, 0.85), 0 0 2.4rem rgba(95, 230, 255, 0.35); outline: 0; }
+/* With hands it is the main control of the screen: bigger, so the cursor does not have to aim. */
+body.hands-on .leave { height: 4.4rem; padding: 0 2rem 0 1.5rem; border-radius: 2.2rem; font-size: 1.3125rem; }
+body.hands-on .leave svg { width: 1.7rem; height: 1.7rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hc-spin, .hc-link line, .chip-hands.is-on .ic { animation: none; }
+  .hcam { animation: none; }
+}

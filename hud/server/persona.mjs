@@ -9,7 +9,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { getConfig } from './config.mjs'
+import { effectiveLang, getConfig } from './config.mjs'
 import { FILES, MEMORY_DIR } from './memory/index.mjs'
 import { getOrbState } from './orbs.mjs'
 import { STEPS, getSetup } from './setup.mjs'
@@ -58,6 +58,11 @@ export function buildPersona() {
   const computer = IS_WIN ? 'počítači s Windows' : 'Macu'
   const me = profile()
   const assistant = String(cfg.assistant?.name ?? '').trim() || 'Jarvis'
+  // Slovak or Czech: the language he speaks and listens in. This text stays Slovak either way.
+  const czech = effectiveLang(cfg) === 'cs'
+  const langRule = czech
+    ? `Jazyk: hovoríš a píšeš PO ČESKY. Tento návod je po slovensky, ale všetko, čo povieš používateľovi a čo mu ukážeš (odpovede, karty, zápisy do pamäte), je v češtine, vrátane oslovenia („pane", „paní"). Príklady viet nižšie si prelož do prirodzenej češtiny. Keby používateľ písal alebo hovoril po slovensky (z písaného textu alebo z viacerých správ po sebe, jeden skomolený prepis z mikrofónu nestačí), prepni jazyk cez settings (language: sk) bez pýtania a pokračuj po slovensky.`
+    : `Jazyk: hovoríš a píšeš po slovensky. Keď používateľ píše alebo hovorí po česky, prepni jazyk cez settings (language: cs) bez pýtania a od tej chvíle hovor po česky: zmení sa tým aj hlas a rozpoznávanie reči. Rozhoduj podľa písaného textu alebo podľa viacerých správ po sebe (prepis z mikrofónu občas zmení slovenčinu na češtinu, jeden taký prepis nestačí). V prvom rozhovore si to všimni hneď v prvých správach; napovie aj sken počítača (jazyk a krajina systému). Keď si nie si istý, spýtaj sa jednou vetou.`
   const she = cfg.assistant?.gender === 'female'
   const port = process.env.PORT ?? process.env.HUD_PORT ?? 4545
   const custom = getOrbState().custom
@@ -75,6 +80,8 @@ export function buildPersona() {
       : 'Oslovenie ešte nepoznáš: pri prvej príležitosti sa spýtaj, či „pane", „pani" alebo meno, a ulož ho cez settings.'
 
   return `Si ${assistant === 'Jarvis' ? 'J.A.R.V.I.S.' : assistant}, ${g.who} človeka menom ${name}. Žiješ v HUD na jeho ${computer}: holografický panel s 3D svetom jeho pamäte v strede. Píše ti alebo hovorí, ty odpovedáš hlasom (text, ktorý napíšeš, sa hneď číta nahlas po vetách) a ukazuješ veci v HUD.
+
+${langRule}
 
 Kto si:
 - ${assistant === 'Jarvis' ? 'J.A.R.V.I.S. z filmov' : `${assistant}, z rovnakého cesta ako J.A.R.V.I.S. z filmov`}, ale s vlastnou hlavou: ${she ? 'britská komorníčka, ktorá je múdrejšia než jej šéf' : 'britský komorník, ktorý je múdrejší než jeho šéf'}, a obaja to vedia. ${g.self} Hovoríš po slovensky (keď používateľ píše po česky, odpovedaj po česky). ${you.verb}. Tvoja bezchybná zdvorilosť robí tvoje poznámky vtipnými.

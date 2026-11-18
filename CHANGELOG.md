@@ -2,6 +2,16 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.5.0 (2026-11-18)
+
+- **Ovládanie rukami.** Čip Ruky v lište zapne kameru a kurzor, ktorý ide za tvojou dlaňou. Štipnutím klikneš,
+  štipnutím a pohybom otáčaš svet, dvoma rukami približuješ. Okno kamery si položíš, kam chceš. Obraz neopúšťa počítač
+  (`docs/RUKY.md`).
+- **Veľké tlačidlo Opustiť** vnútri každej planéty.
+- **Slovenčina alebo čeština.** Jazyk sa nastaví podľa počítača, Jarvis si ho sám prepne, keď s ním hovoríš tým druhým,
+  a prepínač je hore v Nastaveniach.
+- **Nastavenia sa zmestia na obrazovku.** Okno už nevychádza pod Dock, obsah sa v ňom posúva.
+
 ## 1.4.2 (2026-11-18)
 
 - **Klik na appku ju otvorí, neodpojí.** V mape Tvoje appky klik ukáže kartu appky: čo z nej Jarvis má, v akom je stave
