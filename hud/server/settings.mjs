@@ -12,8 +12,9 @@
  * server restarts the brain after the config file changed.
  */
 import { spawn } from 'node:child_process'
-import { readFileSync, watchFile } from 'node:fs'
+import { existsSync, readFileSync, watchFile } from 'node:fs'
 import { join } from 'node:path'
+import { callConfig, callProblems, placeCall } from './call.mjs'
 import { CONFIG_FILE, EXAMPLE_FILE, LANG_FROM_ENV, effectiveLang, getConfig } from './config.mjs'
 import { setMicWake, wakeAvailable } from './mic.mjs'
 import { send } from './sse.mjs'
@@ -49,6 +50,62 @@ function prepareProgress() {
   return p ? { step: p.step ?? null, state: p.state ?? null, pct: p.pct ?? null, text: p.text ?? '' } : null
 }
 
+// ── phone calls (Twilio): the keys live in .env, never in the page ─────────────────────────────
+
+const ENV_FILE = join(REPO, '.env')
+const CALL_KEYS = { sid: 'TWILIO_ACCOUNT_SID', token: 'TWILIO_AUTH_TOKEN', from: 'TWILIO_FROM', to: 'JARVIS_CALL_TO' }
+const mask = (n) => String(n).replace(/\d(?=\d{3})/g, '•')
+
+/** What the page may know about the calls: whether they work and what is missing. Never the keys themselves. */
+function callSummary() {
+  const c = callConfig()
+  const problems = callProblems(c)
+  return { ready: problems.length === 0, problems, has: { sid: Boolean(c.sid), token: Boolean(c.token), from: Boolean(c.from), to: Boolean(c.to) }, from: c.from || null, to: c.to ? mask(c.to) : null }
+}
+
+/** Writes the given keys into .env (changing a line that is there, adding one that is not) and into this process. */
+async function setEnv(pairs) {
+  const lines = existsSync(ENV_FILE) ? readFileSync(ENV_FILE, 'utf8').split(/\r?\n/) : []
+  for (const [key, value] of Object.entries(pairs)) {
+    const line = `${key}=${value}`
+    const at = lines.findIndex((l) => new RegExp(`^\\s*#?\\s*${key}\\s*=`).test(l) && !/^\s*#/.test(l))
+    if (at >= 0) lines[at] = line
+    else lines.push(line)
+    process.env[key] = value
+  }
+  await writeFileAtomic(ENV_FILE, `${lines.join('\n').replace(/\n+$/, '')}\n`, 0o600)
+}
+
+/** POST /api/settings/call: { sid?, token?, from?, to? }. Empty fields keep what is there. */
+export async function applyCall(body) {
+  if (!isObj(body)) throw bad('Telo má byť JSON objekt.')
+  onlyKeys(body, Object.keys(CALL_KEYS), 'Telefonáty')
+  const pairs = {}
+  for (const [k, env] of Object.entries(CALL_KEYS)) {
+    if (body[k] === undefined || body[k] === '') continue
+    const v = String(body[k]).replace(k === 'from' || k === 'to' ? /[\s()-]/g : /\s/g, '')
+    if (!/^[\x21-\x7e]{4,80}$/.test(v) || v.includes('=') || v.includes('#')) throw bad(`${env}: neplatná hodnota`)
+    if ((k === 'from' || k === 'to') && !/^\+[1-9]\d{6,14}$/.test(v)) throw bad(`${k === 'to' ? 'Tvoj mobil' : 'Číslo v Twiliu'}: medzinárodný tvar, napríklad +421900123456`)
+    if (k === 'sid' && !/^AC[0-9a-f]{32}$/i.test(v)) throw bad('Account SID začína na AC a má 34 znakov.')
+    pairs[env] = v
+  }
+  if (Object.keys(pairs).length) await setEnv(pairs)
+  return { ok: true, call: callSummary() }
+}
+
+/** POST /api/settings/call/test: one real call to the user's own mobile. */
+export async function testCall() {
+  const problems = callProblems()
+  if (problems.length) throw bad(problems[0], 409)
+  const cfg = getConfig()
+  try {
+    const r = await placeCall({ text: `Dobrý deň${cfg.address ? `, ${cfg.address}` : ''}. Tu ${cfg.assistant?.name || 'Jarvis'}. Toto je skúška, hovory fungujú.`, reply: false, source: 'skúška z nastavení' })
+    return { ok: true, call: callSummary(), to: r.to }
+  } catch (err) {
+    throw bad(clean(errMsg(err), 240), 502)
+  }
+}
+
 export function settingsBody() {
   const cfg = getConfig()
   const voice = resolveVoice(cfg)
@@ -63,7 +120,8 @@ export function settingsBody() {
     assistant: { name: cfg.assistant.name, gender: cfg.assistant.gender },
     voice: { id: voice.id, rate: voice.rate, pitch: voice.pitch, label: known?.label ?? voice.id, gender: known?.gender ?? null, source: cfg.voice.id ? 'config' : process.env.JARVIS_EDGE_VOICE === voice.id ? 'env' : 'default', provider: tts.provider },
     voices,
-    user: { name: cfg.name ?? '', address: String(cfg.address ?? ''), formal: cfg.formal !== false, gender: cfg.userGender, city: cfg.city ?? '' },
+    user: { name: cfg.name ?? '', address: String(cfg.address ?? ''), formal: cfg.formal !== false, gender: cfg.userGender, city: cfg.city ?? '', birthday: cfg.birthday ?? null },
+    call: callSummary(),
     quiet: cfg.quiet,
     alarm: a ? { enabled: a.enabled, time: a.time, days: a.days, call: a.call } : null,
     stt: {
@@ -156,11 +214,15 @@ export function validateSettings(body, voices) {
 
   if (body.user !== undefined) {
     if (!isObj(body.user)) throw bad('user: má to byť objekt')
-    onlyKeys(body.user, ['name', 'address', 'formal', 'gender', 'city'], 'user')
+    onlyKeys(body.user, ['name', 'address', 'formal', 'gender', 'city', 'birthday'], 'user')
     patch.user = {}
     if (body.user.name !== undefined) patch.user.name = text(body.user.name, 'Meno', 60)
     if (body.user.address !== undefined) patch.user.address = text(body.user.address, 'Oslovenie', 40, { empty: true })
     if (body.user.city !== undefined) patch.user.city = text(body.user.city, 'Mesto', 60)
+    if (body.user.birthday !== undefined) {
+      if (body.user.birthday !== null && body.user.birthday !== '' && !/^(\d{4}-)?\d{2}-\d{2}$/.test(String(body.user.birthday))) throw bad('user.birthday: tvar 1990-05-12 alebo 05-12')
+      patch.user.birthday = body.user.birthday || null
+    }
     if (body.user.formal !== undefined) {
       if (typeof body.user.formal !== 'boolean') throw bad('user.formal: true (vykanie) alebo false (tykanie)')
       patch.user.formal = body.user.formal
@@ -259,6 +321,10 @@ function mergeInto(raw, patch, cfg) {
     if ('address' in patch.user) raw.address = patch.user.address
     if ('formal' in patch.user) raw.formal = patch.user.formal
     if ('city' in patch.user) raw.city = patch.user.city
+    if ('birthday' in patch.user) {
+      if (patch.user.birthday === null) delete raw.birthday
+      else raw.birthday = patch.user.birthday
+    }
     if ('gender' in patch.user) {
       if (patch.user.gender === null) delete raw.userGender
       else raw.userGender = patch.user.gender

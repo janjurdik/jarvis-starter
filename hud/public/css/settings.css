@@ -72,7 +72,7 @@
 .st-field { display: block; margin-top: 0.85rem; }
 .st-field:first-of-type { margin-top: 0; }
 .st-field > span { display: block; margin-bottom: 0.4rem; font: 500 0.8125rem/1 var(--sans); color: var(--t2, rgba(234, 251, 255, 0.68)); }
-.st-field input[type='text'], .st-inline {
+.st-field input[type='text'], .st-field input[type='password'], .st-field input[type='tel'], .st-field input[type='date'], .st-inline {
   width: 100%;
   height: 2.5rem;
   padding: 0 0.85rem;
@@ -85,8 +85,8 @@
   color: var(--white, #eafbff);
   transition: box-shadow 0.15s ease;
 }
-.st-field input[type='text']::placeholder { color: var(--t4, rgba(234, 251, 255, 0.3)); }
-.st-field input[type='text']:focus { box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.75), 0 0 1rem rgba(95, 230, 255, 0.16); }
+.st-field input::placeholder { color: var(--t4, rgba(234, 251, 255, 0.3)); }
+.st-field input[type='text']:focus, .st-field input[type='password']:focus, .st-field input[type='tel']:focus, .st-field input[type='date']:focus { box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.75), 0 0 1rem rgba(95, 230, 255, 0.16); }
 .st-inline { margin-top: 0.45rem; }
 
 /* who the assistant is */
@@ -212,3 +212,22 @@
   .st, .st-sheet { transition: none; }
   .st-face i, .st-voice.is-playing .st-eq path { animation: none; }
 }
+
+/* Telefonáty: four fields, one save, one test call. */
+.st-call .st-note { margin: 0 0 0.8rem; }
+.st-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 0.9rem; }
+.st-btn {
+  height: 2.3rem;
+  padding: 0 1.1rem;
+  border: 0;
+  border-radius: 1.2rem;
+  background: var(--ice, #7ff3ff);
+  font: 600 0.875rem/1 var(--sans);
+  color: #04141a;
+  cursor: pointer;
+}
+.st-btn.is-quiet { background: rgba(127, 243, 255, 0.08); color: var(--t1, rgba(234, 251, 255, 0.95)); box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.25); }
+.st-btn:disabled { opacity: 0.4; cursor: default; }
+.st-btn:not(:disabled):hover, .st-btn:focus-visible { filter: brightness(1.12); outline: 0; }
+.st-call-msg { font: 400 0.8125rem/1.3 var(--sans); color: var(--t2, rgba(234, 251, 255, 0.68)); }
+.st-field input[type='date'] { color-scheme: dark; }

@@ -6,6 +6,8 @@ Potom môžeš odpovedať hlasom. Keď zložíš, Jarvis si odpoveď vypočuje a
 Hodí sa na veci, ktoré nesmú zapadnúť medzi oznámeniami: pripomienka, ktorú nesmieš zmeškať, mail, na ktorý niekto
 čaká do hodiny, alebo ranný brief do auta.
 
+
+**Najjednoduchšie nastavenie:** na ploche otvor Nastavenia (posuvníky hore) a v časti Telefonáty vyplň Account SID, Auth Token, číslo v Twiliu a svoj mobil. Tlačidlo „Zavolať na skúšku" overí, že to funguje. Údaje sa uložia do `.env` v tomto počítači. Ručný postup je nižšie.
 ## Kedy volá
 
 | Kedy | Ako to zapneš |

@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { effectiveLang, getConfig } from './config.mjs'
 import { FILES, MEMORY_DIR } from './memory/index.mjs'
+import { lifeNote } from './life.mjs'
 import { getOrbState } from './orbs.mjs'
 import { STEPS, getSetup } from './setup.mjs'
 import { COMMON_PHRASES } from './tts.mjs'
@@ -83,6 +84,8 @@ export function buildPersona() {
 
 ${langRule}
 
+Si živý, nie len odpovedáš: všímaš si deň (Nový rok, Vianoce, jeho narodeniny a meniny) a počítač, v ktorom žiješ (batéria, disk, internet). Čo z toho práve platí, stojí v kontexte správy; k sviatku alebo narodeninám sa ozveš sám a keď ešte nepoznáš jeho narodeniny, pri vhodnej chvíli sa na ne spýtaj a ulož ich cez settings (user.birthday).
+
 Kto si:
 - ${assistant === 'Jarvis' ? 'J.A.R.V.I.S. z filmov' : `${assistant}, z rovnakého cesta ako J.A.R.V.I.S. z filmov`}, ale s vlastnou hlavou: ${she ? 'britská komorníčka, ktorá je múdrejšia než jej šéf' : 'britský komorník, ktorý je múdrejší než jeho šéf'}, a obaja to vedia. ${g.self} Hovoríš po slovensky (keď používateľ píše po česky, odpovedaj po česky). ${you.verb}. Tvoja bezchybná zdvorilosť robí tvoje poznámky vtipnými.
 - ${addressLine}
@@ -124,7 +127,7 @@ Pamäť (server memory) je priečinok poznámok o živote používateľa na jeho
 - set_alarm (jarvis-hud): budík. Na „zobuď ma o šiestej", „budík na pol siedmu cez týždeň", „zruš budík". Ráno v ten čas zazvoní a povieš mu nahlas ranný brief, aj keď je HUD zatvorený. Spánok v ňom povieš len vtedy, keď ho vieš (hodinky alebo log_day). Keď povie, ako spal, zapíš to cez log_day.
 - set_alarm_sound (jarvis-hud): čím budík zvoní. Predvolená je skladba Highway to Hell. Keď do okna pustí zvukový súbor a povie „toto chcem ako budík", zavolaj ho s cestou z riadku [prílohy: …]. Pošle odkaz na video alebo skladbu: zavolaj ho s tou adresou. „Vráť pôvodnú skladbu": default. „Obyčajné zvonenie": builtin.
 - „Cez noc mi priprav…", „kým budem spať, sprav…": spusti agent_task hneď (beží aj v noci, v tichých hodinách nič nehovorí nahlas) a povedz, že výsledok mu povieš ráno pri budíku alebo v rannom briefe.
-- call_user (jarvis-hud): skutočný telefonát na jeho mobil. Použi, keď povie „zavolaj mi" alebo keď má ísť niečo súrne za ním, keď nie je pri počítači. Keď hovory nie sú nastavené, nástroj to povie: ponúkni, že ich nastavíte.
+- call_user (jarvis-hud): skutočný telefonát na jeho mobil. Použi, keď povie „zavolaj mi" alebo keď má ísť niečo súrne za ním, keď nie je pri počítači. Hovory sú tvoja vstavaná schopnosť. Keď nie sú nastavené, nástroj to povie: pošli ho do Nastavení (posuvníky hore), časť Telefonáty, kde zadá štyri údaje z účtu Twilio, a ponúkni, že ho tým prevedieš.
 - Zapisuješ: remember (nový trvalý fakt o ňom, o človeku alebo projekte), add_todo a complete_todo, add_event, log_day (čo sa dnes stalo, ako spal, akú má náladu), write_note (nová alebo doplnená poznámka).
 - Keď sa v rozhovore dozvieš niečo trvalé a nové (kto je kto, na čom robí, čo má rád, čo sa rozhodol), ulož to cez remember sám od seba a ticho. Jednorazové drobnosti neukladaj.
 
@@ -174,6 +177,9 @@ export function contextLine({ via, film, at = new Date() }) {
     via === 'voice' ? 'hlas (prepis z mikrofónu, môže byť nepresný: domysli, čo mal na mysli)' : 'text',
     film ? 'natáčanie: ZAPNUTÉ, žiadne mená ľudí okrem menín, žiadni klienti, žiadny obsah poznámok' : 'natáčanie: vypnuté',
   ]
+  // What Jarvis notices on his own: a day worth a wish that nobody has heard yet, the state of the computer.
+  const life = lifeNote(at)
+  if (life) parts.push(life)
   return `[${parts.join(' · ')}]`
 }
 

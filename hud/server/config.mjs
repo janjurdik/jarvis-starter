@@ -121,6 +121,8 @@ export function getConfig() {
     dueAt: /^\d{1,2}:\d{2}$/.test(p.dueAt ?? '') ? p.dueAt.padStart(5, '0') : DEFAULTS.pulse.dueAt,
   }
   value.quiet = typeof raw.quiet === 'string' ? raw.quiet : DEFAULTS.quiet
+  // The user's birthday, with or without the year (Jarvis wishes on the day: server/life.mjs).
+  value.birthday = /^(\d{4}-)?\d{2}-\d{2}$/.test(String(raw.birthday ?? '')) ? String(raw.birthday) : null
   // No language chosen yet: the one the computer is set to. Jarvis corrects it himself when the
   // user turns out to speak the other one (persona.mjs).
   value.language = langOf(raw.language ?? systemLang())

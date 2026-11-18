@@ -284,6 +284,7 @@ serveMcp({
                   formal: { type: 'boolean', description: 'true = vykať, false = tykať.' },
                   gender: { type: ['string', 'null'], enum: ['male', 'female', null], description: 'Rod používateľa pre tvary slov (pripravený, pripravená).' },
                   city: { type: 'string' },
+                  birthday: { type: ['string', 'null'], description: 'Narodeniny používateľa, 1990-05-12 alebo bez roku 05-12. V ten deň mu sám zablahoželáš.' },
                 },
               },
               quiet: { type: 'string', description: 'Tiché hodiny "22:30-07:00", prázdny text ich vypne.' },

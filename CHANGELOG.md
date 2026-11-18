@@ -2,6 +2,16 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.7.0 (2026-11-18)
+
+- **Jarvis sa ozve sám, keď na tom záleží.** Na Nový rok, Štedrý deň, Veľkú noc, na tvoje narodeniny a meniny
+  a v deň, keď ste spolu rok. Povie to raz: o polnoci, ak si pri počítači, inak ráno, keď k nemu prídeš, alebo na začiatku
+  prvého rozhovoru v ten deň. Narodeniny si nastavíš v Nastaveniach, alebo mu ich povieš.
+- **Cíti počítač, v ktorom žije.** Ozve sa, keď batéria klesne na 20, 10 a 5 percent (a poďakuje za nabíjačku),
+  keď sa plní disk a keď vypadne a vráti sa internet. Príde to aj ako oznámenie systému.
+- **Telefonáty sa nastavujú priamo v Jarvisovi.** V Nastaveniach je časť Telefonáty: štyri údaje z účtu Twilio
+  a tlačidlo na skúšobný hovor. Údaje ostávajú v súbore `.env` v tvojom počítači.
+
 ## 1.6.3 (2026-11-18)
 
 - **Úlohy a Kalendár stoja na mieste.** Tabuľa sa už nedá odtiahnuť ani priblížiť mimo obrazovky (myšou ani rukami),

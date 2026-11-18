@@ -153,6 +153,7 @@ export function createSettings({ onToast = () => {} } = {}) {
         : `Whisper beží v tomto počítači${stt.model ? ` · model ${esc(stt.model)}` : ''}${stt.plan?.sizeMb ? ` · ${stt.plan.sizeMb >= 1000 ? `${(stt.plan.sizeMb / 1000).toFixed(1).replace('.', ',')} GB` : `${stt.plan.sizeMb} MB`}` : ''}. Nič z toho, čo poviete, neodchádza von.`
     const alarm = d.alarm?.enabled ? `Budík zvoní o ${esc(d.alarm.time)}.` : 'Budík je vypnutý.'
 
+    const call = d.call ?? { ready: false, has: {}, from: null, to: null }
     body.innerHTML = `
       <section class="st-sec st-who">
         <h3>${icon('jarvis')}Váš asistent</h3>
@@ -188,6 +189,18 @@ export function createSettings({ onToast = () => {} } = {}) {
         </div>
         <div class="st-field"><span>Ako s vami hovorí</span>${seg('formal', [['true', 'Vyká'], ['false', 'Tyká']], String(d.user.formal))}</div>
         <label class="st-field"><span>Mesto</span><input type="text" data-text="user.city" maxlength="60" value="${esc(d.user.city)}" placeholder="kvôli počasiu" spellcheck="false" autocomplete="off"></label>
+        <label class="st-field"><span>Narodeniny</span><input type="date" data-date="user.birthday" value="${/^\d{4}-/.test(d.user.birthday ?? '') ? esc(d.user.birthday) : ''}" aria-describedby="st-bday"></label>
+        <p class="st-note" id="st-bday">${d.user.birthday ? 'V ten deň sa ozvem sám.' : 'Keď ich poznám, v ten deň sa ozvem sám.'}</p>
+      </section>
+
+      <section class="st-sec st-call">
+        <h3>${icon('phone')}Telefonáty</h3>
+        <p class="st-note${call.ready ? '' : ' is-warn'}">${call.ready ? `Keď je niečo súrne a nie ste pri počítači, zavolám vám na ${esc(call.to ?? 'mobil')}.` : 'Viem vám zavolať na mobil cez Twilio (twilio.com). Stačia štyri údaje z vášho účtu, ostanú v tomto počítači.'}</p>
+        <label class="st-field"><span>Account SID</span><input type="text" data-call="sid" placeholder="${call.has.sid ? 'uložené' : 'AC…'}" spellcheck="false" autocomplete="off"></label>
+        <label class="st-field"><span>Auth Token</span><input type="password" data-call="token" placeholder="${call.has.token ? 'uložené' : 'z konzoly Twilia'}" spellcheck="false" autocomplete="off"></label>
+        <label class="st-field"><span>Číslo v Twiliu</span><input type="tel" data-call="from" placeholder="${call.from ? esc(call.from) : '+1…'}" spellcheck="false" autocomplete="off"></label>
+        <label class="st-field"><span>Váš mobil</span><input type="tel" data-call="to" placeholder="${call.to ? esc(call.to) : '+421…'}" spellcheck="false" autocomplete="off"></label>
+        <div class="st-row"><button type="button" class="st-btn" data-call-save>Uložiť</button><button type="button" class="st-btn is-quiet" data-call-test ${call.ready ? '' : 'disabled'}>Zavolať na skúšku</button><span class="st-call-msg" role="status"></span></div>
       </section>
 
       <section class="st-sec">
@@ -268,12 +281,43 @@ export function createSettings({ onToast = () => {} } = {}) {
   })
   body.addEventListener('change', (e) => {
     const t = e.target
+    if (t.dataset.date === 'user.birthday') return save({ user: { birthday: t.value || null } })
     if (t.dataset.toggle === 'wake') return save({ wake: t.checked })
     if (t.dataset.toggle === 'quiet' || t.dataset.time) {
       const on = body.querySelector('[data-toggle="quiet"]').checked
       const from = body.querySelector('[data-time="from"]').value || '22:30'
       const to = body.querySelector('[data-time="to"]').value || '07:00'
       return save({ quiet: on ? `${from}-${to}` : '' })
+    }
+  })
+  // Phone calls: the four values are sent once and never come back to the page.
+  body.addEventListener('click', async (e) => {
+    const saveBtn = e.target.closest('[data-call-save]')
+    const testBtn = e.target.closest('[data-call-test]')
+    if (!saveBtn && !testBtn) return
+    const msg = body.querySelector('.st-call-msg')
+    const post = async (path, payload) => {
+      const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
+      const out = await res.json().catch(() => ({}))
+      if (!res.ok || out.ok === false) throw new Error(out.error || 'Nepodarilo sa.')
+      return out
+    }
+    try {
+      if (saveBtn) {
+        const payload = {}
+        for (const input of body.querySelectorAll('[data-call]')) if (input.value.trim()) payload[input.dataset.call] = input.value.trim()
+        if (!Object.keys(payload).length) return (msg.textContent = 'Vyplňte aspoň jedno pole.')
+        msg.textContent = 'Ukladám…'
+        await post('/api/settings/call', payload)
+        await load()
+        body.querySelector('.st-call-msg').textContent = 'Uložené.'
+      } else {
+        msg.textContent = 'Volám…'
+        await post('/api/settings/call/test', {})
+        msg.textContent = 'Telefón by mal o chvíľu zvoniť.'
+      }
+    } catch (err) {
+      msg.textContent = err.message
     }
   })
   // Typing in the sheet must not reach the HUD shortcuts (space is push-to-talk there).

@@ -39,12 +39,13 @@ import { STT_ENGINE, sttLocal, sttState, stopStt, transcribeAudio, warmStt } fro
 import { getWeather } from './server/weather.mjs'
 import { routeHands } from './server/hands.mjs'
 import { routeInner } from './server/inner.mjs'
+import { lifeStatus, startLife } from './server/life.mjs'
 import { systemNotify } from './server/notify.mjs'
 import { initImports, loadImports, resolveAttachments, routeImportGet, routeImportPost } from './server/imports.mjs'
 import { startUpdateWatch, updateInfo } from './server/updates.mjs'
 import { callProblems } from './server/call.mjs'
 import { getApps, saveApps } from './server/apps.mjs'
-import { applySettings, brainSettings, initSettings, previewVoice, settingsBody } from './server/settings.mjs'
+import { applyCall, applySettings, brainSettings, initSettings, previewVoice, settingsBody, testCall } from './server/settings.mjs'
 import { routeVideoGet, routeVideoPost, stopVideo } from './server/video.mjs'
 import { changeOrbs, getOrbs } from './server/orbs.mjs'
 import { getSetup, noteSetup, setupContextNote } from './server/setup.mjs'
@@ -267,7 +268,27 @@ function statusChanged() {
   statusTimer = setTimeout(() => send('status', statusBody()), 40)
 }
 
-setOnRolesChange(statusChanged)
+// Jarvis as a living thing: wishes on the days that matter and a word about the computer he lives in (server/life.mjs).
+const life = PRIMARY
+  ? startLife({
+      canSpeak: () => clientCount() > 0 && !state.film && voiceState() === 'idle' && !currentTurnId(),
+      brainReady: () => Boolean(brain) && !MOCK_ALL && brain.status().state === 'ready',
+      speakTurn: (text) => sendChat({ text, via: 'text', hidden: true }),
+      say: (text) => {
+        if (clientCount() === 0) return
+        announceQueue.push({ say: text })
+        drainAnnounce().catch((err) => log('life', errMsg(err)))
+      },
+      toast: (text, icon, type) => sendHud({ type, text, icon, say: null, heard: null, node: null, source: 'jarvis' }),
+      notify: systemNotify,
+      quiet: () => quietNow(getConfig()),
+    })
+  : null
+setOnRolesChange(() => {
+  statusChanged()
+  // Somebody opened the desktop: a wish that waited for the morning can be said now.
+  life?.again()
+})
 initSettings({ statusChanged, primary: PRIMARY })
 
 /** The agent Jarvis runs on: Claude Code or Codex (server/provider.mjs). */
@@ -300,6 +321,8 @@ function statusBody() {
     film: state.film,
     mock: MOCK_ALL,
     voiceState: voiceState(),
+    // Battery, free disk and internet, as Jarvis last saw them (server/life.mjs).
+    life: lifeStatus(),
     turn: currentTurnId(),
     memory: memoryStatus(),
     brainInfo: b ? { pid: b.pid, startMs: b.startMs, turns: b.turns, lastError: b.lastError, mcp: b.mcp, limit: b.limit } : null,
@@ -566,6 +589,15 @@ async function routePost(req, res, path) {
   const body = await readJson(req, 32_000)
   if (path === '/api/settings') return sendJson(res, 200, await applySettings(body))
   if (path === '/api/settings/preview') return sendJson(res, 200, await previewVoice(body))
+  // Phone calls: the keys go into .env on this computer, and a test call proves they work. Only from this computer.
+  if (path === '/api/settings/call' || path === '/api/settings/call/test') {
+    if (!isLocal(req)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
+    try {
+      return sendJson(res, 200, path.endsWith('/test') ? await testCall() : await applyCall(body))
+    } catch (err) {
+      return sendJson(res, err.status ?? 500, { ok: false, error: err.message })
+    }
+  }
   const jobPath = /^\/api\/jobs\/(j\d+)\/(stop|reply)$/.exec(path)
   if (jobPath) {
     try {
