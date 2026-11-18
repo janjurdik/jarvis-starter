@@ -2,6 +2,11 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.5.1 (2026-11-18)
+
+- **„Ukázať, ako na to" funguje aj v appke na ploche.** Sprievodca, ako získať dáta z appky, sa otvorí priamo v Jarvisovi.
+  Ostatné odkazy (napríklad web, ktorý Jarvis postavil) sa z appky na ploche otvoria v prehliadači.
+
 ## 1.5.0 (2026-11-18)
 
 - **Ovládanie rukami.** Čip Ruky v lište zapne kameru a kurzor, ktorý ide za tvojou dlaňou. Štipnutím klikneš,

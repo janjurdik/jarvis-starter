@@ -34,7 +34,7 @@ import { currentSnapshot, filmNameList, forFilm, memoryStatus, refreshSnapshot, 
 import { openStream, send, sendHud, setGreeting, clientCount, desktopCount, setOnRolesChange } from './server/sse.mjs'
 import { saveState, setPersist, state } from './server/state.mjs'
 import { pruneTtsCache, stopTts, ttsFileExists, ttsInfo, warmCommonPhrases } from './server/tts.mjs'
-import { BRAIN_DIR, DATA_DIR, REPO, clean, errMsg, isLoopback, log, readJson, readRaw, sendJson, slug, writeFileAtomic } from './server/util.mjs'
+import { BRAIN_DIR, DATA_DIR, REPO, clean, errMsg, isLoopback, log, readJson, readRaw, sendJson, slug, winSys, writeFileAtomic } from './server/util.mjs'
 import { STT_ENGINE, sttLocal, sttState, stopStt, transcribeAudio, warmStt } from './server/stt.mjs'
 import { getWeather } from './server/weather.mjs'
 import { routeHands } from './server/hands.mjs'
@@ -573,6 +573,21 @@ async function routePost(req, res, path) {
     } catch (err) {
       return sendJson(res, err.status ?? 500, { ok: false, error: err.message })
     }
+  }
+  if (path === '/api/open-url') {
+    // A link clicked in the desktop app, which is one window without tabs: it opens in the default
+    // browser. Only for a click made on this computer, and only web addresses.
+    if (!isLocal(req)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
+    let target = null
+    try {
+      target = new URL(String(body.url ?? ''))
+    } catch {
+      target = null
+    }
+    if (!target || !['http:', 'https:'].includes(target.protocol)) return sendJson(res, 400, { ok: false, error: 'len http a https adresy' })
+    const [bin, args] = process.platform === 'darwin' ? ['/usr/bin/open', [target.href]] : process.platform === 'win32' ? [winSys('rundll32.exe'), ['url.dll,FileProtocolHandler', target.href]] : ['xdg-open', [target.href]]
+    spawn(bin, args, { stdio: 'ignore', detached: true, windowsHide: true }).on('error', (err) => log('hud', `odkaz sa neotvoril: ${errMsg(err)}`)).unref()
+    return sendJson(res, 200, { ok: true })
   }
   if (path === '/api/apps/open') {
     // Setup (scripts/hud.mjs --apps) or Jarvis: the camera flies to the Tvoje appky orb and the picker opens.

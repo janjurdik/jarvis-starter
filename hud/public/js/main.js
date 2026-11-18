@@ -16,6 +16,7 @@
 import { createCore } from './core.js'
 import { createDossier } from './dossier.js'
 import { createHands } from './hands.js'
+import { initLinks } from './links.js'
 import { createUI } from './ui.js'
 import { createChat } from './chat.js'
 import { createSpeech } from './speech.js'
@@ -1090,6 +1091,8 @@ function bindControls() {
     },
   })
   handsChip.addEventListener('click', () => hands.toggle())
+  // Links to the guide open inside Jarvis, other web links in the browser (links.js).
+  initLinks({ desktop: DESKTOP, toast: (text) => ui.toast(text, { iconName: 'web', ms: 2600 }) })
   if (params.get('debug') === '1') window.__hands = hands
   document.getElementById('chip-jobs').addEventListener('click', () => jobs?.open())
   document.getElementById('chip-voice').addEventListener('click', toggleWake)
