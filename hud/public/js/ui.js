@@ -103,16 +103,51 @@ export function createUI({ capture }) {
 
   // ── stavové čipy ──
   el.chips.innerHTML = [
-    `<span class="chip chip-brain" id="chip-brain" title="Mozog Jarvisa">${icon('claude')}<span>Claude</span></span>`,
-    `<span class="chip chip-model" id="chip-model" title="Model">${icon('model')}<span></span></span>`,
-    `<button type="button" class="chip chip-wake" id="chip-voice" title="Hlas a počúvanie, klik zapne Hey Jarvis">${icon('speaker')}<span>Hlas</span></button>`,
-    `<span class="chip chip-life" id="chip-life" title="Pamäť">${icon('pamat')}<span>Pamäť</span></span>`,
-    `<button type="button" class="chip chip-hands is-off" id="chip-hands" title="Ovládanie rukami cez kameru" aria-label="Ovládanie rukami" aria-pressed="false">${icon('kamera')}<span>Ruky</span></button>`,
-    `<button type="button" class="chip chip-film" id="chip-film" title="Režim natáčania (N)">${icon('film')}<span>Natáčanie</span></button>`,
-    `<button type="button" class="chip chip-set" id="chip-set" title="Nastavenia: hlas, oslovenie, počúvanie" aria-label="Nastavenia">${icon('sliders')}</button>`,
-    `<button type="button" class="chip chip-jobs" id="chip-jobs" hidden>${icon('projekty')}<span></span></button>`,
+    `<span class="chip chip-brain" id="chip-brain" data-tip="Mozog|AI, cez ktorú myslím. Beží na vašom predplatnom, nič navyše neplatíte.">${icon('claude')}<span>Claude</span></span>`,
+    `<span class="chip chip-model" id="chip-model" data-tip="Model|Ktorým modelom práve odpovedám v rozhovore.">${icon('model')}<span></span></span>`,
+    `<button type="button" class="chip chip-wake" id="chip-voice" data-tip="Hlas a počúvanie|Akým hlasom hovorím. Klik zapne Hey Jarvis: stačí ma osloviť a netreba držať medzerník.">${icon('speaker')}<span>Hlas</span></button>`,
+    `<span class="chip chip-life" id="chip-life" data-tip="Pamäť|Poznámky o vás, z ktorých čerpám. Sú len vo vašom počítači, v priečinku memory.">${icon('pamat')}<span>Pamäť</span></span>`,
+    `<button type="button" class="chip chip-hands is-off" id="chip-hands" data-tip="Ovládanie rukami|Zapne kameru. Kurzor ide za dlaňou a štipnutím prstov kliknete. Obraz neopúšťa počítač." aria-label="Ovládanie rukami" aria-pressed="false">${icon('kamera')}<span>Ruky</span></button>`,
+    `<button type="button" class="chip chip-film" id="chip-film" data-tip="Režim natáčania|Skryjem súkromné veci (mená, správy, obsah pamäte), aby ste mohli nahrávať alebo zdieľať obrazovku. Klávesa N.">${icon('film')}<span>Natáčanie</span></button>`,
+    `<button type="button" class="chip chip-set" id="chip-set" data-tip="Nastavenia|Hlas, oslovenie, počúvanie, mozog a plocha." aria-label="Nastavenia">${icon('sliders')}</button>`,
+    `<button type="button" class="chip chip-jobs" id="chip-jobs" data-tip="Úlohy na pozadí|Na čom práve pracujem sám. Klik ich ukáže." hidden>${icon('projekty')}<span></span></button>`,
     `<span class="chip chip-app" id="chip-app" hidden>${icon('app')}<span></span></span>`,
   ].join('')
+  // A chip explains itself: a small pane under it with its name and one sentence on what it does.
+  const tipEl = document.createElement('div')
+  tipEl.className = 'tip'
+  tipEl.hidden = true
+  document.body.append(tipEl)
+  let tipTimer = 0
+  const hideTip = () => {
+    clearTimeout(tipTimer)
+    tipEl.classList.remove('is-on')
+    tipEl.hidden = true
+  }
+  const showTip = (target) => {
+    const [name, text] = String(target.dataset.tip ?? '').split('|')
+    if (!name) return
+    tipEl.innerHTML = `<b>${esc(name)}</b>${text ? `<span>${esc(text)}</span>` : ''}`
+    tipEl.hidden = false
+    const r = target.getBoundingClientRect()
+    const w = tipEl.offsetWidth
+    const x = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2))
+    tipEl.style.transform = `translate3d(${x.toFixed(0)}px,${(r.bottom + 10).toFixed(0)}px,0)`
+    requestAnimationFrame(() => tipEl.classList.add('is-on'))
+  }
+  el.chips.addEventListener('pointerover', (e) => {
+    const target = e.target.closest('[data-tip]')
+    if (!target || target.contains(e.relatedTarget)) return
+    clearTimeout(tipTimer)
+    tipTimer = setTimeout(() => showTip(target), 350)
+  })
+  el.chips.addEventListener('pointerout', (e) => {
+    const target = e.target.closest('[data-tip]')
+    if (target && !target.contains(e.relatedTarget)) hideTip()
+  })
+  el.chips.addEventListener('focusin', (e) => e.target.closest('[data-tip]') && e.target.matches(':focus-visible') && showTip(e.target.closest('[data-tip]')))
+  el.chips.addEventListener('focusout', hideTip)
+  el.chips.addEventListener('pointerdown', hideTip)
   const chip = {
     brain: $('#chip-brain'),
     model: $('#chip-model'),
@@ -126,7 +161,13 @@ export function createUI({ capture }) {
     set(`${key}:cls`, node, `chip ${node.dataset.base ?? (node.dataset.base = node.className.replace(/\s*is-\w+/g, '').replace(/^chip\s*/, ''))}${cls ? ` ${cls}` : ''}`, 'className')
     if (html !== undefined) set(`${key}:html`, node, html, 'innerHTML')
     if (node.hidden !== hidden) node.hidden = hidden
-    if (title) set(`${key}:title`, node, title, 'title')
+    // What a chip reports right now goes into its own explanation (the pane under it), not into a second,
+    // native tooltip: the name stays, the live sentence is added after what the chip is for.
+    if (title !== undefined && cache.get(`${key}:tip`) !== title) {
+      cache.set(`${key}:tip`, title)
+      const [name, about = ''] = String(node.dataset.tipBase ?? (node.dataset.tipBase = node.dataset.tip ?? '')).split('|')
+      node.dataset.tip = name ? `${name}|${[about, title === name || about.includes(title) ? '' : title].filter(Boolean).join(' ')}` : `${title}|`
+    }
   }
 
   // ── stav dát zo snapshotu ──
@@ -418,13 +459,14 @@ export function createUI({ capture }) {
     const blocked = limit?.status && limit.status !== 'allowed' && limit.status !== 'allowed_warning'
     const pct = util !== null && !mock ? ` <span class="pre">${Math.round(util * 100)} %</span>` : ''
     // The name of the agent Jarvis runs on (Claude or ChatGPT) comes from the server, never from page content.
-    const ai = status?.aiName === 'ChatGPT' ? 'ChatGPT' : 'Claude'
+    // The name of the AI Jarvis runs on, as the server says it (Claude, ChatGPT, Gemini).
+    const ai = ['ChatGPT', 'Gemini'].includes(status?.aiName) ? status.aiName : 'Claude'
     const brainText = !connected ? 'Server nedostupný' : mock ? `${ai} <b>mock</b>` : brain === 'busy' ? `${ai} pracuje` : ok ? `${ai} online` : starting ? `${ai} štartuje` : brain === 'error' ? `${ai} chyba` : status ? `${ai} offline` : `${ai} nepripojený`
     const resets = Number.isFinite(limit?.resetsAt) ? new Date(limit.resetsAt * (limit.resetsAt < 1e12 ? 1000 : 1)) : null
     setChip('brain', chip.brain, {
       cls: !(ok || mock) ? (starting ? 'is-warn' : 'is-err') : blocked || (util ?? 0) >= 0.95 ? 'is-err' : (util ?? 0) >= 0.8 ? 'is-warn' : '',
       html: `${icon('claude')}<span>${brainText}${pct}</span>`,
-      title: util !== null ? `Týždenné využitie predplatného ${Math.round(util * 100)} %${resets ? `, obnova ${shortDate(resets)} ${hm(resets)}` : ''}` : 'Mozog Jarvisa',
+      title: util !== null ? `Týždenné využitie predplatného ${Math.round(util * 100)} %${resets ? `, obnova ${shortDate(resets)} ${hm(resets)}` : ''}` : '',
     })
     const model = modelName(status?.model)
     setChip('model', chip.model, { hidden: !model || mock, html: `${icon('model')}<span>${esc(model ?? '')}</span>` })

@@ -4,7 +4,7 @@
  */
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { MANIFEST, P, REPO, SCHEMA, abs, cmpVersion, fileHash, installMode, isGenerated, isProtected, plural, readBuf, readJson, rmDir, walk, writeJson } from './core.mjs'
+import { MANIFEST, MANIFEST_SIG, P, REPO, SCHEMA, abs, cmpVersion, fileHash, installMode, isGenerated, isProtected, plural, readBuf, readJson, rmDir, walk, writeJson } from './core.mjs'
 import { currentVersion, ensureBaseline } from './baseline.mjs'
 import { changelogSince } from './check.mjs'
 import { treeManifest } from './manifest.mjs'
@@ -130,7 +130,7 @@ export async function plan({ force = false } = {}) {
   const hashes = {}
   let same = 0
   for (const rel of [...new Set([...Object.keys(baseline.files), ...Object.keys(incoming.files)])].sort()) {
-    if (isProtected(rel) || rel === MANIFEST) continue
+    if (isProtected(rel) || rel === MANIFEST || rel === MANIFEST_SIG) continue
     const B = baseline.files[rel] ?? null
     const I = incoming.files[rel] ?? null
     const localBuf = readBuf(abs(rel))
@@ -170,7 +170,7 @@ export async function plan({ force = false } = {}) {
     }
   }
 
-  const shipped = new Set([...Object.keys(baseline.files), ...Object.keys(incoming.files), MANIFEST])
+  const shipped = new Set([...Object.keys(baseline.files), ...Object.keys(incoming.files), MANIFEST, MANIFEST_SIG])
   const own = walk(REPO, { keep: (rel) => !shipped.has(rel) })
   const mine = own.slice(0, MINE_LIMIT)
 

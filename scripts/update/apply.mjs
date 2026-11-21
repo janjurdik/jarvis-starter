@@ -7,7 +7,7 @@
  */
 import { readdirSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { MANIFEST, P, SCHEMA, abs, copyInto, errMsg, exists, hashOf, readBuf, readJson, relFromInput, removeFile, rmDir, stamp, writeFile, writeJson } from './core.mjs'
+import { MANIFEST, MANIFEST_SIG, P, SCHEMA, abs, copyInto, errMsg, exists, hashOf, readBuf, readJson, relFromInput, removeFile, rmDir, stamp, writeFile, writeJson } from './core.mjs'
 import { treeManifest } from './manifest.mjs'
 import { hasMarkers, mergeFile } from './merge.mjs'
 import { depsKey } from './plan.mjs'
@@ -98,7 +98,7 @@ export async function apply() {
   const dir = join(P.backup, id)
   const meta = { schema: SCHEMA, id, at: new Date().toISOString(), from: plan.current.version, to: plan.latest.version, changed: [], added: [], hadState: exists(P.state), rolledBack: null }
   // The manifest is replaced by finish and the lock file may be rewritten by npm install: both belong to the backup.
-  for (const rel of new Set([...plan.update, ...plan.add, ...plan.remove, ...plan.conflict.map((c) => c.path), MANIFEST, 'package-lock.json'])) {
+  for (const rel of new Set([...plan.update, ...plan.add, ...plan.remove, ...plan.conflict.map((c) => c.path), MANIFEST, MANIFEST_SIG, 'package-lock.json'])) {
     if (exists(abs(rel))) {
       copyInto(abs(rel), abs(rel, join(dir, 'files')))
       meta.changed.push(rel)

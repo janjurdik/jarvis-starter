@@ -4,7 +4,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
-import { MANIFEST, REPO, abs, exists, fileHash, git, isNoise, isProtected, parseVersion, readBuf, readJson, safeRel, walk } from './core.mjs'
+import { MANIFEST, MANIFEST_SIG, REPO, abs, exists, fileHash, git, isNoise, isProtected, parseVersion, readBuf, readJson, safeRel, walk } from './core.mjs'
 
 /** Reads and cleans a manifest. Returns null when the file is missing or is not a manifest. */
 export function readManifest(file) {
@@ -65,7 +65,7 @@ export function treeManifest(root) {
   const declared = readManifest(join(root, MANIFEST))
   const version = declared?.version ?? packageVersion(root)
   if (!version) return null
-  const files = hashFiles(root, walk(root, { keep: (rel) => rel !== MANIFEST }))
+  const files = hashFiles(root, walk(root, { keep: (rel) => rel !== MANIFEST && rel !== MANIFEST_SIG }))
   const stale = declared ? Object.keys(files).filter((rel) => declared.files[rel] !== files[rel]).length + Object.keys(declared.files).filter((rel) => !(rel in files)).length : 0
   return { name: declared?.name ?? 'jarvis-starter', version, released: declared?.released ?? null, files, declared: Boolean(declared), stale }
 }

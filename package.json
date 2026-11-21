@@ -1,6 +1,6 @@
 {
   "name": "jarvis-starter",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "private": true,
   "type": "module",
   "description": "Jarvis: osobný AI asistent s vlastnou pamäťou, HUD na ploche a rutinami. Základ, ktorý si každý dostavia po svojom, na Claude alebo ChatGPT.",
@@ -23,6 +23,7 @@
     "call": "node scripts/call.mjs",
     "setup": "node scripts/setup.mjs",
     "orb": "node scripts/orb.mjs",
+    "suggest": "node scripts/suggest.mjs",
     "alarm": "node scripts/alarm.mjs",
     "media": "node scripts/media.mjs",
     "voice": "node scripts/voice.mjs",

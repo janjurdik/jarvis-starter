@@ -7,11 +7,12 @@
  *
  * Works before `npm install` too: it only uses Node built-ins and files from this repo.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, sep } from 'node:path'
 import { DATA_DIR, IS_MAC, IS_WIN, LABEL, PORT, REPO, TASK_FOLDER, findBin, has, hudAlive, parseArgs, sh } from './lib.mjs'
-import { aiProvider } from '../hud/server/provider.mjs'
+import { INSTALL_HINT, antigravityStatus } from '../hud/server/antigravity.mjs'
+import { aiProvider, cleanEnv } from '../hud/server/provider.mjs'
 import { prepareNeeded, prepareRunning, sttSummary } from '../hud/server/stt-plan.mjs'
 
 const { flags } = parseArgs()
@@ -27,10 +28,21 @@ add('node', nodeMajor >= 20, 'Node.js 20 alebo novší', `v${process.versions.no
 
 add('deps', has(join(REPO, 'node_modules', 'three', 'package.json')) && has(join(REPO, 'node_modules', 'ws', 'package.json')), 'Balíčky HUD (npm install)', '', 'npm install')
 
-// ── the AI Jarvis runs on: Claude Code or Codex (hud/server/provider.mjs) ──
+// ── the AI Jarvis runs on: Claude Code, Codex or Antigravity (hud/server/provider.mjs) ──
 const ai = aiProvider()
 let login = null
-if (ai.id === 'codex') {
+if (ai.id === 'antigravity') {
+  // Antigravity is asked itself: it is started and opens an empty session (hud/server/antigravity.mjs). No browser opens.
+  const cwd = join(DATA_DIR, 'brain', 'antigravity')
+  mkdirSync(cwd, { recursive: true })
+  const s = await antigravityStatus({ env: cleanEnv(), cwd })
+  const source = { cli: 'Antigravity CLI', t3: 'server z aplikácie T3 Code', custom: 'JARVIS_ANTIGRAVITY_BIN' }[s.source] ?? ''
+  add('claude', s.installed, 'Antigravity (Gemini)', s.installed ? [s.version, source].filter(Boolean).join(', ') : 'nenašiel sa', s.installed ? '' : INSTALL_HINT)
+  if (s.installed) {
+    login = { loggedIn: s.loggedIn, subscriptionType: s.loggedIn ? s.tier ?? 'google' : null }
+    add('claude-login', s.loggedIn, 'Prihlásenie do Antigravity', s.loggedIn ? s.tier ?? 'účet Google' : s.needsLogin ? 'neprihlásený' : String(s.error ?? 'nepodarilo sa spustiť').slice(0, 200), 'Spusti: node scripts/antigravity.mjs login  (otvorí sa prehliadač, prihlás sa účtom Google).')
+  }
+} else if (ai.id === 'codex') {
   const codex = ai.bin()
   if (codex) {
     const ver = await sh(codex, ['--version'])

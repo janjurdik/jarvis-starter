@@ -183,36 +183,32 @@ export function createInner(renderer, U) {
 
   // ── rozloženie ──
   /**
-   * Jedna hviezdokopa: význam určuje vzdialenosť od stredu (najdôležitejšie v jadre),
-   * skupina určuje smer (každá skupina má svoj sektor oblohy), takže skupiny sa prelínajú
-   * v strede a do diaľky sa rozbiehajú ako ramená.
+   * One orderly constellation: concentric rings that face the camera, evenly spaced. The most
+   * important item sits in the middle, the next ones on the first ring and so on outward; within
+   * a ring the items of one group stay next to each other. Every ring lies a little deeper than
+   * the one before it, so the whole thing is a shallow bowl and still reads as space when turned.
    */
   function layoutCluster(items, groups) {
     const keys = [...new Set([...groups.map((g) => g.key), ...items.map((i) => i.g)])]
-    const golden = Math.PI * (3 - Math.sqrt(5))
-    const dirs = new Map(
-      keys.map((k, i) => {
-        const y = keys.length === 1 ? 0 : (1 - ((i + 0.5) / keys.length) * 2) * 0.7
-        const r = Math.sqrt(1 - y * y)
-        return [k, new THREE.Vector3(Math.cos(golden * i) * r, y, Math.sin(golden * i) * r)]
-      }),
-    )
-    const R = 45 + Math.sqrt(items.length) * 4.2
-    const d = new THREE.Vector3()
-    return items.map((it) => {
-      const r = rnd(hash(it.id))
-      const imp = clamp(it.imp ?? 0)
-      // Náhodný smer pritiahnutý k smeru skupiny (čím ďalej od stredu, tým viac v jej sektore).
-      const z = r() * 2 - 1
-      const t = r() * Math.PI * 2
-      const q = Math.sqrt(1 - z * z)
-      d.set(Math.cos(t) * q, z, Math.sin(t) * q)
-      const base = dirs.get(it.g) ?? d
-      const dist = R * (0.06 + 0.94 * Math.pow(1 - imp, 1.15)) * (0.85 + 0.3 * r())
-      const pull = 0.35 + 0.5 * (1 - imp)
-      d.lerp(base, pull).normalize()
-      return new THREE.Vector3(d.x * dist, d.y * dist * 0.62, d.z * dist)
-    })
+    const order = items.map((it, i) => i).sort((a, b) => (items[b].imp ?? 0) - (items[a].imp ?? 0) || String(items[a].t).localeCompare(String(items[b].t)))
+    const STEP = 12.5 // distance between rings and between neighbours on a ring
+    const pos = new Array(items.length)
+    let at = 0
+    for (let ring = 0; at < order.length; ring++) {
+      const cap = ring === 0 ? 1 : Math.floor((2 * Math.PI * ring * STEP) / STEP)
+      const slice = order.slice(at, at + cap)
+      at += slice.length
+      // One group next to the other around the ring, each group keeping the order of importance.
+      slice.sort((a, b) => keys.indexOf(items[a].g) - keys.indexOf(items[b].g) || (items[b].imp ?? 0) - (items[a].imp ?? 0))
+      const r = ring * STEP
+      // A ring that is not full is still spread over the whole circle; odd rings start half a step on.
+      const turn = (ring % 2 ? Math.PI / Math.max(1, slice.length) : 0) - Math.PI / 2
+      slice.forEach((i, k) => {
+        const a = turn + (k / slice.length) * Math.PI * 2
+        pos[i] = new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r * 0.78, -ring * 3.2)
+      })
+    }
+    return pos
   }
 
   /**

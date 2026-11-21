@@ -3,6 +3,9 @@
 Jarvis sa vyvíja ďalej a nové verzie vychádzajú na GitHube. Zároveň je tvoj: môžeš si v ňom s Claudom meniť,
 čo chceš. Aktualizácia je spravená tak, aby si dostal novinky a neprišiel pri tom o nič svoje.
 
+Je jedno, či si Jarvisa stiahol ako ZIP alebo cez git. Novú verziu si Jarvis stiahne z GitHubu sám, overí jej podpis
+a porovná ju so zoznamom súborov, ktorý prišiel s tvojou verziou (`jarvis.manifest.json`). Git na to netreba.
+
 ## Ako to funguje
 
 1. **Jarvis si všimne novú verziu.** Keď beží HUD, raz za pol dňa sa pozrie, či nevyšla novšia verzia. Ak áno,

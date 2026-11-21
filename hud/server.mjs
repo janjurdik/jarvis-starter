@@ -22,6 +22,7 @@ import { networkInterfaces } from 'node:os'
 import { extname, join, normalize, sep } from 'node:path'
 import { quietNow } from './server/alarm.mjs'
 import { Brain, EFFORT, MODEL } from './server/brain.mjs'
+import { AntigravityBrain } from './server/brain-antigravity.mjs'
 import { CodexBrain } from './server/brain-codex.mjs'
 import { aiProvider } from './server/provider.mjs'
 import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onVoiceChange, sayText, sendChat, setVoice, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
@@ -49,6 +50,7 @@ import { applyCall, applySettings, brainSettings, initSettings, previewVoice, se
 import { routeVideoGet, routeVideoPost, stopVideo } from './server/video.mjs'
 import { changeOrbs, getOrbs } from './server/orbs.mjs'
 import { getSetup, noteSetup, setupContextNote } from './server/setup.mjs'
+import { addSuggestion, dismissSuggestion, suggestContextNote, suggestions } from './server/suggest.mjs'
 import { FIRST_RUN_TEXT, addressOf } from './server/persona.mjs'
 
 const ROOT = import.meta.dirname
@@ -291,11 +293,11 @@ setOnRolesChange(() => {
 })
 initSettings({ statusChanged, primary: PRIMARY })
 
-/** The agent Jarvis runs on: Claude Code or Codex (server/provider.mjs). */
+/** The agent Jarvis runs on: Claude Code, Codex or Antigravity (server/provider.mjs). */
 const AI = aiProvider()
 const CLAUDE = AI.bin()
 const brainOpts = { hudUrl: `http://127.0.0.1:${PORT}`, token: BRAIN_TOKEN, onStatus: statusChanged, warmup: PRIMARY }
-const brain = MOCK_ALL ? null : AI.id === 'codex' ? new CodexBrain(brainOpts) : new Brain(brainOpts)
+const brain = MOCK_ALL ? null : AI.id === 'codex' ? new CodexBrain(brainOpts) : AI.id === 'antigravity' ? new AntigravityBrain(brainOpts) : new Brain(brainOpts)
 
 function statusBody() {
   const b = brain?.status()
@@ -335,7 +337,7 @@ function statusBody() {
 
 const snapshotFor = () => currentSnapshot({ film: state.film })
 
-initChat({ brain, getSnapshot: () => snapshotFor() ?? {}, getNames: filmNameList, getExtraContext: () => [jobsContextNote(), setupContextNote()].filter(Boolean).join('\n'), mockAll: MOCK_ALL })
+initChat({ brain, getSnapshot: () => snapshotFor() ?? {}, getNames: filmNameList, getExtraContext: () => [jobsContextNote(), setupContextNote(), suggestContextNote()].filter(Boolean).join('\n'), mockAll: MOCK_ALL })
 setGreeting(() => {
   // An open HUD means push-to-talk should be ready (a cold local Whisper takes a while).
   if (PRIMARY) warmStt()
@@ -563,6 +565,14 @@ async function routePost(req, res, path) {
       sendHud({ type: 'action', text: 'Volám na mobil', icon: 'alarm', say: null, heard: null, node: null, source: 'jarvis' })
       return sendJson(res, 200, { ok: true })
     }
+    if (body.action === 'suggest') {
+      // An idea from Jarvis himself, or one he takes off the list because it is done or unwanted.
+      if (body.done) await dismissSuggestion(body.done)
+      else await addSuggestion(body.idea ?? {})
+      const items = suggestions()
+      send('suggest', { items })
+      return sendJson(res, 200, { ok: true, items })
+    }
     if (body.action === 'setup') {
       const setup = await noteSetup(body.note ?? {})
       send('setup', setup)
@@ -639,12 +649,21 @@ async function routePost(req, res, path) {
   if (path === '/api/apps') {
     const apps = saveApps(body)
     send('apps', apps)
-    log('apps', `${apps.picked.length} appiek, ${apps.wants.length} prianí`)
+    log('apps', `${apps.picked.length} appiek, ${apps.own.length} vlastných`)
+    send('suggest', { items: suggestions() })
     return sendJson(res, 200, { ok: true, ...apps })
+  }
+  if (path === '/api/suggest') {
+    if (body.dismiss !== undefined) await dismissSuggestion(body.dismiss)
+    else if (body.add) await addSuggestion(body.add)
+    else return sendJson(res, 400, { ok: false, error: 'dismiss alebo add' })
+    const items = suggestions()
+    send('suggest', { items })
+    return sendJson(res, 200, { ok: true, items })
   }
   if (path === '/api/orbs') return sendJson(res, 200, orbAction(body))
   if (path === '/api/jobs') {
-    const job = await createJob({ task: body.task, title: body.title, mock: body.mock === true, silent: body.silent === true })
+    const job = await createJob({ task: body.task, title: body.title, weight: body.weight, mock: body.mock === true, silent: body.silent === true })
     return sendJson(res, 202, { ok: true, job })
   }
 
@@ -734,6 +753,7 @@ async function route(req, res) {
   if (path === '/api/mode') return sendJson(res, 200, { film: state.film })
   if (path === '/api/jobs') return sendJson(res, 200, listJobs())
   if (path === '/api/apps') return sendJson(res, 200, getApps())
+  if (path === '/api/suggest') return sendJson(res, 200, { ok: true, items: suggestions() })
   if (path === '/api/settings') return sendJson(res, 200, settingsBody())
   if (path === '/api/orbs') return sendJson(res, 200, { ok: true, ...getOrbs() })
   // An image a finished job named in its result, shown in the middle of the desktop. Only those exact files.
@@ -815,7 +835,7 @@ const server = createServer((req, res) => {
 async function jobAction(body) {
   const info = currentTurnInfo()
   try {
-    if (body.action === 'job_task') return { ok: true, job: await createJob({ task: body.task, title: body.title, mock: info?.mock, silent: info?.silent }) }
+    if (body.action === 'job_task') return { ok: true, job: await createJob({ task: body.task, title: body.title, weight: body.weight, mock: info?.mock, silent: info?.silent }) }
     if (body.action === 'job_list') return { ok: true, jobs: listJobs() }
     if (body.action === 'job_reply') return { ok: true, job: replyJob(String(body.id ?? ''), body.text) }
     if (body.action === 'job_stop') return { ok: true, job: stopJob(String(body.id ?? '')) }
@@ -995,7 +1015,7 @@ server.listen(PORT, HOST, async () => {
   if (!['127.0.0.1', 'localhost', '::1'].includes(HOST)) console.log('  POZOR: Jarvis je otvorený do siete (HUD_HOST). Kto pozná token z data/brain/token, ovláda tento počítač, a po bežnej sieti ide token nešifrovane. Otvor ho radšej len cez šifrovaný tunel (napríklad tailscale serve).\n')
   lockDown()
   for (const u of urls) console.log(`  ${u}`)
-  console.log(`\n  mozog: ${MOCK_ALL ? 'MOCK (JARVIS_MOCK=1)' : CLAUDE ? `${AI.name} (${AI.id === 'codex' ? brain.status().model : `${MODEL}, effort ${EFFORT}`})` : `${AI.product} CLI sa nenašiel`} · hlas: ${ttsInfo().provider} · reč: ${STT_ENGINE}`)
+  console.log(`\n  mozog: ${MOCK_ALL ? 'MOCK (JARVIS_MOCK=1)' : CLAUDE ? `${AI.name} (${AI.id !== 'claude' ? brain.status().model : `${MODEL}, effort ${EFFORT}`})` : `${AI.product} CLI sa nenašiel`} · hlas: ${ttsInfo().provider} · reč: ${STT_ENGINE}`)
   console.log(`  pamäť: ${MEMORY_DIR}${cfg.configured ? '' : '\n  nastavenie ešte neprebehlo: Jarvis ťa ním prevedie na ploche'}\n`)
   await startSnapshots(() => state.film).catch((err) => log('snapshot', errMsg(err)))
   if (PRIMARY) {

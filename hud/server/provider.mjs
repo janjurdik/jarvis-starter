@@ -5,9 +5,12 @@
  *   claude   Claude Code CLI (Claude Pro or Max). The reference: token streaming, the fastest voice.
  *   codex    Codex CLI (ChatGPT Plus or Pro). The same tools and memory; answers arrive whole,
  *            sentence by sentence instead of token by token.
+ *   antigravity  Google Antigravity (a Google account, Gemini models), driven over ACP
+ *            (antigravity.mjs). Token streaming like Claude, one warm process for the voice.
  *
  * The choice: JARVIS_AI in .env, then `ai` in config/jarvis.json, then whichever CLI is installed
- * (Claude first). Setup writes `ai` according to the assistant the user ran it with.
+ * (Claude first, then Codex, then Antigravity). Setup writes `ai` according to the assistant the
+ * user ran it with.
  *
  * Everything that differs between the two is in this file: how a full agent run is started
  * (background jobs and routines) and how its event stream is read. A third agent (a local model
@@ -16,9 +19,10 @@
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { antigravityInstall } from './antigravity.mjs'
 import { getConfig } from './config.mjs'
 import { MEMORY_DIR } from './memory/index.mjs'
-import { DATA_DIR, HOME, REPO, findBin, withPath } from './util.mjs'
+import { DATA_DIR, HOME, REPO, ROOT, findBin, withPath } from './util.mjs'
 import { sep } from 'node:path'
 
 const MEMORY_EXTERNAL = !(MEMORY_DIR + sep).startsWith(REPO + sep)
@@ -46,6 +50,8 @@ export const PROVIDERS = {
     name: 'Claude',
     product: 'Claude Code',
     plan: 'Claude Pro alebo Max',
+    /** Model routing (routing.mjs): the model a light, a normal and a heavy job runs on. */
+    tiers: { light: 'haiku', normal: 'sonnet', heavy: 'opus' },
     bin: () => bin('claude', process.env.JARVIS_CLAUDE_BIN),
     /** Arguments of one headless run. The task goes in over stdin, `contextFile` holds the standing instructions. */
     args({ contextFile, model, sessionId }) {
@@ -95,8 +101,10 @@ export const PROVIDERS = {
     name: 'ChatGPT',
     product: 'Codex',
     plan: 'ChatGPT Plus alebo Pro',
+    /** Model routing (routing.mjs): Codex keeps its model and turns the reasoning effort up or down. */
+    efforts: { light: 'low', normal: 'medium', heavy: 'high' },
     bin: () => bin('codex', process.env.JARVIS_CODEX_BIN),
-    args({ model, sessionId, cwd }) {
+    args({ model, effort, sessionId, cwd }) {
       return [
         'exec',
         ...(sessionId ? ['resume'] : []),
@@ -105,6 +113,7 @@ export const PROVIDERS = {
         // Jarvis works with everything the user can, like on Claude. What goes out to people still waits for a yes (the task says so).
         '--dangerously-bypass-approvals-and-sandbox',
         ...(model ? ['-m', model] : []),
+        ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []),
         ...(cwd && !sessionId ? ['-C', cwd] : []),
         ...(MEMORY_EXTERNAL && !sessionId ? ['--add-dir', MEMORY_DIR] : []),
         ...(sessionId ? [sessionId] : []),
@@ -148,6 +157,48 @@ export const PROVIDERS = {
       return []
     },
   },
+
+  antigravity: {
+    id: 'antigravity',
+    name: 'Gemini',
+    product: 'Antigravity',
+    plan: 'účet Google, najlepšie s Google AI Pro alebo Ultra',
+    /** Model routing (routing.mjs): the fast model for light jobs, the strongest for heavy ones. Between them the user's own default. */
+    tiers: { light: 'gemini-3.8-flash', heavy: 'gemini-4-neon' },
+    /** The agent itself: the Antigravity CLI or a standalone ACP server (antigravity.mjs says where it is looked for). */
+    bin: () => antigravityInstall()?.exe ?? null,
+    /**
+     * Antigravity speaks ACP, a conversation over stdin and stdout, not one command with a result.
+     * A run is therefore started through a small script of Jarvis's own that holds that conversation
+     * and prints the same kind of event lines the other two agents do.
+     */
+    exe: () => process.execPath,
+    args({ contextFile, model, effort, sessionId, cwd }) {
+      return [
+        join(ROOT, 'server', 'antigravity-run.mjs'),
+        ...(cwd ? ['--cwd', cwd] : []),
+        // The standing instructions go in as a system prompt, the script reads them from the file.
+        ...(contextFile ? ['--context', contextFile] : []),
+        ...(model ? ['--model', model] : []),
+        ...(effort ? ['--effort', effort] : []),
+        ...(sessionId ? ['--session', sessionId] : []),
+      ]
+    },
+    stdin: ({ prompt }) => prompt,
+    parse(line) {
+      let m
+      try {
+        m = JSON.parse(line)
+      } catch {
+        return []
+      }
+      if (m?.type === 'init') return [{ type: 'init', sessionId: m.sessionId ?? null, apiKey: null }]
+      if (m?.type === 'tool') return [{ type: 'tool', name: String(m.name ?? ''), input: m.input ?? {} }]
+      if (m?.type === 'text') return m.text ? [{ type: 'text', text: String(m.text) }] : []
+      if (m?.type === 'result') return [{ type: 'result', ok: m.ok === true, text: m.ok === true ? m.text ?? '' : '', error: m.ok === true ? null : m.error || 'Antigravity skončil chybou', turns: m.turns ?? 0, ms: m.ms ?? null }]
+      return []
+    },
+  },
 }
 
 /** The provider Jarvis runs on right now. */
@@ -163,6 +214,7 @@ export function aiProvider() {
   if (PROVIDERS[asked]) return PROVIDERS[asked]
   if (PROVIDERS.claude.bin()) return PROVIDERS.claude
   if (PROVIDERS.codex.bin()) return PROVIDERS.codex
+  if (PROVIDERS.antigravity.bin()) return PROVIDERS.antigravity
   return PROVIDERS.claude
 }
 
@@ -181,12 +233,13 @@ export const STRANGERS_NOTE =
  * Starts one full agent run of the current provider. Returns the child process and the provider,
  * the caller reads stdout line by line through `provider.parse`.
  */
-export async function spawnAgent({ prompt, contextFile = null, model = jobModel(), sessionId = null, cwd = REPO }) {
+export async function spawnAgent({ prompt, contextFile = null, model = jobModel(), effort = null, sessionId = null, cwd = REPO }) {
   const { spawnBin } = await import('./util.mjs')
   const provider = aiProvider()
   const exe = provider.bin()
   if (!exe) throw new Error(`${provider.product} CLI sa nenašiel. Nainštaluj ho a prihlás sa, potom to skús znova.`)
-  const proc = spawnBin(exe, provider.args({ contextFile, model, sessionId, cwd }), { cwd, env: cleanEnv(), stdio: ['pipe', 'pipe', 'pipe'] })
+  // `exe` is for an agent that is not started directly but through a script of Jarvis's own (Antigravity).
+  const proc = spawnBin(provider.exe?.() ?? exe, provider.args({ contextFile, model, effort, sessionId, cwd }), { cwd, env: cleanEnv(), stdio: ['pipe', 'pipe', 'pipe'] })
   proc.stdin.on('error', () => {})
   proc.stdin.end(provider.stdin({ prompt, contextFile }))
   return { proc, provider }

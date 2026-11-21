@@ -220,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     (() => {
       const d = (window.__jarvisDesktop = window.__jarvisDesktop || {});
       d.native = true;
-      d.version = 1;
+      d.version = 2;
       d.isRaised = false;
       d.hotkeyLabel = '\(HOTKEY_LABEL)';
       d.post = (msg) => { try { window.webkit.messageHandlers.jarvis.postMessage(msg) } catch (e) {} };
@@ -237,12 +237,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         document.documentElement.classList.toggle('jarvis-raised', !!on);
         emit({ type: 'raised', on: !!on });
       };
+      // What the menu bar icon offers, for the Settings sheet of the page: desktop icons and start at login.
+      d.prefs = \(prefsJSON());
+      d.setPref = (key, value) => d.post({ type: 'pref', key, value: !!value });
+      d.prefsChanged = (prefs) => { d.prefs = prefs; emit({ type: 'prefs', prefs }); };
       d.dismiss = () => d.post({ type: 'dismiss' });
       d.summon = () => d.post({ type: 'raise' });
       document.documentElement.classList.add('jarvis-desktop');
       d.setInsets(\(insetsJSON(currentInsets())));
     })();
     """
+  }
+
+  /// The two switches of the menu bar icon as JSON, for the page.
+  func prefsJSON() -> String {
+    "{\"icons\":\(desktopIconsVisible()),\"login\":\(loginItemEnabled())}"
+  }
+
+  func pushPrefs() {
+    js("window.__jarvisDesktop && window.__jarvisDesktop.prefsChanged && window.__jarvisDesktop.prefsChanged(\(prefsJSON()))")
   }
 
   func load() {
@@ -590,6 +603,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     case "raise": raise()
     case "ready": pushInsets(force: true)
     case "log": log("stránka: \(body["text"] ?? "")")
+    case "pref":
+      // The Settings sheet flips the same switches the menu bar icon has.
+      let on = (body["value"] as? Bool) ?? false
+      switch body["key"] as? String {
+      case "icons":
+        defaults.set(!on, forKey: "hideDesktopIcons")
+        setDesktopIcons(visible: on)
+      case "login":
+        defaults.set(on, forKey: "launchAtLogin")
+        setLoginItem(on)
+      default: break
+      }
+      pushPrefs()
     case "notify":
       // The result of a background job: a notification the user sees over any window.
       let text = { (k: String, n: Int) -> String in String(((body[k] as? String) ?? "").prefix(n)) }
@@ -632,18 +658,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
   func menuNeedsUpdate(_ menu: NSMenu) {
     menu.removeAllItems()
-    let head = NSMenuItem(title: serverOK ? "Jarvis HUD beží" : "Jarvis HUD: server štartuje", action: nil, keyEquivalent: "")
+    let head = NSMenuItem(title: serverOK ? "Jarvis beží na vašej ploche" : "Jarvis štartuje…", action: nil, keyEquivalent: "")
     head.isEnabled = false
     menu.addItem(head)
     menu.addItem(.separator())
-    item(menu, "Vyvolať Jarvisa (\(HOTKEY_LABEL))", #selector(menuSummon))
-    item(menu, "Obnoviť HUD", #selector(menuReload))
-    item(menu, "Otvoriť v prehliadači", #selector(menuBrowser))
+    item(menu, "Ukázať Jarvisa nad oknami (\(HOTKEY_LABEL))", #selector(menuSummon)).toolTip = "Jarvis žije na ploche pod vašimi oknami. Toto ho vytiahne navrch, Esc ho vráti späť."
+    item(menu, "Nastavenia Jarvisa…", #selector(menuSettings)).toolTip = "Hlas, oslovenie, počúvanie, tiché hodiny a plocha."
     menu.addItem(.separator())
-    item(menu, "Ikony na ploche", #selector(menuIcons)).state = desktopIconsVisible() ? .on : .off
-    item(menu, "Spúšťať po prihlásení", #selector(menuLogin)).state = loginItemEnabled() ? .on : .off
+    item(menu, "Zobrazovať ikony na ploche", #selector(menuIcons)).state = desktopIconsVisible() ? .on : .off
+    item(menu, "Spúšťať po zapnutí počítača", #selector(menuLogin)).state = loginItemEnabled() ? .on : .off
     menu.addItem(.separator())
-    item(menu, "Ukončiť a vrátiť plochu", #selector(menuQuit))
+    item(menu, "Načítať Jarvisa znova", #selector(menuReload)).toolTip = "Keď sa niečo zasekne. Nič sa nestratí."
+    item(menu, "Otvoriť ako stránku v prehliadači", #selector(menuBrowser))
+    menu.addItem(.separator())
+    item(menu, "Vypnúť Jarvisa a vrátiť pôvodnú plochu", #selector(menuQuit))
   }
 
   @discardableResult
@@ -655,6 +683,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   }
 
   @objc func menuSummon() { raise() }
+  @objc func menuSettings() {
+    raise()
+    js("window.dispatchEvent(new CustomEvent('jarvis-desktop', { detail: { type: 'settings' } }))")
+  }
   @objc func menuReload() { reload() }
 
   @objc func menuBrowser() {
@@ -665,12 +697,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     let show = !desktopIconsVisible()
     defaults.set(!show, forKey: "hideDesktopIcons")
     setDesktopIcons(visible: show)
+    pushPrefs()
   }
 
   @objc func menuLogin() {
     let on = !loginItemEnabled()
     defaults.set(on, forKey: "launchAtLogin")
     setLoginItem(on)
+    pushPrefs()
   }
 
   @objc func menuQuit() {

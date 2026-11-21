@@ -120,11 +120,10 @@ export function createAppsWorld({ core, canvas = document.querySelector('canvas'
   root.className = 'aw'
   root.hidden = true
   root.innerHTML = `
-    <button type="button" class="leave" aria-label="Opustiť"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6M4 12h16"/></svg>Opustiť</button>
     <header class="aw-head">
-      <div class="aw-title">Tvoje appky</div>
-      <div class="aw-sub"></div>
-      <label class="aw-search">${icon('search')}<input type="search" placeholder="Hľadať appku" autocomplete="off" spellcheck="false" aria-label="Hľadať appku"><kbd>Esc</kbd></label>
+      <button type="button" class="leave" aria-label="Opustiť"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6M4 12h16"/></svg>Opustiť<kbd>Esc</kbd></button>
+      <div class="aw-titles"><div class="aw-title">Tvoje appky</div><div class="aw-sub"></div></div>
+      <label class="aw-search">${icon('search')}<input type="search" placeholder="Hľadať appku" autocomplete="off" spellcheck="false" aria-label="Hľadať appku"></label>
       <nav class="aw-groups" aria-label="Skupiny appiek"></nav>
     </header>
     <div class="aw-labels"></div>
@@ -141,7 +140,7 @@ export function createAppsWorld({ core, canvas = document.querySelector('canvas'
       <div class="aw-tray-list" role="list"></div>
       <form class="aw-own"><input type="text" maxlength="40" placeholder="Iná appka? Napíš ju" aria-label="Pridať vlastnú appku"><button type="submit" aria-label="Pridať">${icon('plus')}</button></form>
     </footer>
-    <div class="aw-hint"><span>klik</span> otvorí appku · <span>koliesko</span> priblíži · <span>ťahaj</span> rozhliadni sa · <kbd>Esc</kbd> späť</div>`
+    <div class="aw-hint"><span>klik</span> otvorí appku · <span>koliesko</span> priblíži · <span>ťahaj</span> rozhliadni sa</div>`
   document.body.append(root)
   const el = {
     sub: root.querySelector('.aw-sub'),

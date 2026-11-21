@@ -1,7 +1,7 @@
 # Jarvis
 
 Osobný AI asistent, ktorý ťa pozná, žije na tvojej ploche, hovorí s tebou a sám sa ti ozýva.
-Beží na tvojom počítači a na predplatnom, ktoré už máš: Claude alebo ChatGPT.
+Beží na tvojom počítači a na predplatnom, ktoré už máš: Claude, ChatGPT alebo Gemini cez Antigravity.
 
 ![Jarvis HUD](docs/hud.jpg)
 
@@ -12,12 +12,44 @@ doprogramuje a pridá na plochu ako nový orb. Začína s málom a rastie s tebo
 
 ## Ako začať
 
-1. **Stiahni** tento priečinok (zelené tlačidlo *Code* → *Download ZIP*) a rozbaľ ho. Najlepšie do domovského priečinka, nie do Stiahnutých.
-2. **Otvor ho vo svojej AI.** Claude: karta *Code* v aplikácii Claude, alebo `claude` v termináli. ChatGPT: Codex (`codex`).
-3. **Napíš `štart`.**
+Netreba vedieť programovať ani poznať terminál. Sú to štyri kroky a trvajú pár minút.
 
-AI pripraví počítač a o pár minút sa Jarvis objaví na ploche. **Odvtedy už hovoríš s ním.** Predstaví sa, poobzerá sa
-po počítači, aby ťa spoznal, spýta sa na to, čo nenájde, a spolu dotiahnete zvyšok. Žiadny dotazník, nemusíš vedieť programovať.
+**1. Stiahni Jarvisa.** Hore na tejto stránke klikni na zelené tlačidlo **Code** a potom na **Download ZIP**.
+Do počítača sa stiahne súbor `jarvis-starter-main.zip`.
+
+**2. Rozbaľ ho a daj na dobré miesto.** ZIP je zbalený priečinok, tak ako je, sa použiť nedá.
+- **Mac:** dvakrát naň klikni. Vedľa neho vznikne priečinok `jarvis-starter-main`. Presuň ho zo Stiahnutých do svojho
+  domovského priečinka (vo Finderi *Prejsť → Domov*) a pokojne ho premenuj na `Jarvis`.
+- **Windows:** klikni naň pravým tlačidlom, zvoľ *Extrahovať všetko* a ako cieľ daj napríklad `C:\Users\tvoje-meno\Jarvis`.
+
+Dôležité: nenechávaj ho v Stiahnutých, na Ploche ani v Dokumentoch. Mac tam programom na pozadí nedovolí čítať
+a budík s rutinami by nefungovali.
+
+**3. Otvor ten priečinok vo svojej AI.** Jarvis nemá vlastnú appku na inštaláciu. Nainštaluje ho AI, ktorú už máš:
+- **Claude:** otvor aplikáciu Claude, hore prepni na kartu **Code**, klikni na výber priečinka a vyber priečinok `Jarvis`.
+  (V termináli: `cd ~/Jarvis` a `claude`.)
+- **ChatGPT:** otvor Codex a vyber v ňom priečinok `Jarvis`. (V termináli: `cd ~/Jarvis` a `codex`.)
+- **Gemini:** otvor priečinok `Jarvis` v Antigravity. (V termináli: `cd ~/Jarvis` a `agy`.)
+
+Priečinok sa takto dá mať v Claude otvorený natrvalo: je to obyčajný projekt, do ktorého sa kedykoľvek vrátiš.
+
+**4. Napíš `štart`.** AI sa spýta, či chceš Jarvisa priamo na pracovnej ploche (odporúčame), alebo len ako stránku
+v prehliadači, pripraví počítač a o pár minút sa Jarvis objaví. **Odvtedy už hovoríš s ním.** Predstaví sa, poobzerá sa
+po počítači, aby ťa spoznal, spýta sa na to, čo nenájde, a spolu dotiahnete zvyšok.
+
+### Čo sa po štarte zmení v počítači
+
+- **Jarvis žije na ploche.** Na Macu je namiesto tapety, pod všetkými oknami. Skratka `Control + Option + J` ho
+  vytiahne navrch, `Esc` ho vráti späť. Na Windows beží v okne na celú obrazovku.
+- **V lište hore pribudne malý krúžok.** To je menu Jarvisa: ukázať ho, Nastavenia, skryť alebo zobraziť ikony
+  na ploche, spúšťať po zapnutí počítača, vypnúť Jarvisa a vrátiť pôvodnú plochu.
+- **Nič sa nemaže.** Skryté ikony ostávajú v priečinku Plocha a tou istou voľbou sa vrátia. Jarvisa vypneš jedným klikom.
+
+### Aktualizácie
+
+Nové verzie si Jarvis všimne sám a opýta sa, či ich má nainštalovať. Stačí povedať „aktualizuj sa". Funguje to
+rovnako, či si priečinok stiahol ako ZIP, alebo cez git: Jarvis si novú verziu stiahne, overí jej podpis a spojí ju
+s tvojimi úpravami. Nič nesťahuješ znova a o pamäť ani nastavenia neprídeš ([docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md)).
 
 ## Čo má každý Jarvis
 
@@ -29,6 +61,8 @@ po počítači, aby ťa spoznal, spýta sa na to, čo nenájde, a spolu dotiahne
 - **Pošta, kalendár, úlohy.** Triedi poštu a ozve sa len pri dôležitom, upozorní pred stretnutím, stráži termíny a pripomienky.
 - **3D svet na ploche.** Každá väčšia vec v tvojom živote je orb. Pribúdajú a miznú podľa toho, čo naozaj používaš.
 - **Pracuje sám.** „Cez noc mi priprav…" a ráno to máš. Vidíš, čo práve robí, a vieš ho zastaviť. Čo má ísť von k ľuďom, vždy čaká na tvoje áno.
+- **Šetrí tvoje predplatné.** Pred každou úlohou povie, aká je náročná, a podľa toho si vyberie model: na pozretie pošty rýchly, na tvorbu najsilnejší.
+- **Odporúča sám.** Podľa toho, čo máš v počítači a v pošte, navrhne, čo sa oplatí pridať ďalej. Klikneš a spraví to.
 
 ## Čo si vieš pridať
 
@@ -42,13 +76,14 @@ po počítači, aby ťa spoznal, spýta sa na to, čo nenájde, a spolu dotiahne
 - hovor na mobil, keď niečo nepočká,
 - denník z toho, čo si naozaj robil na počítači.
 
-Na úpravy, pri ktorých chceš vidieť každý krok, otvor tento priečinok v Claude Code alebo Codexe a povedz, čo chceš zmeniť.
+Na úpravy, pri ktorých chceš vidieť každý krok, otvor tento priečinok v Claude Code, Codexe alebo Antigravity a povedz, čo chceš zmeniť.
 
 ## Čo potrebuješ
 
 - Mac alebo počítač s Windows 10/11
-- Predplatné Claude (Pro alebo Max) s [Claude Code](https://claude.com/claude-code), alebo ChatGPT (Plus alebo Pro) s Codexom
+- Predplatné Claude (Pro alebo Max) s [Claude Code](https://claude.com/claude-code), alebo ChatGPT (Plus alebo Pro) s Codexom, alebo účet Google s [Antigravity](https://antigravity.google)
 - [Node.js](https://nodejs.org) 20 alebo novší. Ak ho nemáš, `štart` ti ho pomôže nainštalovať.
+- Na Macu pre Jarvisa na ploche nástroje pre vývojárov od Apple (zadarmo). Keď chýbajú, `štart` povie, ako ich pridať jedným príkazom, a Jarvis zatiaľ beží v okne.
 
 ## Čo je v priečinku
 
@@ -58,7 +93,7 @@ Na úpravy, pri ktorých chceš vidieť každý krok, otvor tento priečinok v C
 | `memory/` | Tvoja pamäť. Formáty sú v [`memory/README.md`](memory/README.md). |
 | `hud/` | Obrazovka, server a appka na plochu pre macOS. |
 | `routines/` | Zadania rutín: budík, ranný brief, večerný denník, stráž pošty. |
-| `scripts/` | Príkazy: štart, orby, budík, video, import dát, aktualizácie. |
+| `scripts/` | Príkazy: štart, orby, odporúčania, budík, video, import dát, aktualizácie. |
 | `docs/` | [Orby](docs/ORBY.md), [hlas](docs/HLAS.md), [video](docs/VIDEO.md), [aktivita](docs/AKTIVITA.md), [Garmin](docs/GARMIN.md), [ovládanie počítača](docs/OVLADANIE.md), [iné modely](docs/MODELY.md), [samostatnosť](docs/AUTONOMIA.md), [hovory](docs/HOVORY.md), [aktualizácie](docs/AKTUALIZACIE.md), [Windows](docs/WINDOWS.md), [plocha Macu](docs/DESKTOP-MAC.md), [API](docs/API.md). |
 
 ## Súkromie a bezpečnosť
@@ -82,12 +117,12 @@ MIT. Rob si s tým, čo chceš.
 
 Jarvis is a personal AI assistant that lives on your desktop: a 3D HUD, a local markdown memory, voice in and out,
 an alarm clock, scheduled routines and background work. It runs on your own computer and on the subscription you
-already have (Claude Code or Codex), with no API keys and no server.
+already have (Claude Code, Codex or Google Antigravity), with no API keys and no server.
 
 It is a base, not a finished product. Everyone gets the same core (mail, tasks, calendar, memory, voice, alarm) and
 tells Jarvis what else they need. He connects it, writes the code and adds it to the desktop as a new orb.
 
-Quick start: download the folder, open it in Claude Code or Codex and type `štart` (or `start`). The assistant prepares
+Quick start: download the folder, open it in Claude Code, Codex or Antigravity and type `štart` (or `start`). The assistant prepares
 the computer and puts Jarvis on the desktop; from there Jarvis leads the setup himself, by voice. The dialogue and the
 UI are in Slovak; ask it to continue in your language if you prefer.
 

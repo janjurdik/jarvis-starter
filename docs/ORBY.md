@@ -61,7 +61,10 @@ Vlastný obsah môže mať aj vstavaný orb: stráž pošty takto plní Poštu.
     { "type": "actions", "items": [ { "label": "Pretrieď znova", "say": "Pretrieď mi poštu." } ] }
   ],
   "items": [
-    { "t": "Ponuka od tlačiarne", "s": "Peter K.", "g": "čaká na teba", "imp": 0.9 },
+    { "t": "Ponuka od tlačiarne", "from": "Peter K.", "at": "dnes 9:14", "g": "čaká na teba", "imp": 0.9,
+      "text": "Posiela cenu za 500 kusov: 1 240 € bez DPH, dodanie do 10 dní.\n\nPýta sa na matný alebo lesklý obal a chce PDF do stredy.",
+      "reply": "Dobrý deň, ďakujem, cena aj termín mi vyhovujú. Prosím o matný obal, PDF pošlem do stredy.",
+      "say": "Uprav odpoveď Petrovi na ponuku od tlačiarne." },
     { "t": "Newsletter", "s": "obchod", "g": "šum", "imp": 0.1 }
   ]
 }
@@ -70,7 +73,11 @@ Vlastný obsah môže mať aj vstavaný orb: stráž pošty takto plní Poštu.
 - `value` a `sub`: číslo a krátky text pri orbe vo svete. `alert: true` znamená, že si pýta pozornosť.
 - `panel`: komponenty, ktoré sa ukážu vnútri orbu (najviac 12).
 - `items`: body vo vnútornom vesmíre orbu, zoskupené podľa `g`. Každý mail, každá faktúra, každý návyk môže byť
-  jedna hviezda; dôležitejšie (`imp` od 0 do 1) sú väčšie a bližšie. Klik na bod ukáže `t`, `s` a voliteľný `text`.
+  jeden bod; body sú rozložené v pravidelných kruhoch, dôležitejšie (`imp` od 0 do 1) sú väčšie a bližšie k stredu.
+  Klik na bod otvorí detail. Čím viac doň napíšeš, tým je užitočnejší:
+  `from` (od koho), `at` (kedy), `text` (samotný obsah, nie len nadpis: čo v maile stojí, kto čo chce, do kedy; odseky
+  oddeľ prázdnym riadkom, najviac 4 000 znakov), `reply` (odpoveď, ktorú navrhuješ) a `say` (veta, ktorú tlačidlo
+  v detaile povie Jarvisovi). Čísla v `value` môžu byť čísla aj text.
 - S `--folder` sa k tomu pridajú poznámky z priečinka v pamäti.
 
 ### Komponenty

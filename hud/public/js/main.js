@@ -76,7 +76,8 @@ function buildNodes(snapshot) {
     projekty: { label: 'Projekty', value: nf(m.projects ?? 0), sub: 'v pamäti' },
     questy: { label: 'Ciele', value: String(q.active ?? 0), sub: q.paused ? `aktívnych · ${q.paused} v pauze` : 'aktívnych' },
     kalendar: { label: 'Kalendár', value: day ? shortDate(day) : '–', sub: `${items.length} ${plural(items.length, 'položka', 'položky', 'položiek')}` },
-    rutiny: { label: 'Rutiny', value: String((snapshot.routines ?? []).length), sub: 'dnes' },
+    // The same number the inside of the orb shows: every routine that is switched on (the alarm included).
+    rutiny: { label: 'Rutiny', value: String(innerCounts.rutiny ?? (snapshot.routines ?? []).length), sub: 'zapnutých' },
     udalosti: { label: 'Denník', value: nf(m.dailyLogs ?? 0), sub: plural(m.dailyLogs ?? 0, 'deň', 'dni', 'dní') },
     spravy: { label: 'Rozhovory', value: nf(m.chatMessages ?? 0), sub: 'správ s Jarvisom' },
     fotky: { label: 'Poznámky', value: nf(m.other ?? 0), sub: 'v pamäti' },
@@ -675,6 +676,7 @@ function connectEvents() {
   // Úlohy: bez wakeUp, bežiaca úloha pokojový režim nebrzdí.
   on('job', (job) => jobs?.apply(job))
   on('apps', (a) => applyApps(a))
+  on('suggest', (s) => renderSuggest(s?.items))
   on('orbs', (o) => paint('orbs', () => applyOrbs(o)))
   on('settings', (st) => settings?.apply(st))
   on('job-feed', (m) => jobs?.feed(m.id, m.entry))
@@ -716,6 +718,36 @@ async function loadHistory() {
 // ── akcie: písanie, hlas, stop, natáčanie ─────────────────────────────────
 
 const errorText = (err, what) => (err.status === 404 ? `${what}: server ešte nepozná toto API.` : err.status === 0 ? `${what}: server neodpovedá.` : `${what}: ${err.message}`)
+
+// ── Odporúčam: what Jarvis would add next (hud/server/suggest.mjs). A click says it to him, the cross drops it. ──
+const suggestEl = document.getElementById('suggest')
+function renderSuggest(items) {
+  const mod = document.getElementById('mod-suggest')
+  if (!mod || !suggestEl) return
+  const list = (Array.isArray(items) ? items : []).slice(0, 2)
+  mod.hidden = !list.length || film
+  suggestEl.innerHTML = list
+    .map((i) => `<li class="sg-i"><button type="button" class="sg-go" data-say="${escAttr(i.say)}"><b>${escAttr(i.title)}</b>${i.why ? `<span>${escAttr(i.why)}</span>` : ''}</button><button type="button" class="sg-x" data-drop="${escAttr(i.id)}" aria-label="Nechcem: ${escAttr(i.title)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></li>`)
+    .join('')
+}
+const escAttr = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+suggestEl?.addEventListener('click', (e) => {
+  const drop = e.target.closest('[data-drop]')
+  if (drop) {
+    fetch('/api/suggest', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ dismiss: drop.dataset.drop }) })
+      .then((r) => r.json())
+      .then((b) => renderSuggest(b.items))
+      .catch(() => {})
+    return
+  }
+  const go = e.target.closest('[data-say]')
+  if (go) send(go.dataset.say, 'text')
+})
+const loadSuggest = () =>
+  fetch('/api/suggest', { cache: 'no-store' })
+    .then((r) => r.json())
+    .then((b) => renderSuggest(b.items))
+    .catch(() => {})
 
 async function send(text, via = 'text') {
   const clean = String(text ?? '').trim()
@@ -1232,6 +1264,7 @@ async function main() {
     if (data.audio) audio = await loadAudio(data.audio)
   }
   const counted = await loadInnerCounts(SCENE_ID ? 1 : 2500)
+  if (!SCENE_ID) loadSuggest()
   if (!SCENE_ID && !CAPTURE) {
     try {
       const a = await (await fetch('/api/apps', { cache: 'no-store', signal: AbortSignal.timeout(2000) })).json()

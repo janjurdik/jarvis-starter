@@ -7,6 +7,7 @@
  * focus on its own (server/autocards.mjs), so Jarvis only has to talk.
  */
 import '../env.mjs'
+import { readFileSync } from 'node:fs'
 import { describeDay, garminConnected, garminDays, loginCommands, readCache, readState, syncGarmin } from '../garmin/index.mjs'
 import { addEvent, calendarRange } from '../memory/calendar.mjs'
 import { FILES, FOLDERS, addTodo, appendUnder, completeTodo, dayStats, findNote, getIndex, goals, logDay, search, slugify, stats, todos, writeNote } from '../memory/index.mjs'
@@ -24,7 +25,16 @@ const label = (day) => {
 }
 
 const HUD = (process.env.HUD_URL || '').replace(/\/$/, '')
-const HUD_TOKEN = process.env.HUD_BRAIN_TOKEN || ''
+// The token comes in the environment (Claude) or in a file only this user can read (Codex, Antigravity), the same as in jarvis-hud.mjs.
+function brainToken() {
+  if (process.env.HUD_BRAIN_TOKEN) return process.env.HUD_BRAIN_TOKEN
+  try {
+    return process.env.HUD_BRAIN_TOKEN_FILE ? readFileSync(process.env.HUD_BRAIN_TOKEN_FILE, 'utf8').trim() : ''
+  } catch {
+    return ''
+  }
+}
+const HUD_TOKEN = brainToken()
 
 /** Data for the automatic card and focus in the HUD. A HUD error never fails the tool. */
 async function auto(tool, data) {

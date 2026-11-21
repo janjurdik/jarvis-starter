@@ -20,7 +20,7 @@
  */
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DATA_DIR, clean } from './util.mjs'
+import { DATA_DIR, clean, cleanBlock } from './util.mjs'
 
 const ORBS_FILE = join(DATA_DIR, 'orbs.json')
 const CONTENT_DIR = join(DATA_DIR, 'orbs')
@@ -93,13 +93,16 @@ const accent = (a) => (ACCENTS.includes(a) ? a : undefined)
 const strip = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ''))
 
 /** One component of the panel. Anything unknown is dropped: the HUD only draws what it has a part for. */
+/** A value on a card may arrive as a number („value": 14): it is shown as written, never dropped. */
+const text = (v, max) => clean(typeof v === 'number' && Number.isFinite(v) ? String(v) : v, max)
+
 function cleanComponent(c) {
   if (!c || typeof c !== 'object') return null
   const title = clean(c.title, 48) || undefined
   const list = (items, max, fn) => (Array.isArray(items) ? items : []).slice(0, max).map(fn).filter(Boolean)
   switch (c.type) {
     case 'stat':
-      return strip({ type: 'stat', label: clean(c.label, 40), value: clean(c.value, 16), unit: clean(c.unit, 12), caption: clean(c.caption, 80), accent: accent(c.accent) })
+      return strip({ type: 'stat', label: clean(c.label, 40), value: text(c.value, 16), unit: clean(c.unit, 12), caption: clean(c.caption, 80), accent: accent(c.accent) })
     case 'ring': {
       const value = num(c.value)
       return value === null ? null : strip({ type: 'ring', label: clean(c.label, 40), value: Math.max(0, Math.min(100, value)), caption: clean(c.caption, 80), accent: accent(c.accent) })
@@ -117,7 +120,7 @@ function cleanComponent(c) {
         type: 'list',
         ...(title ? { title } : {}),
         // `say`: a click sends this sentence to Jarvis, so a row can be a button ("Priprav odpoveď na …").
-        items: list(c.items, 12, (i) => (clean(i?.label, 80) ? strip({ label: clean(i.label, 80), sub: clean(i.sub, 100), value: clean(i.value, 16), accent: accent(i.accent), say: clean(i.say, 240) }) : null)),
+        items: list(c.items, 12, (i) => (clean(i?.label, 80) ? strip({ label: clean(i.label, 80), sub: clean(i.sub, 100), value: text(i.value, 16), accent: accent(i.accent), say: clean(i.say, 240) }) : null)),
       }
     case 'steps':
       return { type: 'steps', ...(title ? { title } : {}), items: list(c.items, 14, (i) => (clean(i?.text, 100) ? { text: clean(i.text, 100), done: i.done === true } : null)) }
@@ -139,12 +142,24 @@ function cleanContent(raw) {
       const t = clean(it?.t ?? it?.title, 80)
       if (!t) return null
       const imp = num(it.imp)
-      return strip({ id: `o:${clean(it.id, 40) || i}`, t, s: clean(it.s ?? it.sub, 120), g: clean(it.g ?? it.group, 32) || 'iné', imp: imp === null ? 0.4 : Math.max(0, Math.min(1, imp)), text: clean(it.text, 600) })
+      // `text` is the content itself (what the mail says, not just its subject) and keeps its paragraphs.
+      return strip({
+        id: `o:${clean(it.id, 40) || i}`,
+        t,
+        s: clean(it.s ?? it.sub, 120),
+        g: clean(it.g ?? it.group, 32) || 'iné',
+        imp: imp === null ? 0.4 : Math.max(0, Math.min(1, imp)),
+        from: clean(it.from, 80),
+        at: clean(it.at ?? it.when, 40),
+        text: cleanBlock(it.text, 4000),
+        reply: cleanBlock(it.reply, 2000),
+        say: clean(it.say, 200),
+      })
     })
     .filter(Boolean)
   const panel = (Array.isArray(raw.panel) ? raw.panel : []).slice(0, 12).map(cleanComponent).filter((c) => c && (!('items' in c) || c.items.length) && (!('series' in c) || c.series.length))
   return strip({
-    value: clean(raw.value, 12),
+    value: text(raw.value, 12),
     sub: clean(raw.sub, 40),
     alert: raw.alert === true ? true : undefined,
     groups: groups.length ? groups : undefined,

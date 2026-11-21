@@ -263,7 +263,19 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
     return outBuf
   }
 
-  // ── mikrofón: stream ostane otvorený po prvom povolení (bez oneskorenia pri ďalšom stlačení) ──
+  // ── microphone ──
+  // Raw capture on purpose: echo cancellation, noise suppression and automatic gain make the system
+  // switch the microphone to its voice processing mode (macOS) or to a communications session
+  // (Windows), and a call running in another app (Discord, Meet, Teams) then loses its microphone
+  // or gets ducked. Whisper does not need any of it. The stream stays open for a short while after
+  // the last use, so the next press has no delay, and is given back after MIC_IDLE_MS.
+  const MIC_AUDIO = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }
+  const MIC_IDLE_MS = 20_000
+  let micIdleTimer = 0
+  const micKeep = () => {
+    clearTimeout(micIdleTimer)
+    micIdleTimer = setTimeout(() => (rec || recog ? micKeep() : micRelease()), MIC_IDLE_MS)
+  }
   let mic = null // {stream, source, analyser, buf}
   let micOpening = null
   let micLevel = 0
@@ -275,7 +287,7 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
     if (!navigator.mediaDevices?.getUserMedia) return null
     micOpening = (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } })
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_AUDIO })
         ensure()
         if (ctx.state !== 'running') ctx.resume().catch(() => undefined)
         const source = ctx.createMediaStreamSource(stream)
@@ -286,6 +298,7 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
         mic = { stream, source, analyser: an, buf: new Float32Array(1024) }
         // Keď macOS alebo Chrome mikrofón odoberie, ďalšie stlačenie ho otvorí znova.
         for (const track of stream.getAudioTracks()) track.addEventListener('ended', () => (mic = null))
+        micKeep()
       } catch (err) {
         onError?.(err)
       } finally {
@@ -307,6 +320,7 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
     wakeAudio()
     const m = await micStart()
     if (!m || typeof MediaRecorder === 'undefined') return false
+    micKeep()
     const type = REC_TYPES.find((t) => MediaRecorder.isTypeSupported?.(t)) ?? ''
     const recorder = new MediaRecorder(m.stream, type ? { mimeType: type, audioBitsPerSecond: 64_000 } : undefined)
     const chunks = []
@@ -338,6 +352,7 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
     rec = null
     if (!r) return Promise.resolve(null)
     clearInterval(r.timer)
+    micKeep()
     return new Promise((done) => {
       r.recorder.addEventListener('stop', () => done({ blob: new Blob(r.chunks, { type: r.type }), ms: Math.round((now() - r.startedAt) * 1000), silent: r.measured && r.peak < SILENCE_RMS }), { once: true })
       try {
@@ -351,6 +366,7 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
   /** Pokoj na ploche: uvoľní mikrofón (ďalšie stlačenie ho znova otvorí). Počas nahrávania nič. */
   function micRelease() {
     if (!mic || rec) return
+    clearTimeout(micIdleTimer)
     for (const track of mic.stream.getTracks()) track.stop()
     mic.source.disconnect()
     mic = null

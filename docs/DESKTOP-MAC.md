@@ -5,7 +5,8 @@ Zdroj je jeden súbor `hud/desktop/main.swift` bez závislostí.
 
 ## Inštalácia
 
-Potrebuješ nástroje Xcode (stačí príkazový riadok): `xcode-select --install`. Potom:
+Pri `štarte` sa appka postaví sama, keď si zvolíš, že chceš Jarvisa na ploche (`--surface desktop`, na Macu predvolené).
+Ručne: potrebuješ nástroje Xcode (stačí príkazový riadok): `xcode-select --install`. Potom:
 
 ```sh
 sh hud/desktop/build.sh --open
@@ -24,8 +25,10 @@ Keď priečinok Jarvisa presunieš alebo zmeníš verziu Node, spusti build znov
 | Vrátiť HUD na plochu | Esc alebo znova ⌃⌥J |
 | Ponuka | ikona Jarvisa v lište hore |
 
-V ponuke nájdeš: Vyvolať Jarvisa, Obnoviť HUD, Otvoriť v prehliadači, Ikony na ploche (zap/vyp),
-Spúšťať po prihlásení (zap/vyp), Ukončiť a vrátiť plochu.
+V ponuke (malý krúžok v lište hore) nájdeš: Ukázať Jarvisa nad oknami, Nastavenia Jarvisa, Zobrazovať ikony na ploche (zap/vyp),
+Spúšťať po zapnutí počítača (zap/vyp), Načítať Jarvisa znova, Otvoriť ako stránku v prehliadači, Vypnúť Jarvisa a vrátiť pôvodnú plochu.
+Tie isté dva prepínače sú aj v Nastaveniach Jarvisa v časti Plocha. Tam sa dá zvoliť aj to, či má Jarvis bývať na ploche,
+alebo v okne prehliadača (`surface` v `config/jarvis.json`: `desktop` alebo `web`).
 
 - **Ikony na ploche.** Aby kliky išli priamo do HUD, dajú sa skryť ikony plochy (appka prepne nastavenie Findera).
   Súbory ostávajú v priečinku Plocha, len ich nevidno na tapete. Appka to nikdy nespraví sama, len keď to zapneš v ponuke.

@@ -136,15 +136,19 @@ serveMcp({
     {
       name: 'agent_task',
       description:
-        'Spustí úlohu na pozadí: plnohodnotný Claude Code v priečinku Jarvisa (súbory a pamäť, web, pripojené konektory ako mail a kalendár). Na všetko, čo je reálna práca na viac krokov: rešerš, dokument, upratanie poznámok, príprava mailu. Vráti hneď id, výsledok HUD ohlási sám. task = úplné zadanie v jednej až pár vetách (čo, kde, kedy je hotovo), title = 2 až 5 slov.',
+        'Spustí úlohu na pozadí: plnohodnotný Claude Code v priečinku Jarvisa (súbory a pamäť, web, pripojené konektory ako mail a kalendár). Na všetko, čo je reálna práca na viac krokov: rešerš, dokument, upratanie poznámok, príprava mailu. Vráti hneď id, výsledok HUD ohlási sám. task = úplné zadanie v jednej až pár vetách (čo, kde, kedy je hotovo), title = 2 až 5 slov, weight = aká je úloha ťažká (podľa toho sa vyberie model).',
       inputSchema: {
         type: 'object',
-        properties: { task: { type: 'string' }, title: { type: 'string', description: 'Krátky názov, 2 až 5 slov.' } },
-        required: ['task', 'title'],
+        properties: {
+          task: { type: 'string' },
+          title: { type: 'string', description: 'Krátky názov, 2 až 5 slov.' },
+          weight: { type: 'string', enum: ['light', 'normal', 'heavy'], description: 'light = pozrieť, zistiť, skontrolovať, zhrnúť (rýchly model). heavy = vytvoriť, napísať, naprogramovať, analyzovať, naplánovať (najsilnejší model). normal = všetko medzi tým.' },
+        },
+        required: ['task', 'title', 'weight'],
       },
-      handler: async ({ task, title }) => {
-        const r = await hud('job_task', { task, title })
-        return r.isError ? r : `Úloha ${r.job.id} „${r.job.title}" ${r.job.status === 'queued' ? 'čaká vo fronte' : 'beží'}. Povedz jednu vetu a skonči, výsledok HUD ohlási sám.`
+      handler: async ({ task, title, weight }) => {
+        const r = await hud('job_task', { task, title, weight })
+        return r.isError ? r : `Úloha ${r.job.id} „${r.job.title}" ${r.job.status === 'queued' ? 'čaká vo fronte' : 'beží'}${r.job.route ? ` (${r.job.route})` : ''}. Povedz jednu vetu, v ktorej zaznie aj to, aká je úloha náročná a na čom ju robíš, a skonči. Výsledok HUD ohlási sám.`
       },
     },
     {
@@ -206,6 +210,24 @@ serveMcp({
         if (r.isError) return r
         const s = r.setup
         return s.done ? 'Nastavenie je uzavreté.' : `Hotové: ${s.hotove.join(', ') || 'nič'}. Ďalší krok: ${s.next ?? 'ukončiť nastavenie (finished: true)'}.${s.caka.length ? ` Čaká na neho: ${s.caka.join('; ')}.` : ''}`
+      },
+    },
+    {
+      name: 'suggest',
+      description:
+        'Tvoj zoznam odporúčaní: čo by sa používateľovi oplatilo pridať, podľa toho, čo si si všimol (v pošte chodia faktúry, na počítači je appka, ktorú nemáš pripojenú, opakuje sa mu rovnaká práca). Odporúčanie sa ukáže na ploche a on naň stačí kliknúť. Pridaj ho, keď si niečo také všimneš, aj keď sa na to nepýtal: title = čo pridať (2 až 5 slov), why = jedna veta, z čoho to vidíš, say = veta, ktorou ti to zadá. Keď je vec hotová alebo ju nechce, pošli done s jej id.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', description: 'Čo pridať, 2 až 5 slov, napríklad Orb Financie.' },
+          why: { type: 'string', description: 'Jedna veta: z čoho to vidíš a čo mu to dá.' },
+          say: { type: 'string', description: 'Veta, ktorú ti má povedať, aby si to spravil, napríklad: Sprav mi orb Financie z faktúr v pošte.' },
+          done: { type: 'string', description: 'Id odporúčania, ktoré je vybavené alebo ho nechce.' },
+        },
+      },
+      handler: async ({ title, why, say, done }) => {
+        const r = await hud('suggest', done ? { done } : { idea: { title, why, say } })
+        return r.isError ? r : `Na zozname je ${r.items.length} odporúčaní: ${r.items.map((i) => `${i.title} (${i.id})`).join(', ') || 'nič'}.`
       },
     },
     {

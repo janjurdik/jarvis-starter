@@ -42,9 +42,18 @@ class MicFrames extends AudioWorkletProcessor {
     this.n = 0
     this.sumSq = 0
     this.buf = new Float32Array(128)
+    // Slow automatic gain: the microphone is captured raw (no system voice processing, so calls in
+    // other apps keep working), and a quiet microphone would otherwise fall under the wake word's ear.
+    this.gain = 1
+    this.env = 0
   }
 
-  push(v) {
+  push(x) {
+    // Envelope follower (fast attack, slow release), gain towards a peak of 0.25, at most 8×, never below 1×.
+    const a = x < 0 ? -x : x
+    this.env = a > this.env ? a : this.env * 0.99995
+    if (this.env > 0.01) this.gain += (Math.min(8, Math.max(1, 0.25 / this.env)) - this.gain) * 0.0005
+    const v = x * this.gain
     const s = v > 1 ? 1 : v < -1 ? -1 : v
     this.frame[this.n++] = s < 0 ? s * 0x8000 : s * 0x7fff
     this.sumSq += s * s

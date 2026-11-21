@@ -60,7 +60,11 @@ function heroHtml(d) {
   const chips = d.chips?.length ? `<div class="dz-chips">${d.chips.map((c) => `<span>${esc(c)}</span>`).join('')}</div>` : ''
   const stats = d.stats?.length ? `<div class="dz-stats">${d.stats.map((s) => `<div><b>${esc(s.value)}</b><span>${esc(s.label)}</span></div>`).join('')}</div>` : ''
   const steps = d.steps?.length ? `<ul class="dz-steps">${d.steps.map((s) => `<li class="${s.done ? 'is-done' : ''}">${esc(s.text)}</li>`).join('')}</ul>` : ''
-  const sections = (d.sections ?? []).map((s) => `<section><h4>${esc(s.title)}</h4><ul>${s.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul></section>`).join('')
+  // A section is a list of lines, or one block of text that keeps its paragraphs (the reply Jarvis prepared).
+  const paras = (text) => String(text).split(/\n{2,}/).map((p) => `<p>${esc(p.trim()).replace(/\n/g, '<br>')}</p>`).join('')
+  const sections = (d.sections ?? []).map((s) => `<section><h4>${esc(s.title)}</h4>${s.text ? `<div class="dz-prose">${paras(s.text)}</div>` : `<ul>${(s.lines ?? []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>`}</section>`).join('')
+  const body = d.paragraphs?.length ? `<div class="dz-prose">${d.paragraphs.map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>` : d.text ? `<p class="dz-hero-text">${esc(d.text)}</p>` : ''
+  const actions = d.actions?.length ? `<div class="dz-acts">${d.actions.map((a, i) => `<button type="button" class="dz-act${i ? ' is-quiet' : ''}" data-say="${esc(a.say)}">${esc(a.label)}</button>`).join('')}</div>` : ''
   const timeline = d.timeline?.length ? `<section><h4>Dni v denníku</h4><div class="dz-chips">${d.timeline.map((t) => `<span>${esc(t.label)}</span>`).join('')}</div></section>` : ''
   const people = d.people?.length
     ? `<section><h4>Ľudia</h4><div class="dz-links">${d.people
@@ -77,8 +81,8 @@ function heroHtml(d) {
     <div class="dz-hero-title">${esc(d.title)}</div>
     ${d.sub ? `<div class="dz-sub">${esc(d.sub)}</div>` : ''}
     ${chips}${stats}
-    ${d.text ? `<p class="dz-hero-text">${esc(d.text)}</p>` : ''}
-    ${steps}${sections}${people}${projects}${gallery}${timeline}
+    ${body}
+    ${steps}${sections}${actions}${people}${projects}${gallery}${timeline}
   </div>`
 }
 
@@ -125,17 +129,19 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
   root.id = 'dossier'
   root.className = 'dz'
   root.hidden = true
-  root.innerHTML = `<header class="dz-head"><div class="dz-kicker"></div><div class="dz-headline"></div><div class="dz-comment"></div><div class="dz-legend"></div></header>
+  root.innerHTML = `<header class="dz-head">
+      <button type="button" class="leave" aria-label="Opustiť"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6M4 12h16"/></svg>Opustiť<kbd>Esc</kbd></button>
+      <div class="dz-title"><div class="dz-headline"></div><div class="dz-comment"></div></div>
+      <div class="dz-legend"></div>
+    </header>
     <aside class="dz-kit" hidden><div class="dz-kit-in"></div></aside>
     <div class="dz-tags"></div>
     <div class="dz-tip" hidden><b></b><span></span></div>
-    <aside class="dz-hero" hidden><button type="button" class="dz-x" aria-label="Zavrieť detail">×</button><div class="dz-hero-in"></div></aside>
+    <aside class="dz-hero" hidden><button type="button" class="dz-x" aria-label="Zavrieť detail"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button><div class="dz-hero-in"></div></aside>
     <div class="dz-light" hidden><img alt=""></div>
-    <button type="button" class="leave" aria-label="Opustiť"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6M4 12h16"/></svg>Opustiť</button>
     <div class="dz-hint"></div>`
   document.body.append(root)
   const el = {
-    kicker: root.querySelector('.dz-kicker'),
     headline: root.querySelector('.dz-headline'),
     comment: root.querySelector('.dz-comment'),
     legend: root.querySelector('.dz-legend'),
@@ -206,6 +212,16 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     root.classList.toggle('has-kit', panel.length > 0)
   }
 
+  // The inspector and the panel hang under the header, wherever it really ends (a long name or a
+  // second row of groups makes it taller), so they can never slide under it.
+  const headEl = root.querySelector('.dz-head')
+  const measureHead = () => {
+    const b = headEl.getBoundingClientRect().bottom
+    if (b > 0) root.style.setProperty('--head-b', `${Math.round(b)}px`)
+  }
+  new ResizeObserver(measureHead).observe(headEl)
+  window.addEventListener('resize', measureHead)
+
   const HINT_SPACE = `<span>ťahaj</span> otáčanie · <span>koliesko / pinch</span> let · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · <span>dvojklik</span> priletieť · <kbd>Esc</kbd> späť`
   /** A board stands still, so it only says what a click does. */
   const HINT_BOARD = '<span>klik</span> otvorí položku · <kbd>Esc</kbd> späť'
@@ -214,10 +230,21 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     const hint = d?.layout === 'board' ? HINT_BOARD : HINT_SPACE
     const hintEl = root.querySelector('.dz-hint')
     if (hintEl._html !== hint) hintEl.innerHTML = hintEl._html = hint
-    el.kicker.textContent = 'Vnútro planéty'
     el.headline.textContent = d?.title ?? titleOf(node) ?? ''
     const items = d?.items ?? []
-    el.comment.textContent = !d ? 'Vstupujem…' : !items.length && node === 'posta' && !d.panel ? 'Pošta ešte nie je pripojená. Povedz „pripoj mi poštu" a prevediem ťa tým.' : !items.length ? (d.panel ? '' : 'Zatiaľ je tu prázdno. Stačí povedať a začnem to sem zapisovať.') : `${nfmt(items.length)} ${items.length === 1 ? 'položka' : items.length < 5 && items.length > 1 ? 'položky' : 'položiek'}`
+    const noMail = Boolean(d) && !items.length && node === 'posta' && !d.panel
+    el.comment.textContent = !d ? 'Vstupujem…' : noMail ? 'Pošta ešte nie je pripojená. Keď ju pripojím, uvidíte tu každý mail aj s tým, čo v ňom stojí.' : !items.length ? (d.panel ? '' : 'Zatiaľ je tu prázdno. Stačí povedať a začnem to sem zapisovať.') : `${nfmt(items.length)} ${items.length === 1 ? 'položka' : items.length < 5 && items.length > 1 ? 'položky' : 'položiek'}`
+    // An empty mail planet does not leave the user with a sentence to remember: one button says it for him.
+    let cta = root.querySelector('.dz-cta')
+    if (noMail && !cta) {
+      cta = document.createElement('button')
+      cta.type = 'button'
+      cta.className = 'dz-act dz-cta'
+      cta.dataset.say = 'Pripoj mi poštu.'
+      cta.textContent = 'Pripojiť poštu'
+      cta.addEventListener('click', () => onAsk(cta.dataset.say))
+      root.querySelector('.dz-title').append(cta)
+    } else if (!noMail && cta) cta.remove()
     // Časová os: najnovšie roky, klik preletí k ich galaxii. Inak skupiny ako legenda.
     const years = d?.layout === 'years'
     const groups = years ? [...(d?.groups ?? [])].reverse().slice(0, 12) : d?.layout === 'board' ? [] : (d?.groups ?? []).slice(0, 8)
@@ -261,8 +288,8 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     for (const im of el.heroIn.querySelectorAll('img')) im.removeAttribute('src')
     el.heroIn.innerHTML = heroHtml(d)
     el.heroIn.scrollTop = 0
-    el.hero.scrollTop = 0
     el.hero.hidden = false
+    root.classList.add('has-hero')
     wireHero()
   }
 
@@ -300,6 +327,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     for (const im of el.heroIn.querySelectorAll('img')) im.removeAttribute('src')
     el.heroIn.textContent = ''
     el.hero.hidden = true
+    root.classList.remove('has-hero')
   }
 
   /** Odkaz z inspektora: položka v tomto svete → prelet k nej, inak len jej detail. */
@@ -442,6 +470,8 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
         t.classList.toggle('is-row', board)
         if (board) t.innerHTML = `<b>${esc(l.item.t)}</b>${l.item.s ? `<i>${esc(l.item.s)}</i>` : ''}`
         else t.textContent = l.item.t
+        // A row has room for one line of the name: the whole of it is in the tooltip and in the detail a click opens.
+        t.title = board ? l.item.t : ''
         if (!board) t.style.maxWidth = t.style.fontSize = ''
       }
       t.classList.toggle('is-sel', l.i === w?.sel || (board && l.i === w?.hover))
@@ -559,6 +589,8 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
   el.heroIn.addEventListener('click', (e) => {
     const link = e.target.closest('.dz-link')
     if (link) return follow(link.dataset.node, link.dataset.id)
+    const act = e.target.closest('[data-say]')
+    if (act) return onAsk(act.dataset.say)
     const g = e.target.closest('.dz-gallery button')
     if (g) lightbox(g.dataset.full)
   })

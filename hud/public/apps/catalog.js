@@ -3,8 +3,8 @@
 // so keep it free of DOM code.
 //
 // app: { id, name, group, icon?, mono?, color?, glyph?, how, connector?, guide?, find?, gives }
-//   icon       Simple Icons slug in brands.js; without it the tile shows `glyph` (a small drawing below)
-//              or `mono` (one or two letters) in `color`
+//   icon       Simple Icons slug in brands.js; without it the tile shows `glyph` (a small drawing in glyph.js)
+//              in `color`. Every app in the catalog has one or the other: letters (`mono`) are only for apps the user typed in
 //   how        connector  Claude connector, live (Nastavenia → Konektory → `connector`)
 //              export     a copy of the user's data, walkthrough at /guide/#`guide`
 //              beeper     live chats through the Beeper connector
@@ -34,10 +34,10 @@ export const APPS = [
   // Mail a kalendár: the base everyone starts with.
   { id: 'gmail', name: 'Gmail', group: 'mail', icon: 'gmail', how: 'connector', connector: 'Gmail', find: ['gmail', '@gmail.com'], gives: 'Kto čaká na odpoveď, návrhy odpovedí, stráž pošty.' },
   { id: 'googlecalendar', name: 'Google Kalendár', group: 'mail', icon: 'googlecalendar', how: 'connector', connector: 'Google Calendar', find: ['google calendar', 'calendar.google.com'], gives: 'Čo ťa čaká, pripomienky pred stretnutiami, budík vie tvoj deň.' },
-  { id: 'outlook', name: 'Outlook', group: 'mail', mono: 'O', color: '#0F78D4', how: 'connector', connector: 'Microsoft 365', find: ['outlook'], gives: 'Pošta a kalendár z práce alebo školy.' },
+  { id: 'outlook', name: 'Outlook', group: 'mail', glyph: 'mail', color: '#0F78D4', how: 'connector', connector: 'Microsoft 365', find: ['outlook'], gives: 'Pošta a kalendár z práce alebo školy.' },
   { id: 'applecalendar', name: 'Kalendár na Macu', group: 'mail', glyph: 'calendar', color: '#FF3B30', how: 'auto', perm: 'calendar', find: [], gives: 'Udalosti na 30 dní dopredu.' },
   { id: 'icloudmail', name: 'iCloud Mail', group: 'mail', icon: 'icloud', how: 'ask', find: ['apple mail'], gives: 'Pošta z Apple účtu.' },
-  { id: 'seznam', name: 'Seznam Email', group: 'mail', mono: 'S', color: '#CC0000', how: 'ask', find: ['seznam'], gives: 'Pošta zo Seznamu.' },
+  { id: 'seznam', name: 'Seznam Email', group: 'mail', glyph: 'mail', color: '#CC0000', how: 'ask', find: ['seznam'], gives: 'Pošta zo Seznamu.' },
   { id: 'protonmail', name: 'Proton Mail', group: 'mail', icon: 'protonmail', how: 'ask', find: ['proton'], gives: 'Šifrovaná pošta.' },
 
   // Správy
@@ -47,8 +47,8 @@ export const APPS = [
   { id: 'telegram', name: 'Telegram', group: 'chat', icon: 'telegram', how: 'export', guide: 'telegram', find: ['telegram'], gives: 'Rozhovory a skupiny.' },
   { id: 'signal', name: 'Signal', group: 'chat', icon: 'signal', how: 'beeper', find: ['signal'], gives: 'Správy naživo, keď máš Beeper.' },
   { id: 'imessage', name: 'iMessage a SMS', group: 'chat', icon: 'imessage', how: 'auto', perm: 'messages', find: ['imessage', 'správy (imessage'], gives: 'S kým si píšeš najviac (len počty, nie text).' },
-  { id: 'slack', name: 'Slack', group: 'chat', mono: 'S', color: '#E01E5A', how: 'connector', connector: 'Slack', find: ['slack'], gives: 'Pracovné kanály naživo a ranný prehľad z nich.' },
-  { id: 'teams', name: 'Microsoft Teams', group: 'chat', mono: 'T', color: '#6264A7', how: 'connector', connector: 'Microsoft 365', find: ['teams'], gives: 'Správy a porady z práce alebo školy.' },
+  { id: 'slack', name: 'Slack', group: 'chat', glyph: 'hash', color: '#E01E5A', how: 'connector', connector: 'Slack', find: ['slack'], gives: 'Pracovné kanály naživo a ranný prehľad z nich.' },
+  { id: 'teams', name: 'Microsoft Teams', group: 'chat', glyph: 'team', color: '#6264A7', how: 'connector', connector: 'Microsoft 365', find: ['teams'], gives: 'Správy a porady z práce alebo školy.' },
   { id: 'viber', name: 'Viber', group: 'chat', icon: 'viber', how: 'ask', find: ['viber'], gives: 'Rozhovory s rodinou.' },
 
   // Úlohy a poznámky
@@ -69,7 +69,7 @@ export const APPS = [
   { id: 'googledrive', name: 'Google Disk', group: 'files', icon: 'googledrive', how: 'connector', connector: 'Google Drive', find: ['google drive', 'google disk'], gives: 'Dokumenty, tabuľky a súbory v cloude.' },
   { id: 'googledocs', name: 'Google Dokumenty', group: 'files', icon: 'googledocs', how: 'connector', connector: 'Google Drive', find: [], gives: 'Texty, ktoré píšeš a zdieľaš.' },
   { id: 'googlesheets', name: 'Google Tabuľky', group: 'files', icon: 'googlesheets', how: 'connector', connector: 'Google Drive', find: [], gives: 'Evidencie a tabuľky, ktoré ti Jarvis vedie a dopĺňa.' },
-  { id: 'onedrive', name: 'OneDrive a Office', group: 'files', mono: 'O', color: '#0364B8', how: 'connector', connector: 'Microsoft 365', find: ['onedrive', 'microsoft word', 'microsoft excel'], gives: 'Word, Excel a súbory z OneDrivu.' },
+  { id: 'onedrive', name: 'OneDrive a Office', group: 'files', glyph: 'cloud', color: '#0364B8', how: 'connector', connector: 'Microsoft 365', find: ['onedrive', 'microsoft word', 'microsoft excel'], gives: 'Word, Excel a súbory z OneDrivu.' },
   { id: 'dropbox', name: 'Dropbox', group: 'files', icon: 'dropbox', how: 'ask', find: ['dropbox'], gives: 'Súbory v cloude.' },
   { id: 'icloud', name: 'iCloud', group: 'files', icon: 'icloud', how: 'export', guide: 'apple', find: ['icloud'], gives: 'Kópia dát z Apple účtu.' },
   { id: 'applephotos', name: 'Fotky', group: 'files', glyph: 'flower', color: '#FF2D55', how: 'auto', perm: 'photos', find: ['knižnica fotiek', 'photos library'], gives: 'Albumy, výlety a ľudia na fotkách.' },
@@ -80,7 +80,7 @@ export const APPS = [
   { id: 'facebook', name: 'Facebook', group: 'social', icon: 'facebook', how: 'export', guide: 'facebook', find: ['facebook'], gives: 'Priatelia, udalosti, narodeniny a príspevky.' },
   { id: 'tiktok', name: 'TikTok', group: 'social', icon: 'tiktok', how: 'export', guide: 'tiktok', find: ['tiktok'], gives: 'Čo pozeráš a čo tvoríš.' },
   { id: 'youtube', name: 'YouTube', group: 'social', icon: 'youtube', how: 'export', guide: 'google', find: ['youtube'], gives: 'Čo ťa baví a čo sa učíš. Video mi stačí poslať ako odkaz.' },
-  { id: 'linkedin', name: 'LinkedIn', group: 'social', mono: 'in', color: '#0A66C2', how: 'export', guide: 'linkedin', find: ['linkedin'], gives: 'Kariéra a pracovné kontakty.' },
+  { id: 'linkedin', name: 'LinkedIn', group: 'social', glyph: 'linked', color: '#0A66C2', how: 'export', guide: 'linkedin', find: ['linkedin'], gives: 'Kariéra a pracovné kontakty.' },
   { id: 'x', name: 'X', group: 'social', icon: 'x', how: 'export', guide: 'x', find: ['twitter'], gives: 'Tvoje príspevky a koho sleduješ.' },
   { id: 'snapchat', name: 'Snapchat', group: 'social', icon: 'snapchat', how: 'export', guide: 'snapchat', find: ['snapchat'], gives: 'Priatelia a spomienky.' },
   { id: 'reddit', name: 'Reddit', group: 'social', icon: 'reddit', how: 'ask', find: ['reddit'], gives: 'Komunity a témy, ktoré ťa zaujímajú.' },
@@ -113,10 +113,10 @@ export const APPS = [
   { id: 'epicgames', name: 'Epic Games', group: 'games', icon: 'epicgames', how: 'auto', find: ['epic games'], gives: 'Hry z Epicu.' },
   { id: 'minecraft', name: 'Minecraft', group: 'games', glyph: 'cube', color: '#62B47A', how: 'auto', find: ['minecraft'], gives: 'Svety a servery, kde hráš.' },
   { id: 'playstation', name: 'PlayStation', group: 'games', icon: 'playstation', how: 'ask', find: ['playstation'], gives: 'Hry a trofeje.' },
-  { id: 'xbox', name: 'Xbox', group: 'games', mono: 'X', color: '#107C10', how: 'auto', find: ['xbox'], gives: 'Hry a úspechy.' },
+  { id: 'xbox', name: 'Xbox', group: 'games', glyph: 'pad', color: '#107C10', how: 'auto', find: ['xbox'], gives: 'Hry a úspechy.' },
 
   // Škola
-  { id: 'edupage', name: 'EduPage', group: 'school', mono: 'E', color: '#E85A2B', how: 'ask', find: ['edupage'], gives: 'Rozvrh, známky a domáce úlohy.' },
+  { id: 'edupage', name: 'EduPage', group: 'school', glyph: 'school', color: '#E85A2B', how: 'ask', find: ['edupage'], gives: 'Rozvrh, známky a domáce úlohy.' },
   { id: 'googleclassroom', name: 'Google Classroom', group: 'school', icon: 'googleclassroom', how: 'ask', find: ['classroom'], gives: 'Zadania a termíny.' },
   { id: 'moodle', name: 'Moodle', group: 'school', icon: 'moodle', how: 'ask', find: ['moodle'], gives: 'Kurzy a odovzdávky.' },
   { id: 'unisystem', name: 'Univerzitný systém', group: 'school', glyph: 'school', color: '#7FF3FF', how: 'file', file: 'rozvrh alebo kalendár (.ics) zo systému školy', find: ['muni', 'rozvrh', 'is.muni', 'ais2'], gives: 'Rozvrh, skúšky a termíny odovzdávok.' },
@@ -125,7 +125,7 @@ export const APPS = [
   // Práca a tvorba
   { id: 'github', name: 'GitHub', group: 'work', icon: 'github', how: 'connector', connector: 'GitHub', find: ['github'], gives: 'Na čom programuješ a čo čaká na review.' },
   { id: 'figma', name: 'Figma', group: 'work', icon: 'figma', how: 'connector', connector: 'Figma', find: ['figma'], gives: 'Návrhy a dizajn.' },
-  { id: 'canva', name: 'Canva', group: 'work', mono: 'C', color: '#00C4CC', how: 'connector', connector: 'Canva', find: ['canva'], gives: 'Grafiky a príspevky.' },
+  { id: 'canva', name: 'Canva', group: 'work', glyph: 'brush', color: '#00C4CC', how: 'connector', connector: 'Canva', find: ['canva'], gives: 'Grafiky a príspevky.' },
   { id: 'linear', name: 'Linear', group: 'work', icon: 'linear', how: 'connector', connector: 'Linear', find: ['linear'], gives: 'Issues a cykly tímu.' },
   { id: 'zoom', name: 'Zoom', group: 'work', icon: 'zoom', how: 'ask', find: ['zoom'], gives: 'Porady a ich zápisy.' },
   { id: 'airtable', name: 'Airtable', group: 'work', icon: 'airtable', how: 'ask', find: ['airtable'], gives: 'Databázy a evidencie.' },

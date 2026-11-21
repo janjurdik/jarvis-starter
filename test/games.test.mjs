@@ -15,6 +15,9 @@ const { dedupeGames, defaultEnv, detectGames, iso, normName, parseIni, parseReg,
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'games')
 const NOW = Date.parse('2026-11-17T12:00:00Z')
+// The clock of the detectors. Fixture folders are created while the test runs, so times derived
+// from them (Riot) are today's: a fixed clock in the past would call them „from the future" and drop them.
+const CLOCK = Math.max(NOW, Date.now())
 
 /** Copies a fixture tree into the temp folder and puts its real path where the files say {{ROOT}}. */
 function stage(name) {
@@ -68,7 +71,7 @@ function winEnv(root) {
     drives: [join(root, 'drive')],
     reg: async (key) => new Map([...tree].filter(([path]) => path === full(key) || path.startsWith(`${full(key)}\\`))),
     sqlite: sqliteReader,
-    now: NOW,
+    now: CLOCK,
   })
 }
 
@@ -212,7 +215,7 @@ test('Windows: with userFolders off nothing under Desktop, Documents and Downloa
 
 test('macOS: Steam, games by app category, well-known names, Riot, launchers are not games', async () => {
   const root = stage('mac')
-  const env = defaultEnv({ platform: 'darwin', home: join(root, 'home'), macSupport: join(root, 'Support'), shared: join(root, 'Shared'), appDirs: [join(root, 'Applications')], sqlite: sqliteReader, now: NOW })
+  const env = defaultEnv({ platform: 'darwin', home: join(root, 'home'), macSupport: join(root, 'Support'), shared: join(root, 'Shared'), appDirs: [join(root, 'Applications')], sqlite: sqliteReader, now: CLOCK })
   const res = await detectGames(env)
   assert.deepEqual(res.errors, [])
   const by = (name) => res.games.find((g) => g.name === name)

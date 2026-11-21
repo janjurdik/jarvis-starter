@@ -69,6 +69,8 @@ export const parseArgs =
 // ── where the updater keeps its things ──
 
 export const MANIFEST = 'jarvis.manifest.json'
+/** The signature of the manifest. It cannot be listed in the manifest it signs, so it travels with it: never compared, always replaced. */
+export const MANIFEST_SIG = `${MANIFEST}.sig`
 /** Version of the plan and session file format. A newer updater refuses files written by an older one. */
 export const SCHEMA = 1
 export const DEFAULT_REPO = 'janjurdik/jarvis-starter'

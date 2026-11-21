@@ -185,6 +185,32 @@ button.chip:hover { background: var(--fill-2); color: var(--t1); }
 .chip-set { padding: 0 0.6rem; }
 .chip-set:hover { color: var(--white); box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.5); }
 
+/* What a chip is for: its name and one sentence, in a small pane under it (js/ui.js). */
+.tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: max-content;
+  max-width: 17.5rem;
+  padding: 0.75rem 0.95rem 0.8rem;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgba(12, 26, 34, 0.94), rgba(6, 13, 19, 0.94));
+  box-shadow: inset 0 1px 0 rgba(210, 250, 255, 0.12), 0 1rem 2.4rem rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.tip.is-on { opacity: 1; }
+.tip[hidden] { display: none; }
+.tip b { font: 600 0.9375rem/1.2 var(--sans); color: var(--white); }
+.tip span { font: 400 0.875rem/1.4 var(--sans); color: var(--t2); text-wrap: pretty; }
+
 .clock { justify-self: end; display: flex; flex-direction: column; align-items: flex-end; gap: 0.2rem; }
 .clock-main { display: flex; align-items: baseline; gap: 0.15rem; }
 .clock-hm { font: 300 2rem/1 var(--sans); letter-spacing: -0.02em; color: var(--t1); }
@@ -333,8 +359,8 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
 
 .today-top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(6.4rem, max-content);
-  grid-template-areas: 'time art' 'date meta';
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'time art' 'date temp' 'wx wx';
   align-items: end;
   column-gap: 0.5rem;
 }
@@ -350,14 +376,16 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
   filter: drop-shadow(0 0 1.2rem rgba(127, 243, 255, 0.28));
 }
 .hero-hm .colon { -webkit-text-fill-color: rgba(234, 251, 255, 0.5); margin: 0 0.02em; }
-.today-date { grid-area: date; min-width: 0; margin-top: 0.75rem; font: 500 1rem/1.2 var(--sans); color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.today-date { grid-area: date; min-width: 0; margin-top: 0.75rem; font: 500 1rem/1.25 var(--sans); color: var(--t2); text-wrap: balance; }
 .today-date::first-letter { text-transform: uppercase; }
 .wx-art { grid-area: art; justify-self: end; width: 6.4rem; height: 6.4rem; margin: -1.2rem -0.55rem -0.6rem 0; }
-/* Teplota nad popisom, oboje zarovnané k ikone: dlhý popis („zamračené, slabý dážď · Bratislava") sa skráti, nikdy nevyjde z dosky. */
-.wx-meta { grid-area: meta; justify-self: end; min-width: 0; max-width: 8.5rem; display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; white-space: nowrap; }
-.wx-temp { font: 300 1.6rem/1 var(--sans); letter-spacing: -0.02em; color: var(--t1); }
+/* The date and the temperature share a line; the weather and the place get a line of their own across the
+   whole pane, and wrap when they are long („zamračené, slabý dážď · Banská Bystrica"). Nothing here is ever cut. */
+.wx-temp { grid-area: temp; justify-self: end; align-self: end; font: 300 1.6rem/1 var(--sans); letter-spacing: -0.02em; color: var(--t1); white-space: nowrap; }
 .wx-temp sup { font-size: 0.875rem; vertical-align: 0.75em; margin-left: 0.08em; color: var(--t2); }
-.wx-text { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font: 500 0.875rem/1.2 var(--sans); color: var(--t3); }
+.wx-text { grid-area: wx; min-width: 0; margin-top: 0.35rem; font: 500 0.875rem/1.3 var(--sans); color: var(--t3); overflow-wrap: anywhere; }
+.wx-text::first-letter { text-transform: uppercase; }
+.wx-text:empty { display: none; }
 
 /* Spánok: prstenec skóre, dĺžka, týždeň. */
 .sleep { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 1.1rem; margin-top: 1.35rem; }
@@ -403,8 +431,8 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
 .ev-time { font: 500 1rem/1 var(--mono); color: var(--t1); }
 .ev-body { min-width: 0; }
 .ev-time.allday { font: 600 0.875rem/1.1 var(--sans); }
-.ev-title { display: block; font: 500 1rem/1.25 var(--sans); color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ev-sub { display: block; margin-top: 0.15rem; font: 500 0.8125rem/1.2 var(--sans); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev-title { font: 500 1rem/1.25 var(--sans); color: var(--t1); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.ev-sub { margin-top: 0.15rem; font: 500 0.8125rem/1.25 var(--sans); color: var(--t3); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .ev.next { background: linear-gradient(90deg, rgba(255, 178, 92, 0.13), rgba(255, 178, 92, 0.03)); }
 .ev.next::before {
   content: '';
@@ -454,7 +482,7 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
 }
 .tl-row .em { width: 1.75rem; height: 1.75rem; color: var(--ice); background: var(--bg); border-radius: 50%; }
 .tl-t { font: 500 0.875rem/1 var(--mono); color: var(--t2); white-space: nowrap; }
-.tl-n { min-width: 0; font: 500 0.9375rem/1.2 var(--sans); color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-n { min-width: 0; font: 500 0.9375rem/1.2 var(--sans); color: var(--t1); overflow-wrap: anywhere; }
 .tl-n small { font: 500 0.8125rem/1 var(--sans); color: var(--t3); margin-left: 0.45rem; }
 .tl-s { font: 500 0.8125rem/1 var(--sans); color: var(--t3); white-space: nowrap; }
 .tl-row.past { opacity: 0.42; }
@@ -617,7 +645,7 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
 .card-c { margin-top: 0.4rem; font: 500 0.875rem/1.3 var(--sans); color: var(--t3); }
 .card-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
 .card-list li { display: grid; grid-template-columns: 1fr auto; column-gap: 0.8rem; align-items: baseline; padding: 0.25rem 0; }
-.card-list .cl-l { font: 500 0.9375rem/1.3 var(--sans); color: var(--t1); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-list .cl-l { font: 500 0.9375rem/1.3 var(--sans); color: var(--t1); min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .card-list .cl-l small { display: block; font-size: 0.8125rem; color: var(--t3); }
 .card-list .cl-v { font: 500 0.875rem/1 var(--mono); color: var(--ice); }
 .card-text { margin: 0.5rem 0 0; font: 400 0.9375rem/1.45 var(--sans); color: var(--t2); }
@@ -683,7 +711,7 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
 .le-t { font: 400 0.8125rem/1 var(--mono); color: var(--t4); }
 .le-i { display: flex; color: var(--t3); }
 .le-i .ic { width: 1.15rem; height: 1.15rem; filter: none; }
-.le-x { font: 500 0.9375rem/1.2 var(--sans); color: var(--t1); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.le-x { font: 500 0.9375rem/1.25 var(--sans); color: var(--t1); min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .le-x span { color: var(--t3); }
 .log li.t-action .le-i, .log li.t-done .le-i { color: var(--ice); }
 .log li.t-action .le-i .ic, .log li.t-done .le-i .ic { filter: drop-shadow(0 0 0.25em rgba(127, 243, 255, 0.5)); }
@@ -1052,6 +1080,20 @@ body.scene .keys, body.capture .keys { display: none; }
 
 /* ── Úlohy: agentická práca Jarvisa na pozadí ───────────────────────────── */
 
+/* Odporúčam: one or two things Jarvis would add next. A row says it to him, the cross drops it. */
+.mod-suggest { flex: 0 0 auto; margin-top: 0.3rem; }
+.mod-suggest[hidden] { display: none; }
+.sg { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.sg-i { position: relative; display: flex; align-items: stretch; border-radius: 1rem; background: var(--fill); transition: background 0.25s; }
+.sg-i:hover { background: var(--fill-2); }
+.sg-go { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0.25rem; padding: 0.7rem 0.4rem 0.75rem 0.95rem; text-align: left; }
+.sg-go b { font: 500 1rem/1.25 var(--sans); color: var(--t1); overflow-wrap: anywhere; }
+.sg-go span { font: 500 0.8125rem/1.35 var(--sans); color: var(--t3); overflow-wrap: anywhere; text-wrap: pretty; }
+.sg-x { flex: none; align-self: center; display: grid; place-items: center; width: 2rem; height: 2rem; margin-right: 0.45rem; border-radius: 50%; color: var(--t4); opacity: 0; transition: opacity 0.2s, background 0.2s, color 0.2s; }
+.sg-x svg { width: 0.9rem; height: 0.9rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.sg-i:hover .sg-x, .sg-x:focus-visible { opacity: 1; }
+.sg-x:hover, .sg-x:focus-visible { background: rgba(176, 246, 255, 0.12); color: var(--white); outline: 0; }
+
 .mod-jobs { flex: 0 0 auto; }
 .mod-jobs[hidden] { display: none; }
 .jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
@@ -1079,7 +1121,7 @@ body.scene .keys, body.capture .keys { display: none; }
 .jb-err { color: var(--red); filter: drop-shadow(0 0 0.3em rgba(255, 90, 78, 0.6)); }
 .jb-stop { color: var(--t3); filter: none; }
 .jb-main { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
-.jb-title { font: 500 0.9375rem/1.2 var(--sans); color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-title { font: 500 0.9375rem/1.25 var(--sans); color: var(--t1); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .jb-step { font: 500 0.8125rem/1.2 var(--sans); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .st-running .jb-step { color: var(--ice); }
 .st-needs_ok .jb-step { color: var(--amber); }
@@ -1127,7 +1169,7 @@ body.job-open .toast { z-index: 48; }
 .jv-top { flex: none; display: flex; align-items: center; gap: 0.9rem; padding: 0 0.4rem; }
 .jv-top > .jb-ic { flex: none; width: 1.9rem; height: 1.9rem; }
 .jv-h { flex: 1 1 auto; min-width: 0; }
-.jv-h h2 { margin: 0; font: 600 1.5rem/1.15 var(--sans); letter-spacing: -0.015em; color: var(--white); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jv-h h2 { margin: 0; font: 600 1.5rem/1.15 var(--sans); letter-spacing: -0.015em; color: var(--white); overflow-wrap: anywhere; text-wrap: balance; }
 .jv-sub { margin: 0.3rem 0 0; font: 500 0.875rem/1.2 var(--mono); color: var(--t3); }
 .st-running .jv-sub { color: var(--ice); }
 .st-needs_ok .jv-sub { color: var(--amber); }

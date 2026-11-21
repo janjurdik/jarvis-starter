@@ -16,6 +16,7 @@ import { calendarRange } from './memory/calendar.mjs'
 import { FOLDERS, STATUS_LABEL, checkboxes, dayStats, firstParagraph, getIndex, inFolder, ofKind, plain, section, slugify, statusOf, todos } from './memory/index.mjs'
 import { gameArt } from './game-art.mjs'
 import { customOrb, getOrbState, orbContent } from './orbs.mjs'
+import { routineRunsOn } from './snapshot.mjs'
 import { sendStored } from './upload.mjs'
 import { addDays, errMsg, isoDay, sendJson } from './util.mjs'
 
@@ -25,7 +26,7 @@ export const PLANETS = {
   projekty: { title: 'Projekty', color: '#7ff3ff', layout: 'cluster' },
   questy: { title: 'Ciele', color: '#ffb25c', layout: 'cluster' },
   kalendar: { title: 'Kalendár', color: '#ffb25c', layout: 'board' },
-  rutiny: { title: 'Rutiny', color: '#7ff3ff', layout: 'cluster' },
+  rutiny: { title: 'Rutiny', color: '#7ff3ff', layout: 'board' },
   udalosti: { title: 'Denník', color: '#7ff3ff', layout: 'years' },
   spravy: { title: 'Rozhovory', color: '#5fe6ff', layout: 'years' },
   fotky: { title: 'Poznámky', color: '#9fd8ff', layout: 'cluster' },
@@ -185,9 +186,11 @@ const WORLDS = {
     })
     return { items, groups: ['Dnes', 'Zajtra', 'Tento týždeň', 'Neskôr'].filter((k) => items.some((i) => i.g === k)).map((key) => ({ key, label: key })) }
   },
+  // A board, like tasks: what runs today (in the order of the day), what runs on other days, what is switched off.
+  // The alarm is a routine too. The number on the orb is the number of rows under „Dnes" and „Inokedy" (routineCounts).
   rutiny: () => {
-    const items = getConfig().routines.map((r) => ({ id: `r:${r.id}`, t: r.title, s: `${r.time} · ${r.enabled ? 'zapnutá' : 'vypnutá'}`, img: null, imp: r.enabled ? 0.8 : 0.3, g: r.enabled ? 'zapnuté' : 'vypnuté', k: 'routine' }))
-    return { items, groups: [...new Set(items.map((i) => i.g))].map((key) => ({ key, label: key })) }
+    const items = routineRows().map((r) => ({ id: `r:${r.id}`, t: r.title, s: r.when, img: null, imp: r.group === 'Dnes' ? 0.9 : r.group === 'Inokedy' ? 0.6 : 0.25, g: r.group, k: 'routine' }))
+    return { items, groups: ['Dnes', 'Inokedy', 'Vypnuté'].filter((k) => items.some((i) => i.g === k)).map((key) => ({ key, label: key })) }
   },
   // A board: by term when most tasks have one (overdue first), otherwise by the sections of the task file.
   ulohy: async () => {
@@ -230,13 +233,13 @@ async function world(node) {
   // What Jarvis wrote for this orb (data/orbs/<id>.json): its own items and the component panel.
   const content = orbContent(node)
   if (content?.items) {
-    w.items.push(...content.items.map((it) => ({ id: it.id, t: it.t, s: it.s ?? null, img: null, imp: it.imp, g: it.g, k: 'orb', text: it.text ?? null })))
+    w.items.push(...content.items.map((it) => ({ id: it.id, t: it.t, s: it.s ?? it.from ?? null, img: null, imp: it.imp, g: it.g, k: 'orb', text: it.text ?? null, from: it.from ?? null, at: it.at ?? null, reply: it.reply ?? null, say: it.say ?? null })))
     const keys = new Set(w.groups.map((g) => g.key))
     for (const g of content.groups ?? []) if (!keys.has(g.key)) w.groups.push(g), keys.add(g.key)
     for (const it of content.items) if (!keys.has(it.g)) w.groups.push({ key: it.g, label: it.g }), keys.add(it.g)
   }
   // `ev`, `full` and `text` are server-side helpers for details, not part of the wire format.
-  return { title: meta.title, color: meta.color, layout: meta.layout, groups: w.groups, items: w.items.map(({ ev, full, text, ...it }) => it), panel: content?.panel ?? null, updatedAt: content?.updatedAt ?? null, _raw: w.items }
+  return { title: meta.title, color: meta.color, layout: meta.layout, groups: w.groups, items: w.items.map(({ ev, full, text, from, at, reply, say, ...it }) => it), panel: content?.panel ?? null, updatedAt: content?.updatedAt ?? null, _raw: w.items }
 }
 
 // ── item detail ────────────────────────────────────────────────────────
@@ -247,7 +250,9 @@ function noteDetail(ix, n) {
   if (n.kind === 'person') {
     if (relationOf(n) !== 'ostatní') chips.push(relationOf(n))
     if (n.fm.narodeniny) chips.push(`narodeniny ${n.fm.narodeniny}`)
-  } else if (n.kind === 'project' || n.kind === 'goal') chips.push(STATUS_LABEL[statusOf(n)])
+  }
+  if (steps.length) chips.push(`${steps.filter((s) => s.done).length} z ${steps.length} krokov`)
+  const what = n.kind === 'person' ? 'Človek' : n.kind === 'project' ? `Projekt · ${STATUS_LABEL[statusOf(n)]}` : n.kind === 'goal' ? `Cieľ · ${STATUS_LABEL[statusOf(n)]}` : 'Poznámka'
   const related = linksOf(ix, n)
     .map((id) => ix.list.find((x) => idOf(x) === id))
     .filter(Boolean)
@@ -258,14 +263,9 @@ function noteDetail(ix, n) {
   return {
     kind: n.kind,
     title: n.title,
-    sub: n.rel,
+    sub: what,
     round: n.kind === 'person',
     chips,
-    stats: [
-      { value: nf(n.words), label: 'slov' },
-      { value: nf(ix.backlinks.get(n.rel)?.size ?? 0), label: 'odkazov' },
-      ...(steps.length ? [{ value: `${steps.filter((s) => s.done).length}/${steps.length}`, label: 'krokov' }] : []),
-    ],
     text: firstParagraph(n.body, 600),
     steps: steps.slice(0, 14),
     sections: remembered.length ? [{ title: 'Zapamätané', lines: remembered }] : [],
@@ -319,12 +319,65 @@ async function itemDetail(node, id) {
   if (!it) return null
   if (it.k === 'event') return { kind: 'event', title: it.t, sub: it.s, chips: [it.ev.kind === 'birthday' ? 'narodeniny' : it.ev.kind === 'nameday' ? 'meniny' : it.ev.allDay ? 'celý deň' : `${it.ev.time}${it.ev.end ? ` až ${it.ev.end}` : ''}`] }
   if (it.k === 'todo') return { kind: 'todo', title: it.full, sub: it.s }
-  if (it.k === 'orb') return { kind: 'orb', title: it.t, sub: it.s, text: it.text }
+  if (it.k === 'orb') {
+    // The content itself, in paragraphs, then the reply Jarvis prepared and one thing to say to him about it.
+    const paragraphs = (it.text ?? '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
+    return {
+      kind: 'orb',
+      title: it.t,
+      sub: [it.from ?? it.s, it.at].filter(Boolean).join(' · ') || null,
+      chips: it.g && it.g !== 'iné' ? [it.g] : [],
+      paragraphs,
+      sections: it.reply ? [{ title: 'Navrhovaná odpoveď', text: it.reply }] : [],
+      actions: it.say ? [{ label: it.reply ? 'Uprav odpoveď' : 'Vybav to', say: it.say }] : [],
+    }
+  }
   if (it.k === 'routine') {
-    const r = getConfig().routines.find((x) => `r:${x.id}` === id)
-    return { kind: 'routine', title: it.t, sub: it.s, text: r ? `Rutina beží sama v čase ${r.time}. Zadanie je v súbore routines/${r.id}.md, výsledok nájdeš v pamäti v priečinku schranka.` : null }
+    const r = routineRows().find((x) => `r:${x.id}` === id)
+    if (!r) return { kind: 'routine', title: it.t, sub: it.s }
+    return {
+      kind: 'routine',
+      title: r.title,
+      sub: r.when,
+      chips: [r.enabled ? 'zapnutá' : 'vypnutá'],
+      paragraphs: [r.id === 'budik' ? 'Budík zazvoní skladbou a povie vám ranný prehľad.' : `Bežím ju sám, bez pýtania. Zadanie je v súbore routines/${r.id}.md a výsledok ukladám do pamäte, do priečinka schranka.`],
+      actions: [{ label: r.enabled ? 'Vypnúť' : 'Zapnúť', say: `${r.enabled ? 'Vypni' : 'Zapni'} ${r.id === 'budik' ? 'budík' : `rutinu ${r.title}`}.` }, ...(r.id === 'budik' ? [] : [{ label: 'Spustiť teraz', say: `Spusti teraz rutinu ${r.title}.` }])],
+    }
   }
   return { title: it.t, sub: it.s }
+}
+
+// ── routines ───────────────────────────────────────────────────────────
+
+const DAYS_SAY = { daily: 'každý deň', denne: 'každý deň', weekdays: 'v pracovné dni', 'po-pi': 'v pracovné dni', weekend: 'cez víkend', vikend: 'cez víkend' }
+const DAY_SAY = { ne: 'v nedeľu', po: 'v pondelok', ut: 'v utorok', st: 'v stredu', 'št': 'vo štvrtok', stv: 'vo štvrtok', pi: 'v piatok', so: 'v sobotu' }
+const daysSay = (days) => {
+  const rule = String(days ?? 'daily').toLowerCase().trim()
+  if (DAYS_SAY[rule]) return DAYS_SAY[rule]
+  const list = rule.split(/[\s,]+/).filter(Boolean)
+  return list.length === 1 ? (DAY_SAY[list[0]] ?? list[0]) : list.join(', ')
+}
+
+/** Every routine with the words the board shows: when it runs and in which column it belongs today. */
+function routineRows() {
+  const cfg = getConfig()
+  const today = isoDay()
+  const rows = []
+  const add = (r, id, title) => {
+    const every = Number(r.every) > 0
+    const runsToday = r.enabled !== false && (every || routineRunsOn(r, today))
+    const when = every ? `každých ${r.every} min${r.between ? `, ${String(r.between).replace('-', ' až ')}` : ''}` : `${r.time ?? ''} · ${daysSay(r.days)}`.replace(/^ · /, '')
+    rows.push({ id, title, when, enabled: r.enabled !== false, group: r.enabled === false ? 'Vypnuté' : runsToday ? 'Dnes' : 'Inokedy', sort: every ? '99:99' : (r.time ?? '99:98') })
+  }
+  if (cfg.alarm?.time) add({ ...cfg.alarm, enabled: cfg.alarm.enabled === true }, 'budik', 'Budík')
+  for (const r of cfg.routines) add(r, r.id, r.title)
+  return rows.sort((a, b) => a.sort.localeCompare(b.sort))
+}
+
+/** The numbers for the orb: how many routines are switched on, and how many of them run today. */
+export function routineCounts() {
+  const rows = routineRows()
+  return { on: rows.filter((r) => r.enabled).length, today: rows.filter((r) => r.group === 'Dnes').length, all: rows.length }
 }
 
 // ── router ─────────────────────────────────────────────────────────────
@@ -341,6 +394,7 @@ export async function innerCounts() {
   for (const folder of Object.keys(EXTRA)) counts[folder] = inFolder(ix, folder).length
   for (const c of getOrbState().custom) counts[c.id] = (c.folder ? inFolder(ix, c.folder).length : 0) + (orbContent(c.id)?.items?.length ?? 0)
   counts.posta = orbContent('posta')?.items?.length ?? 0
+  counts.rutiny = routineCounts().on
   return counts
 }
 

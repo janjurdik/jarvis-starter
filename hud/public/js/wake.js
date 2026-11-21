@@ -1,4 +1,4 @@
-// „Hey Jarvis" cez mikrofón prehliadača: getUserMedia (echo cancellation, potlačenie šumu, AGC)
+// „Hey Jarvis" cez mikrofón prehliadača: getUserMedia (surový zvuk, hlasitosť dorovná worklet)
 // → AudioWorklet (16 kHz Int16, rámce 80 ms) → WebSocket /api/mic. Wake word, koniec vety a prepis
 // rieši server, výsledok príde cez SSE `voice` a `chat` ako pri hlase.
 //
@@ -118,7 +118,8 @@ export function createWake({ onLevel, onState, onError, query = null, desktop = 
     acquiring = (async () => {
       try {
         const media = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
+          // Raw capture: the system's voice processing would take the microphone away from a call in another app (see speech.js).
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
         })
         if (!wantMic) {
           for (const track of media.getTracks()) track.stop()

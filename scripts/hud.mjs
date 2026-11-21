@@ -17,8 +17,11 @@
  * (JARVIS_PREPARE_WAIT_S, 15 minutes by default): after that the HUD opens anyway, the download
  * carries on in the background and Jarvis listens through the browser until it is done.
  *
- * Window: on macOS the "Jarvis HUD" desktop app when it is installed, otherwise Chrome or Edge
- * in app mode (a clean full-screen window without tabs). F11 or ⌃⌘F toggles full screen.
+ * Window: where the user wants Jarvis (`surface` in config/jarvis.json, or in data/setup.json as asked during setup).
+ *   desktop  macOS only, the default there: the "Jarvis HUD" app, Jarvis as the desktop under the
+ *            windows. Built on first use (hud/desktop/build.sh, needs the Xcode command line tools).
+ *   web      Chrome or Edge in app mode (a clean full-screen window without tabs). F11 or ⌃⌘F
+ *            toggles full screen. Also what happens when the app cannot be built.
  */
 import { spawn } from 'node:child_process'
 import { mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -30,6 +33,37 @@ import { prepareNeeded, prepareRunning, readProgress } from '../hud/server/stt-p
 const { flags } = parseArgs()
 const PID_FILE = join(DATA_DIR, 'hud.pid')
 const MAC_APP = join(homedir(), 'Applications', 'Jarvis HUD.app')
+
+/** Where Jarvis lives: on the desktop (macOS app) or in a browser window. `--browser` forces the window once. */
+function surface() {
+  if (flags.has('browser') || !IS_MAC) return 'web'
+  // The config (Settings on the desktop) wins over what setup wrote down.
+  for (const file of [process.env.JARVIS_CONFIG || join(REPO, 'config', 'jarvis.json'), join(DATA_DIR, 'setup.json')]) {
+    try {
+      const value = JSON.parse(readFileSync(file, 'utf8')).surface
+      if (value === 'web' || value === 'desktop') return value
+    } catch {
+      // not there yet: the next one, then the default
+    }
+  }
+  return 'desktop'
+}
+
+/** Builds and installs the desktop app. False when this Mac cannot build it (no compiler) or the build failed. */
+async function buildMacApp() {
+  if (!findBin('swiftc')) {
+    console.log('Na plochu ma položí malá appka, ktorú si tento Mac postaví sám. Chýbajú mu na to nástroje pre vývojárov od Apple.')
+    console.log('  Nainštaluje ich príkaz: xcode-select --install (okno potvrď, trvá pár minút), potom znova: node scripts/hud.mjs')
+    return false
+  }
+  console.log('Staviam appku, ktorá ma položí na plochu (raz, asi minútu)…')
+  const r = await sh('/bin/sh', [join(REPO, 'hud', 'desktop', 'build.sh')], { timeout: 6 * 60_000, env: { ...process.env, PORT: String(PORT) } })
+  if (r.code !== 0 || !has(MAC_APP)) {
+    console.log(`Appku na plochu sa nepodarilo postaviť. ${String(r.out ?? '').trim().split('\n').slice(-2).join(' ')}`.trim())
+    return false
+  }
+  return true
+}
 
 function browserBin() {
   if (process.env.JARVIS_BROWSER && has(process.env.JARVIS_BROWSER)) return process.env.JARVIS_BROWSER
@@ -61,9 +95,9 @@ async function startServer() {
   return false
 }
 
-function openWindow() {
+async function openWindow() {
   const url = `http://localhost:${PORT}/`
-  if (IS_MAC && has(MAC_APP) && !flags.has('browser')) {
+  if (surface() === 'desktop' && (has(MAC_APP) || (await buildMacApp()))) {
     spawn('/usr/bin/open', [MAC_APP], { detached: true, stdio: 'ignore' }).unref()
     return 'appka Jarvis HUD na ploche'
   }
@@ -186,14 +220,14 @@ if (flags.has('server') || flags.has('restart')) {
   // The picker lives in the 3D world: open a window when none is connected, wait for it, then fly to the orb.
   const app = (parseArgs().rest[0] ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '')
   let opened = null
-  if (!(await clients())) opened = openWindow()
+  if (!(await clients())) opened = await openWindow()
   for (let i = 0; i < 40 && !(await clients()); i++) await new Promise((r) => setTimeout(r, 500))
   // A fresh window builds its world first, the camera flight looks right only after that.
   if (opened) await new Promise((r) => setTimeout(r, 2500))
   const ok = await postHud('/api/apps/open', { app: app || null })
   console.log(ok ? `Jarvis ukazuje Tvoje appky${opened ? ` (${opened})` : ''}: http://localhost:${PORT}/#appky` : `HUD sa neozval. Otvor http://localhost:${PORT}/#appky`)
 } else {
-  console.log(`HUD beží na http://localhost:${PORT}, otváram ${openWindow()}.`)
+  console.log(`HUD beží na http://localhost:${PORT}, otváram ${await openWindow()}.`)
 }
 
 // Jarvis has to be there after every restart of the computer: the first manual start turns on the

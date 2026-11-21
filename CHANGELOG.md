@@ -2,6 +2,37 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.8.0 (2026-11-21)
+
+- **Jarvis aj na Gemini.** Tretí podporovaný mozog je Google Antigravity (účet Google, modely Gemini). Otvor priečinok
+  v Antigravity, napíš `štart` a Jarvis sa pripraví rovnako ako na Claude alebo ChatGPT. Prihlásenie ostáva v Antigravity,
+  Jarvis žiadne heslo ani kód nevidí ([docs/MODELY.md](docs/MODELY.md)).
+- **Nový vzhľad všetkého za hlavnou obrazovkou.** Nastavenia, vnútro planét, detail položky aj Tvoje appky sú prerobené
+  do jazyka hlavnej obrazovky: jedna sklenená doska so svetelnou hranou, veľké tenké nadpisy, čisté riadky namiesto
+  kariet v kartách. Nastavenia majú menu vľavo a nové časti **Mozog** a **Plocha**.
+- **Nič sa neprekrýva a nič nie je odseknuté.** Tlačidlo Opustiť je súčasťou hlavičky a nemá čo prekryť. Dátum, počasie
+  a mesto sa pri dlhšom názve (Bratislava, Banská Bystrica) zalomia, namiesto troch bodiek. Dlhé názvy udalostí a úloh
+  majú druhý riadok. Overené na obrazovkách od 1024 po 2560 px.
+- **Mail s obsahom.** Klik na mail v orbe Pošta ukáže, čo v ňom naozaj stojí (kto čo chce, do kedy), návrh odpovede
+  a tlačidlo, ktorým ju dáš Jarvisovi upraviť. Body vo vnútri planét sú rozložené v pravidelných kruhoch.
+- **Rutiny sedia.** Číslo na orbe Rutiny je počet zapnutých rutín a vnútri je prehľadná tabuľka: čo beží dnes, čo inokedy
+  a čo je vypnuté, aj s budíkom. Predtým vnútro vyzeralo prázdne a číslo nesedelo.
+- **Jarvis ti už neberie mikrofón.** Počas rozhovoru s Jarvisom prestal fungovať mikrofón v Discorde a iných hovoroch.
+  Jarvis teraz nahráva surový zvuk bez systémového spracovania hlasu a mikrofón po chvíli vracia.
+- **Model podľa úlohy.** Pred každou úlohou Jarvis povie, aká je náročná, a vyberie si model: na pozretie pošty rýchly,
+  na tvorbu najsilnejší. Nastavíš to v Nastaveniach → Mozog (Automaticky, Najsilnejší, Najrýchlejší).
+- **Odporúča sám.** Na ploche pribudla časť Odporúčam: čo našiel v počítači a ešte nemá pripojené, čo čaká na pripojenie
+  a čo si všimol v pošte. Klikneš a spraví to, krížikom to zahodíš.
+- **Na ploche, alebo v okne.** Pri `štarte` sa AI spýta, či chceš Jarvisa na pracovnej ploche (odporúčame), alebo ako
+  stránku v prehliadači. Appku na plochu si Mac postaví sám. Potom ti vysvetlí, kde čo je: krúžok v lište hore, skratka,
+  skrytie ikon na ploche. Tie isté prepínače sú v Nastaveniach → Plocha.
+- **Čipy hore sa vysvetlia.** Keď prejdeš myšou na Ruky, Natáčanie alebo Hlas, ukáže sa, čo robia. Menu krúžku v lište
+  má zrozumiteľné názvy.
+- **Ikonky appiek.** Outlook, Slack, Teams, OneDrive, LinkedIn, Xbox, Canva, EduPage a Seznam mali namiesto ikonky len písmeno.
+- **Inštalácia a aktualizácie.** README vedie krok za krokom aj človeka, ktorý nikdy nerozbaľoval ZIP. Aktualizácia
+  funguje rovnako zo ZIP-u aj z gitu a už nehlási zbytočný konflikt pri súbore s podpisom.
+- **Opravy.** Číslo v karte orbu sa nestratí, keď ho Jarvis zapíše ako číslo. Uloženie výberu appiek už nekončí chybou.
+
 ## 1.7.1 (2026-11-18)
 
 - **Pýta sa Jarvis, nie úloha.** Keď práca na pozadí potrebuje od teba informáciu, spýta sa ťa Jarvis sám, hlasom

@@ -135,36 +135,37 @@
 
 /* ── the way out of a portal ───────────────────────────────────────────── */
 
+/* A chip like the ones in the top bar, and a part of the header of the screen it leaves: it has its
+   own column there, so nothing can end up under it. */
 .leave {
-  position: absolute;
-  top: calc(var(--safe-top, 0px) + 5.6rem);
-  left: calc(var(--safe-left, 0px) + var(--edge, 1.5rem) + var(--lw, 0px) + var(--gap, 1rem) + 0.5rem);
-  z-index: 6;
   display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
-  height: 3.25rem;
-  padding: 0 1.4rem 0 1.05rem;
+  gap: 0.55rem;
+  height: 2.5rem;
+  padding: 0 0.7rem 0 0.85rem;
   border: 0;
-  border-radius: 1.7rem;
-  background: rgba(8, 20, 26, 0.72);
-  box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.4), 0 0 1.8rem rgba(95, 230, 255, 0.14);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  font: 600 1.0625rem/1 var(--sans);
-  color: var(--white, #eafbff);
+  border-radius: 1.25rem;
+  background: rgba(176, 246, 255, 0.09);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font: 500 0.9375rem/1 var(--sans);
+  color: var(--t1, rgba(234, 251, 255, 0.95));
+  white-space: nowrap;
   pointer-events: none;
   cursor: pointer;
   opacity: 0;
-  transition: transform 0.16s, box-shadow 0.16s, background 0.16s, opacity 0.35s;
+  transition: background 0.2s, color 0.2s, opacity 0.35s;
 }
 /* It appears with the inside of the planet, not during the flight in. */
-.is-in > .leave { opacity: 1; pointer-events: auto; }
-.leave svg { width: 1.3rem; height: 1.3rem; fill: none; stroke: #7ff3ff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.leave:hover, .leave:focus-visible, .leave.hand-hot { transform: translateX(-2px); background: rgba(95, 230, 255, 0.16); box-shadow: inset 0 0 0 1.5px rgba(127, 243, 255, 0.85), 0 0 2.4rem rgba(95, 230, 255, 0.35); outline: 0; }
+.is-in .leave { opacity: 1; pointer-events: auto; }
+.leave svg { width: 1.15rem; height: 1.15rem; fill: none; stroke: var(--ice, #7ff3ff); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.2s; }
+.leave kbd { margin-left: 0.15rem; padding: 0.24rem 0.42rem; border-radius: 0.4rem; background: rgba(3, 10, 14, 0.45); font: 500 0.6875rem/1 var(--mono, monospace); color: var(--t3, rgba(234, 251, 255, 0.48)); }
+.leave:hover, .leave:focus-visible, .leave.hand-hot { background: rgba(176, 246, 255, 0.17); color: var(--white, #eafbff); outline: 0; }
+.leave:hover svg, .leave:focus-visible svg { transform: translateX(-2px); }
 /* With hands it is the main control of the screen: bigger, so the cursor does not have to aim. */
-body.hands-on .leave { height: 4.4rem; padding: 0 2rem 0 1.5rem; border-radius: 2.2rem; font-size: 1.3125rem; }
-body.hands-on .leave svg { width: 1.7rem; height: 1.7rem; }
+body.hands-on .leave { height: 4rem; padding: 0 1.5rem 0 1.3rem; border-radius: 2rem; font-size: 1.25rem; }
+body.hands-on .leave svg { width: 1.6rem; height: 1.6rem; }
+body.hands-on .leave kbd { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .hc-spin, .hc-link line, .chip-hands.is-on .ic { animation: none; }

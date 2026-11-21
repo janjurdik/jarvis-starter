@@ -22,8 +22,10 @@ import { saveState, state } from './state.mjs'
 import { PLAN_FILE, PROGRESS_FILE, prepareNeeded, prepareRunning, sttSummary } from './stt-plan.mjs'
 import { STT_ENGINE, reloadStt, restartStt, sttActive } from './stt.mjs'
 import { edgeAvailable, speakable, synthesize, ttsInfo, warmCommonPhrases } from './tts.mjs'
-import { REPO, clean, errMsg, log, writeFileAtomic } from './util.mjs'
+import { DATA_DIR, REPO, clean, errMsg, log, writeFileAtomic } from './util.mjs'
 import { defaultVoiceId, isPitch, isRate, resolveVoice, voiceById, voiceList } from './voices.mjs'
+import { aiProvider } from './provider.mjs'
+import { MODES, routingInfo } from './routing.mjs'
 
 const bad = (message, status = 400) => Object.assign(new Error(message), { status })
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v)
@@ -106,8 +108,21 @@ export async function testCall() {
   }
 }
 
+/** Where Jarvis lives on this computer: on the desktop (the macOS app) or in a browser window. */
+export function surfaceOf(cfg = getConfig()) {
+  if (process.platform !== 'darwin') return 'web'
+  let asked = null
+  try {
+    asked = JSON.parse(readFileSync(join(DATA_DIR, 'setup.json'), 'utf8')).surface ?? null
+  } catch {
+    asked = null
+  }
+  return (cfg.surface ?? asked) === 'web' ? 'web' : 'desktop'
+}
+
 export function settingsBody() {
   const cfg = getConfig()
+  const ai = aiProvider()
   const voice = resolveVoice(cfg)
   const voices = voiceList(cfg)
   const known = voices.find((v) => v.id === voice.id)
@@ -136,6 +151,10 @@ export function settingsBody() {
       prepare: prepareProgress(),
     },
     wake: { available: wakeAvailable(), on: state.wake && wakeAvailable() },
+    // What Jarvis runs on and how he picks the model for background jobs (routing.mjs).
+    brain: { id: ai.id, name: ai.name, product: ai.product, plan: ai.plan, routing: routingInfo() },
+    surface: surfaceOf(cfg),
+    platform: process.platform,
     language: effectiveLang(cfg),
     // JARVIS_LANG in .env wins over the setting.
     languageLocked: LANG_FROM_ENV,
@@ -246,6 +265,14 @@ export function validateSettings(body, voices) {
     if (!['sk', 'cs'].includes(body.language)) throw bad('language: sk alebo cs')
     patch.language = body.language
   }
+  if (body.routing !== undefined) {
+    if (!MODES.includes(body.routing)) throw bad('routing: auto, heavy alebo light')
+    patch.routing = body.routing
+  }
+  if (body.surface !== undefined) {
+    if (!['desktop', 'web'].includes(body.surface)) throw bad('surface: desktop alebo web')
+    patch.surface = body.surface
+  }
   if (body.wake !== undefined) {
     const on = isObj(body.wake) ? body.wake.on : body.wake
     if (typeof on !== 'boolean') throw bad('wake: true alebo false')
@@ -333,6 +360,8 @@ function mergeInto(raw, patch, cfg) {
   if ('quiet' in patch) raw.quiet = patch.quiet
   if ('stt' in patch) raw.stt = patch.stt
   if ('language' in patch) raw.language = patch.language
+  if ('routing' in patch) raw.routing = patch.routing
+  if ('surface' in patch) raw.surface = patch.surface
   return JSON.stringify(raw) !== before
 }
 

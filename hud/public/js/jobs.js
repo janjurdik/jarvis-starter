@@ -149,7 +149,7 @@ export function createJobs({ api, ui = null, onChange, onFinished = null, captur
       const end = ts(j.endedAt)
       const run = Number.isFinite(start) ? elapsed((Number.isFinite(end) ? end : clock()) - start) : ''
       const steps = (detail?.feed ?? []).filter((e) => e.kind === 'step').length
-      return [statusText(j), run, steps ? `${steps} ${plural(steps, 'krok', 'kroky', 'krokov')}` : ''].filter(Boolean).join(' · ')
+      return [statusText(j), run, steps ? `${steps} ${plural(steps, 'krok', 'kroky', 'krokov')}` : '', j.route ?? ''].filter(Boolean).join(' · ')
     }
 
     function render() {

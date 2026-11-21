@@ -4,7 +4,7 @@
  */
 import { renameSync } from 'node:fs'
 import { join } from 'node:path'
-import { IS_MAC, MANIFEST, P, REPO, SCHEMA, abs, cmpVersion, copyInto, exists, findBin, installMode, plural, readBuf, readJson, rmDir, sh, walk, writeFile, writeJson } from './core.mjs'
+import { IS_MAC, MANIFEST, MANIFEST_SIG, P, REPO, SCHEMA, abs, cmpVersion, copyInto, exists, findBin, installMode, plural, readBuf, readJson, rmDir, sh, walk, writeFile, writeJson } from './core.mjs'
 import { appendHistory, listBackups } from './apply.mjs'
 import { currentVersion, customizedPaths, ensureBaseline, loadState, localManifest } from './baseline.mjs'
 import { cachedCheck } from './check.mjs'
@@ -66,6 +66,8 @@ export async function finish({ install = true } = {}) {
   const now = new Date().toISOString()
   writeJson(P.state, { version: incoming.version, at: now, source: 'update', ref: null, files: incoming.files, missing: [] })
   if (exists(join(P.incoming, MANIFEST))) copyInto(join(P.incoming, MANIFEST), abs(MANIFEST))
+  // The signature belongs to the manifest: the new one replaces the old one without a question.
+  if (exists(join(P.incoming, MANIFEST_SIG))) copyInto(join(P.incoming, MANIFEST_SIG), abs(MANIFEST_SIG))
   else writeFile(abs(MANIFEST), manifestText({ name: incoming.name, version: incoming.version, released: incoming.released ?? now, files: incoming.files }))
 
   const counts = Object.fromEntries(Object.entries(session.applied).map(([key, list]) => [key, list.length]))
@@ -148,7 +150,7 @@ export async function customizations() {
     const stat = base ? diffStat(base, local) : null
     return { path: rel, status: 'changed', added: stat?.added ?? null, removed: stat?.removed ?? null, note: stat ? `+${stat.added} −${stat.removed} riadkov` : base ? 'binárny súbor' : 'zmenený (pôvodná verzia chýba)' }
   })
-  const own = walk(REPO, { keep: (rel) => !(rel in baseline.files) && rel !== MANIFEST })
+  const own = walk(REPO, { keep: (rel) => !(rel in baseline.files) && rel !== MANIFEST && rel !== MANIFEST_SIG })
   return {
     ok: true,
     baseline: baseline.kind,

@@ -25,6 +25,7 @@ import { MEMORY_DIR } from './memory/index.mjs'
 import { BRAIN_DIR, clean, DATA_DIR, errMsg, log, REPO, spawnBin, winSys, writeFileAtomic } from './util.mjs'
 import { speakable } from './tts.mjs'
 import { addressRule } from './persona.mjs'
+import { routeJob } from './routing.mjs'
 
 const CWD = process.env.JARVIS_JOB_CWD || REPO
 const MAX_PARALLEL = 3
@@ -74,6 +75,9 @@ const pub = (j) => ({
   needsOk: j.needsOk,
   wait: j.status === 'needs_ok' ? (j.wait ?? 'approval') : null,
   cost: j.cost,
+  // How hard the job is and what it runs on („ľahká úloha · Haiku"), see routing.mjs.
+  weight: j.weight ?? null,
+  route: j.route ?? null,
   mock: j.mock || undefined,
   artifacts: j.artifacts?.length ? j.artifacts.map(({ kind, url, name }, i) => ({ kind, name, url: kind === 'image' ? `/api/jobs/${j.id}/file/${i}` : url })) : undefined,
 })
@@ -400,7 +404,7 @@ async function startProcess(j) {
   try {
     // The task goes in over stdin and the context through a file: no quoting problems on Windows.
     writeFileSync(CONTEXT_FILE, contextPrompt(j.film), { mode: 0o600 })
-    ;({ proc, provider } = await spawnAgent({ prompt, contextFile: CONTEXT_FILE, sessionId, cwd: CWD }))
+    ;({ proc, provider } = await spawnAgent({ prompt, contextFile: CONTEXT_FILE, sessionId, cwd: CWD, ...(j.model ? { model: j.model } : {}), ...(j.effort ? { effort: j.effort } : {}) }))
   } catch (err) {
     return finish(j, 'error', { error: errMsg(err) })
   }
@@ -477,9 +481,10 @@ function runMock(j, said = '') {
 // ── verejné API ─────────────────────────────────────────────────────────
 
 /** Nová úloha. Vráti verejný stav ({ id, status, … }). */
-export async function createJob({ task, title, mock = false, silent = false }) {
+export async function createJob({ task, title, weight = null, mock = false, silent = false }) {
   const text = String(task ?? '').trim().slice(0, 8000)
   if (!text) throw Object.assign(new Error('chýba task'), { status: 400 })
+  const route = routeJob({ task: text, weight })
   await mkdir(LOG_DIR, { recursive: true, mode: 0o700 })
   const isMock = mock || /^mock:/i.test(text) || process.env.JARVIS_MOCK === '1'
   const id = `j${++seq}`
@@ -498,13 +503,17 @@ export async function createJob({ task, title, mock = false, silent = false }) {
     needsOk: null,
     cost: { turns: 0, ms: 0 },
     sessionId: null,
+    weight: route.weight,
+    model: route.model,
+    effort: route.effort,
+    route: route.label,
     mock: isMock,
     silent,
     film: opts.isFilm(),
     reported: true,
   }
   jobs.set(id, j)
-  log('jobs', `${id} nová úloha${isMock ? ' (mock)' : ''}`)
+  log('jobs', `${id} nová úloha${isMock ? ' (mock)' : ''}: ${route.label}`)
   emit(j)
   pump()
   return pub(j)

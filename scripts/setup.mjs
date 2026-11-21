@@ -4,13 +4,16 @@
  * computer, puts Jarvis on screen and steps back: from there the setup is a conversation with
  * Jarvis himself (hud/server/persona.mjs, section Úvodné nastavenie).
  *
- *   node scripts/setup.mjs [--ai claude|codex] [--no-hud] [--json]
+ *   node scripts/setup.mjs [--ai claude|codex|antigravity] [--surface desktop|web] [--no-hud] [--json]
  *       1. packages of the HUD (npm install, once)
- *       2. the AI Jarvis runs on: Claude Code or Codex, whichever started this (or is installed)
+ *       2. the AI Jarvis runs on: Claude Code, Codex or Antigravity, whichever started this (or is installed)
  *       3. uv, the one helper the voice, Whisper and the video tools share
  *       4. speech: local Whisper chosen for this computer's hardware and free disk space
  *       5. yt-dlp and the default alarm song
- *       6. Jarvis on the desktop, starting with the computer from now on
+ *       6. Jarvis on the desktop, starting with the computer from now on. On a Mac `--surface`
+ *          says where: `desktop` (the default, Jarvis as the desktop itself, under the windows)
+ *          or `web` (a full-screen browser window). The choice is kept in data/setup.json
+ *          (Settings on the desktop write `surface` to config/jarvis.json later, which wins).
  *     Every step is safe to repeat. A step that fails never stops the rest: it is listed at the
  *     end with what to do, and Jarvis works without it in the meantime.
  *
@@ -22,7 +25,8 @@
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { PROVIDERS } from '../hud/server/provider.mjs'
+import { INSTALL_HINT, antigravityStatus } from '../hud/server/antigravity.mjs'
+import { PROVIDERS, cleanEnv } from '../hud/server/provider.mjs'
 import { STEPS, SETUP_FILE, getSetup, noteSetup } from '../hud/server/setup.mjs'
 import { DATA_DIR, IS_MAC, IS_WIN, REPO, WIN_POWERSHELL, findBin, hudAlive, parseArgs, sh } from './lib.mjs'
 
@@ -35,7 +39,7 @@ const opt = (name) => {
   const i = argv.indexOf(`--${name}`)
   return i >= 0 && argv[i + 1] !== undefined && !argv[i + 1].startsWith('--') ? argv[i + 1] : undefined
 }
-const command = argv.find((a) => !a.startsWith('--') && a !== opt('ai') && a !== opt('done') && a !== opt('waiting') && a !== opt('resolved') && a !== opt('goal'))
+const command = argv.find((a) => !a.startsWith('--') && a !== opt('ai') && a !== opt('surface') && a !== opt('done') && a !== opt('waiting') && a !== opt('resolved') && a !== opt('goal'))
 
 // ── notes about the setup conversation ─────────────────────────────────────
 
@@ -112,8 +116,10 @@ if (!existsSync(join(REPO, 'node_modules', 'three', 'package.json'))) {
 } else step('deps', true, 'Súčasti obrazovky sú na mieste.')
 
 // 2. the AI Jarvis runs on
-const asked = String(opt('ai') ?? process.env.JARVIS_AI ?? '').toLowerCase()
-const ai = PROVIDERS[asked] ?? (PROVIDERS.claude.bin() ? PROVIDERS.claude : PROVIDERS.codex.bin() ? PROVIDERS.codex : PROVIDERS.claude)
+// Antigravity marks every command it runs for the user, so it is recognised even when it forgets to say --ai.
+const harness = process.env.ANTIGRAVITY_AGENT || process.env.ANTIGRAVITY_CONVERSATION_ID ? 'antigravity' : ''
+const asked = String(opt('ai') ?? process.env.JARVIS_AI ?? harness).toLowerCase()
+const ai = PROVIDERS[asked] ?? (PROVIDERS.claude.bin() ? PROVIDERS.claude : PROVIDERS.codex.bin() ? PROVIDERS.codex : PROVIDERS.antigravity.bin() ? PROVIDERS.antigravity : PROVIDERS.claude)
 mkdirSync(DATA_DIR, { recursive: true })
 {
   // Remembered next to the setup state, so the HUD, the routines and the background jobs all use the same one.
@@ -126,7 +132,7 @@ mkdirSync(DATA_DIR, { recursive: true })
   if (raw.ai !== ai.id) writeFileSync(SETUP_FILE, `${JSON.stringify({ ...raw, ai: ai.id }, null, 2)}\n`, { mode: 0o600 })
 }
 if (!ai.bin()) {
-  step('ai', false, `${ai.product} nie je nainštalovaný.`, ai.id === 'codex' ? 'Nainštaluj: npm i -g @openai/codex, potom: codex login' : IS_WIN ? 'PowerShell: irm https://claude.ai/install.ps1 | iex, potom: claude' : 'Terminál: curl -fsSL https://claude.ai/install.sh | bash, potom: claude')
+  step('ai', false, `${ai.product} nie je nainštalovaný.`, ai.id === 'antigravity' ? INSTALL_HINT : ai.id === 'codex' ? 'Nainštaluj: npm i -g @openai/codex, potom: codex login' : IS_WIN ? 'PowerShell: irm https://claude.ai/install.ps1 | iex, potom: claude' : 'Terminál: curl -fsSL https://claude.ai/install.sh | bash, potom: claude')
 } else if (ai.id === 'claude') {
   const auth = await sh(ai.bin(), ['auth', 'status', '--json'])
   let info = null
@@ -139,6 +145,14 @@ if (!ai.bin()) {
   if (info?.loggedIn !== true) step('ai', false, 'Claude Code nie je prihlásený.', 'Spusti: claude auth login (v prehliadači klikni Povoliť)')
   else if (plan === 'free') step('ai', false, 'Claude je prihlásený bezplatným účtom. Jarvis potrebuje predplatné Pro alebo Max.', 'claude.ai/upgrade, potom: claude auth login')
   else step('ai', true, `Mozog: Claude (${plan || 'predplatné'}).`)
+} else if (ai.id === 'antigravity') {
+  // The agent is asked itself (it opens an empty session). The sign-in is its own: Jarvis only says how to start it.
+  const cwd = join(DATA_DIR, 'brain', 'antigravity')
+  mkdirSync(cwd, { recursive: true })
+  const s = await antigravityStatus({ env: cleanEnv(), cwd })
+  if (s.loggedIn) step('ai', true, `Mozog: Gemini cez Antigravity${s.tier ? ` (${s.tier})` : ''}.`)
+  else if (s.needsLogin) step('ai', false, 'Antigravity nie je prihlásený.', 'Spusti: node scripts/antigravity.mjs login (otvorí sa prehliadač, prihlás sa účtom Google)')
+  else step('ai', false, 'Antigravity sa nepodarilo spustiť.', String(s.error ?? '').slice(0, 300) || 'Skús: node scripts/antigravity.mjs status')
 } else {
   const auth = await sh(ai.bin(), ['login', 'status'])
   step('ai', auth.code === 0 && /logged in/i.test(auth.out), auth.code === 0 && /logged in/i.test(auth.out) ? 'Mozog: ChatGPT cez Codex.' : 'Codex nie je prihlásený.', 'Spusti: codex login')
@@ -177,10 +191,24 @@ if (uv) {
 }
 
 // 6. Jarvis on the desktop
+const wanted = String(opt('surface') ?? '').toLowerCase()
+if (wanted === 'desktop' || wanted === 'web') {
+  // Kept next to the setup state (like the AI): a config file would mean "Jarvis is set up", and he is not yet.
+  let raw = {}
+  try {
+    raw = JSON.parse(readFileSync(SETUP_FILE, 'utf8'))
+  } catch {
+    raw = {}
+  }
+  if (raw.surface !== wanted) writeFileSync(SETUP_FILE, `${JSON.stringify({ ...raw, surface: wanted }, null, 2)}\n`, { mode: 0o600 })
+}
 if (!flags.has('no-hud')) {
   say('Štartujem Jarvisa na ploche…')
   const r = await sh(process.execPath, [join(REPO, 'scripts', 'hud.mjs'), '--no-prepare'], { timeout: 90_000 })
-  step('hud', await hudAlive(), (await hudAlive()) ? 'Jarvis je na ploche.' : 'Obrazovku Jarvisa sa nepodarilo spustiť.', r.out.split('\n').slice(-2).join(' ') || 'Skús: node scripts/hud.mjs')
+  const where = /appka Jarvis HUD na ploche/.test(r.out) ? 'Jarvis je na ploche (pod oknami, namiesto tapety).' : 'Jarvis beží v okne na celú obrazovku.'
+  step('hud', await hudAlive(), (await hudAlive()) ? where : 'Obrazovku Jarvisa sa nepodarilo spustiť.', r.out.split('\n').slice(-2).join(' ') || 'Skús: node scripts/hud.mjs')
+  // The desktop was asked for and this Mac could not build the app: say what to do, Jarvis runs in a window meanwhile.
+  if (IS_MAC && wanted !== 'web' && /xcode-select --install/.test(r.out)) step('desktop', false, 'Na plochu ma zatiaľ neviem položiť, bežím v okne.', 'Spusti: xcode-select --install, potom: node scripts/hud.mjs')
 }
 
 const setup = getSetup()
