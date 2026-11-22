@@ -24,7 +24,7 @@ Chatbot čaká, kým sa niečo opýtaš. Agent pracuje aj vtedy, keď pri počí
 | kedykoľvek | Prišiel export, ktorý si pretiahol do okna: prečíta rozhovory a doplní ľudí | úloha na pozadí | áno |
 | 21:30 | Zapíše deň do denníka, odškrtne hotové, uloží nové fakty | rutina `vecerne-zhrnutie` | áno |
 | 22:30 až 07:00 | Tiché hodiny: nič nehovorí nahlas, len zapisuje | `quiet` v konfigurácii | |
-| raz za 12 hodín | Pozrie, či vyšla nová verzia Jarvisa, a spýta sa, či ju má nainštalovať | HUD | nie |
+| raz za hodinu | Pozrie, či vyšla nová verzia Jarvisa, a spýta sa, či ju má nainštalovať | HUD | nie |
 | celý deň, raz za minútu | Zapíše si, ktorá appka je v popredí (nič z jej obsahu). Z toho večer píše denník (`docs/AKTIVITA.md`) | HUD a pulz | nie |
 
 Všetko, čo Jarvis povie, ide do HUD na ploche a ako oznámenie systému. Keď okno HUD nie je otvorené, povie to cez

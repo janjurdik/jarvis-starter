@@ -1,6 +1,6 @@
 /**
  * Watches for new versions of Jarvis while the HUD runs: a first look two minutes after the start,
- * then every twelve hours. A new version is announced once, the update itself always waits for
+ * then every hour. A new version is announced once, the update itself always waits for
  * the user's yes (docs/AKTUALIZACIE.md). Turn it off with JARVIS_UPDATE_CHECK=0 in .env or
  * "update": { "check": false } in config/jarvis.json.
  */
@@ -11,7 +11,7 @@ import { checkEnabled } from '../../scripts/update/source.mjs'
 import { DATA_DIR, errMsg, log } from './util.mjs'
 
 const FIRST_CHECK_MS = 2 * 60_000
-const EVERY_MS = 12 * 3600_000
+const EVERY_MS = 3600_000
 const ANNOUNCED_FILE = join(DATA_DIR, 'update', 'announced.json')
 
 function announcedVersion() {
@@ -44,7 +44,7 @@ export function startUpdateWatch({ onAvailable } = {}) {
     try {
       const res = await check()
       if (res.ok && res.available && !res.inProgress && res.latest.version !== announcedVersion()) {
-        // Remembered first: a handler that throws must not make Jarvis repeat himself every twelve hours.
+        // Remembered first: a handler that throws must not make Jarvis repeat himself every hour.
         rememberAnnounced(res.latest.version)
         log('update', `nová verzia ${res.latest.version} (nainštalovaná ${res.current.version})`)
         await onAvailable?.({ version: res.latest.version, summary: res.summary, changelog: res.changelog })

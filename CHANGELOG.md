@@ -2,6 +2,11 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.8.1 (2026-11-22)
+
+- **O novej verzii sa dozvieš do hodiny.** Jarvis sa po novej verzii pozerá každú hodinu, doteraz to bolo raz za pol dňa.
+  Stále platí, že sa len ozve a inštaluje až po tvojom áno.
+
 ## 1.8.0 (2026-11-21)
 
 - **Jarvis aj na Gemini.** Tretí podporovaný mozog je Google Antigravity (účet Google, modely Gemini). Otvor priečinok

@@ -8,8 +8,8 @@ a porovná ju so zoznamom súborov, ktorý prišiel s tvojou verziou (`jarvis.ma
 
 ## Ako to funguje
 
-1. **Jarvis si všimne novú verziu.** Keď beží HUD, raz za pol dňa sa pozrie, či nevyšla novšia verzia. Ak áno,
-   povie ti to a opýta sa. Sám nič neinštaluje.
+1. **Jarvis si všimne novú verziu.** Keď beží HUD, dve minúty po štarte a potom každú hodinu sa pozrie, či nevyšla
+   novšia verzia. Ak áno, povie ti to a opýta sa. Sám nič neinštaluje.
 2. **Povieš áno.** Napíš alebo povedz `aktualizuj Jarvisa`. Ísť to dá kedykoľvek, aj bez toho, aby sa Jarvis ozval.
 3. **Claude stiahne novú verziu a porovná ju s tvojou.** Pri každom súbore vie tri veci: ako vyzeral, keď si
    Jarvisa dostal, ako vyzerá u teba teraz a ako vyzerá v novej verzii. Podľa toho rozhodne:
