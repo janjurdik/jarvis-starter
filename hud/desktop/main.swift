@@ -12,6 +12,7 @@
 import Carbon.HIToolbox
 import Cocoa
 import UserNotifications
+import AVFoundation
 import WebKit
 
 // MARK: - Konfigurácia
@@ -102,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   var statusLabel: NSTextField!
   var statusItem: NSStatusItem!
   let control = ControlOverlay()
+  let mic = NativeMic()
   var hotKeyRef: EventHotKeyRef?
   var signalSource: DispatchSourceSignal?
 
@@ -220,7 +222,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     (() => {
       const d = (window.__jarvisDesktop = window.__jarvisDesktop || {});
       d.native = true;
-      d.version = 2;
+      d.version = 3;
+      // The microphone is opened by the app (a plain system input), not by the web view: the web
+      // view's capture restarts the audio devices for every app and a call elsewhere loses its microphone.
+      // The page sets d.onMicFrame(base64 of 1280 Int16 samples at 16 kHz, rms) and d.onMicState(state).
+      d.mic = true;
       d.isRaised = false;
       d.hotkeyLabel = '\(HOTKEY_LABEL)';
       d.post = (msg) => { try { window.webkit.messageHandlers.jarvis.postMessage(msg) } catch (e) {} };
@@ -260,6 +266,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
   func load() {
     loading = true
+    // A page that is loading again has no listener yet: the microphone is given back until it asks.
+    mic.stop()
     var req = URLRequest(url: URL(string: HUD_ORIGIN + "/?desktop=1")!)
     req.cachePolicy = .reloadIgnoringLocalCacheData
     req.timeoutInterval = 15
@@ -274,6 +282,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   func showStatus(_ text: String?) {
     statusLabel.stringValue = text ?? ""
     statusLabel.isHidden = text == nil
+  }
+
+  /// Connects the native microphone to the page (once): frames and state changes go to the bridge.
+  func wireMic() {
+    guard mic.onFrame == nil else { return }
+    mic.onFrame = { [weak self] data, rms in
+      let b64 = data.base64EncodedString()
+      DispatchQueue.main.async {
+        self?.js("window.__jarvisDesktop && window.__jarvisDesktop.onMicFrame && window.__jarvisDesktop.onMicFrame('\(b64)', \(rms))")
+      }
+    }
+    mic.onState = { [weak self] state in
+      DispatchQueue.main.async {
+        log("mikrofón: \(state)")
+        self?.js("window.__jarvisDesktop && window.__jarvisDesktop.onMicState && window.__jarvisDesktop.onMicState('\(state)')")
+      }
+    }
   }
 
   func js(_ code: String) {
@@ -616,6 +641,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       default: break
       }
       pushPrefs()
+    case "mic":
+      wireMic()
+      if (body["on"] as? Bool) ?? false { mic.start() } else { mic.stop() }
     case "notify":
       // The result of a background job: a notification the user sees over any window.
       let text = { (k: String, n: Int) -> String in String(((body[k] as? String) ?? "").prefix(n)) }
@@ -822,6 +850,109 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 /// A frame around the screen, a label and a reticle where Jarvis acts, drawn above every window.
 /// It never takes a click and stays out of screenshots, so the agent does not see itself.
 @MainActor
+/// The microphone for the page: a plain capture of the default input device, no voice processing.
+/// Delivers 16 kHz mono Int16 in frames of 1280 samples (80 ms) with their loudness (rms, 0 to 1).
+/// Opening and closing it touches nothing but the input device, so a call in another app keeps going.
+final class NativeMic: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
+  static let frameBytes = 1280 * 2
+  private let queue = DispatchQueue(label: "jarvis.desktop.mic")
+  private var session: AVCaptureSession?
+  private var deviceID: String?
+  private var pending = Data()
+  private var wanted = false
+  var onFrame: ((Data, Float) -> Void)?
+  var onState: ((String) -> Void)?
+
+  func start() {
+    switch AVCaptureDevice.authorizationStatus(for: .audio) {
+    case .authorized: queue.async { self.begin() }
+    case .notDetermined:
+      AVCaptureDevice.requestAccess(for: .audio) { ok in
+        if ok { self.queue.async { self.begin() } } else { self.onState?("denied") }
+      }
+    default: onState?("denied")
+    }
+  }
+
+  func stop() {
+    queue.async {
+      guard self.wanted || self.session?.isRunning == true else { return }
+      self.wanted = false
+      self.session?.stopRunning()
+      self.pending.removeAll(keepingCapacity: true)
+      self.onState?("off")
+    }
+  }
+
+  private func begin() {
+    wanted = true
+    guard let device = AVCaptureDevice.default(for: .audio) else { return fail("no input device") }
+    // Another default input since the last time (headphones plugged in): the session is built again.
+    if session == nil || deviceID != device.uniqueID {
+      session?.stopRunning()
+      if let old = session { NotificationCenter.default.removeObserver(self, name: .AVCaptureSessionRuntimeError, object: old) }
+      let fresh = AVCaptureSession()
+      guard let input = try? AVCaptureDeviceInput(device: device), fresh.canAddInput(input) else { return fail("input refused") }
+      let output = AVCaptureAudioDataOutput()
+      output.audioSettings = [
+        AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 16000, AVNumberOfChannelsKey: 1,
+        AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false,
+        AVLinearPCMIsNonInterleaved: false,
+      ]
+      output.setSampleBufferDelegate(self, queue: queue)
+      guard fresh.canAddOutput(output) else { return fail("output refused") }
+      fresh.beginConfiguration()
+      fresh.addInput(input)
+      fresh.addOutput(output)
+      fresh.commitConfiguration()
+      NotificationCenter.default.addObserver(self, selector: #selector(runtimeError(_:)), name: .AVCaptureSessionRuntimeError, object: fresh)
+      session = fresh
+      deviceID = device.uniqueID
+    }
+    pending.removeAll(keepingCapacity: true)
+    if session?.isRunning != true { session?.startRunning() }
+    onState?(session?.isRunning == true ? "on" : "error")
+  }
+
+  private func fail(_ why: String) {
+    log("mikrofón: \(why)")
+    wanted = false
+    session = nil
+    deviceID = nil
+    onState?("error")
+  }
+
+  /// The device went away while recording (unplugged headset): forget the session, the page asks again.
+  @objc private func runtimeError(_ note: Notification) {
+    queue.async { self.fail("runtime error \((note.userInfo?[AVCaptureSessionErrorKey] as? NSError)?.code ?? 0)") }
+  }
+
+  func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+    guard wanted, let block = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
+    let length = CMBlockBufferGetDataLength(block)
+    guard length > 0 else { return }
+    var chunk = Data(count: length)
+    let status = chunk.withUnsafeMutableBytes { raw -> OSStatus in
+      guard let base = raw.baseAddress else { return -1 }
+      return CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: base)
+    }
+    guard status == kCMBlockBufferNoErr else { return }
+    pending.append(chunk)
+    while pending.count >= NativeMic.frameBytes {
+      let frame = pending.prefix(NativeMic.frameBytes)
+      pending.removeFirst(NativeMic.frameBytes)
+      var sum: Float = 0
+      frame.withUnsafeBytes { raw in
+        for v in raw.bindMemory(to: Int16.self) {
+          let x = Float(Int16(littleEndian: v)) / 32768
+          sum += x * x
+        }
+      }
+      onFrame?(Data(frame), (sum / 1280).squareRoot())
+    }
+  }
+}
+
 final class ControlOverlay {
   private var window: NSWindow?
   private let frameLayer = CAShapeLayer()

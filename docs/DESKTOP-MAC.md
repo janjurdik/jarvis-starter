@@ -42,7 +42,11 @@ v Chrome, Edge, Brave alebo Arcu.
   lokálnym Whisperom, ktorý sa pripraví sám pri prvom spustení (`docs/HLAS.md`). Ak medzerník ohlási, že okno nevie
   rozpoznávať reč, Whisper sa nepripravil: `node scripts/voice.mjs plan` povie prečo. Dovtedy Jarvis v appke hovorí a ty píšeš.
 - **Mikrofón.** Pri prvom použití sa macOS spýta na povolenie. Po každom novom builde sa môže spýtať znova
-  (appka je podpísaná len lokálne).
+  (appka je podpísaná len lokálne). Mikrofón otvára appka sama, obyčajným systémovým vstupom bez spracovania hlasu
+  (`NativeMic` v `main.swift`, na stránke `hud/public/js/native-mic.js`), nie jadro Safari. Zachytávanie cez jadro
+  Safari pri každom otvorení mikrofónu na chvíľu reštartuje zvukové zariadenia celého počítača a hovor v inej appke
+  (Discord) pri tom príde o mikrofón. Natívny vstup sa dotkne len mikrofónu a vlna pri hovorení beží od prvej chvíle.
+  Staršia appka (pred 1.9.1) túto cestu nemá a stránka v nej počúva po starom, kým appku nepostavíš znova.
 
 ## Ladenie
 

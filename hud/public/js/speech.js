@@ -1,10 +1,13 @@
 // Voice in the browser: plays `tts` clips exactly in seq order through WebAudio with an analyser
 // (real loudness, waveform for the core, word-by-word subtitles) and push-to-talk in two ways:
-//   local   getUserMedia + MediaRecorder, the recording goes to POST /api/stt (local Whisper)
+//   local   getUserMedia + MediaRecorder, the recording goes to POST /api/stt (local Whisper);
+//           in the desktop app the app captures the microphone itself (native-mic.js) and the
+//           recording is a WAV file
 //   browser the browser's own speech recognition (Chrome, Edge), nothing to install
 // When the server has no voice engine, sentences marked `speak` are read by speechSynthesis.
 
 import { clamp } from './format.js'
+import { MIC_RATE, acquireNativeMic, nativeMicAvailable, wavBlob } from './native-mic.js'
 
 const now = () => performance.now() / 1000
 const GAP = 0.06 // pauza medzi vetami, klipy už majú vlastné ticho na okrajoch
@@ -276,14 +279,72 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
     clearTimeout(micIdleTimer)
     micIdleTimer = setTimeout(() => (rec || recog ? micKeep() : micRelease()), MIC_IDLE_MS)
   }
-  let mic = null // {stream, source, analyser, buf}
+  let mic = null // {stream, source, analyser, buf} or, in the desktop app, {native, on, rms, at, ring, release}
   let micOpening = null
   let micLevel = 0
   let micLastAt = 0
+  // The desktop app captures the microphone itself: the web view's capture restarts the audio devices
+  // of the whole computer (a call in Discord loses its microphone) and its level meter waits for the
+  // playback AudioContext, so the wave came seconds late.
+  const nativeMic = desktop && nativeMicAvailable()
+  const PRE_ROLL = 2 // frames (160 ms) kept from before the key went down, so the first syllable is whole
+
+  function nativeStart() {
+    micOpening = new Promise((resolve) => {
+      const m = { native: true, on: false, rms: 0, at: 0, ring: [], release: null }
+      let settled = false
+      const settle = (value) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        micOpening = null
+        resolve(value)
+      }
+      const fail = (name) => {
+        m.release?.()
+        if (mic === m) mic = null
+        if (rec?.native) rec = null
+        onError?.(Object.assign(new Error('Mikrofón nie je dostupný.'), { name }))
+        settle(null)
+      }
+      const timer = setTimeout(() => fail('NotReadableError'), 4000)
+      m.release = acquireNativeMic({
+        onFrame(pcm, rms) {
+          m.rms = rms
+          m.at = now()
+          if (rec?.native) {
+            rec.chunks.push(pcm)
+            rec.peak = Math.max(rec.peak, rms)
+            rec.measured = true
+          } else {
+            m.ring.push(pcm)
+            if (m.ring.length > PRE_ROLL) m.ring.shift()
+          }
+          if (!m.on) {
+            m.on = true
+            settle(m)
+          }
+        },
+        onState(state) {
+          if (state === 'denied') fail('NotAllowedError')
+          else if (state === 'error') fail('NotReadableError')
+          else if (state === 'off' && mic === m) {
+            // The app took the microphone back (the page reloaded, the device went away).
+            m.release?.()
+            mic = null
+          }
+        },
+      })
+      mic = m
+      micKeep()
+    })
+    return micOpening
+  }
 
   async function micStart() {
-    if (mic) return mic
+    if (mic && (!mic.native || mic.on)) return mic
     if (micOpening) return micOpening
+    if (nativeMic) return nativeStart()
     if (!navigator.mediaDevices?.getUserMedia) return null
     micOpening = (async () => {
       try {
@@ -319,6 +380,12 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
     if (rec) return true
     wakeAudio()
     const m = await micStart()
+    if (m?.native) {
+      micKeep()
+      // What was heard just before the key went down belongs to the sentence.
+      rec = { native: true, chunks: m.ring.splice(0), startedAt: now(), peak: 0, measured: false }
+      return true
+    }
     if (!m || typeof MediaRecorder === 'undefined') return false
     micKeep()
     const type = REC_TYPES.find((t) => MediaRecorder.isTypeSupported?.(t)) ?? ''
@@ -351,8 +418,12 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
     const r = rec
     rec = null
     if (!r) return Promise.resolve(null)
-    clearInterval(r.timer)
     micKeep()
+    if (r.native) {
+      const samples = r.chunks.reduce((n, c) => n + c.length, 0)
+      return Promise.resolve({ blob: wavBlob(r.chunks), ms: Math.round((samples / MIC_RATE) * 1000), silent: r.measured && r.peak < SILENCE_RMS })
+    }
+    clearInterval(r.timer)
     return new Promise((done) => {
       r.recorder.addEventListener('stop', () => done({ blob: new Blob(r.chunks, { type: r.type }), ms: Math.round((now() - r.startedAt) * 1000), silent: r.measured && r.peak < SILENCE_RMS }), { once: true })
       try {
@@ -367,8 +438,11 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
   function micRelease() {
     if (!mic || rec) return
     clearTimeout(micIdleTimer)
-    for (const track of mic.stream.getTracks()) track.stop()
-    mic.source.disconnect()
+    if (mic.native) mic.release?.()
+    else {
+      for (const track of mic.stream.getTracks()) track.stop()
+      mic.source.disconnect()
+    }
     mic = null
   }
 
@@ -376,6 +450,7 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
   function recCancel() {
     const r = rec
     rec = null
+    if (r?.native) return
     if (r) clearInterval(r.timer)
     if (r && r.recorder.state !== 'inactive') {
       try {
@@ -448,7 +523,10 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
     const dt = Math.min(0.1, t - micLastAt || 0.016)
     micLastAt = t
     let x = 0
-    if (mic) {
+    if (mic?.native) {
+      // The app sends the loudness with every frame (80 ms); a frame that is late means silence.
+      x = t - mic.at < 0.3 ? clamp(mic.rms * 7, 0, 1.2) : 0
+    } else if (mic) {
       mic.analyser.getFloatTimeDomainData(mic.buf)
       let sum = 0
       for (let i = 0; i < mic.buf.length; i++) sum += mic.buf[i] * mic.buf[i]
@@ -485,7 +563,7 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
     },
     /** Mikrofón dáva dáta len pri bežiacom AudioContexte (po prvom geste na stránke). */
     get micOpen() {
-      return Boolean(mic) && ctx?.state === 'running'
+      return mic?.native ? mic.on : Boolean(mic) && ctx?.state === 'running'
     },
     get blocked() {
       return Boolean(ctx) && ctx.state !== 'running'

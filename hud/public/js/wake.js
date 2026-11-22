@@ -1,5 +1,6 @@
 // „Hey Jarvis" cez mikrofón prehliadača: getUserMedia (surový zvuk, hlasitosť dorovná worklet)
-// → AudioWorklet (16 kHz Int16, rámce 80 ms) → WebSocket /api/mic. Wake word, koniec vety a prepis
+// → AudioWorklet (16 kHz Int16, rámce 80 ms) → WebSocket /api/mic. V appke na ploche mikrofón
+// otvára appka sama (native-mic.js) a rámce prídu hotové, bez getUserMedia a bez AudioContextu. Wake word, koniec vety a prepis
 // rieši server, výsledok príde cez SSE `voice` a `chat` ako pri hlase.
 //
 // Server cez ten istý WebSocket hlási, či je wake zapnutý ({type: 'wake', on}). Mikrofón je otvorený
@@ -15,6 +16,8 @@
 //          'suspended' (Chrome čaká na klik alebo kláves, potom sám pokračuje) | 'blocked' (mikrofón
 //          zamietnutý) | 'replaced' (mikrofón má iná karta) | 'reconnecting' | 'error'
 // onLevel(0..1): hlasitosť mikrofónu ~12x za sekundu, kým streamuje (na f.listen).
+
+import { acquireNativeMic, createGain, nativeMicAvailable } from './native-mic.js'
 
 const levelOf = (rms) => Math.min(1, Math.sqrt(rms / 0.12))
 
@@ -35,6 +38,9 @@ export function createWake({ onLevel, onState, onError, query = null, desktop = 
   let mute = null
   let acquiring = null
   let wantMic = false
+  // The desktop app captures the microphone itself: { release, on } while it does.
+  const useNative = desktop && nativeMicAvailable()
+  let native = null
   let failedAt = 0
   let retryMicTimer = null
 
@@ -98,6 +104,13 @@ export function createWake({ onLevel, onState, onError, query = null, desktop = 
 
   function releaseMic() {
     wantMic = false
+    if (native) {
+      const n = native
+      native = null
+      n.release()
+      onLevel?.(0)
+      return
+    }
     for (const track of stream?.getTracks() ?? []) track.stop()
     try {
       source?.disconnect()
@@ -112,7 +125,43 @@ export function createWake({ onLevel, onState, onError, query = null, desktop = 
     onLevel?.(0)
   }
 
+  /** The app's own microphone: frames arrive ready, the gain is the one the worklet applies. */
+  function acquireNative() {
+    wantMic = true
+    if (native) return
+    const gain = createGain()
+    const mine = { on: false, release: null }
+    native = mine
+    mine.release = acquireNativeMic({
+      onFrame(frame) {
+        if (native !== mine) return
+        const { pcm, rms } = gain(frame)
+        if (!mine.on) {
+          mine.on = true
+          update()
+        }
+        onLevel?.(levelOf(rms))
+        if (wantStream() && ws?.readyState === WebSocket.OPEN && ws.bufferedAmount < 64_000) ws.send(pcm.buffer)
+      },
+      onState(next) {
+        if (native !== mine || next === 'on' || next === 'starting') return
+        // denied, error, or the app took the microphone back: let go, a failure waits five seconds before the next try.
+        releaseMic()
+        if (next !== 'off') failedAt = Date.now()
+        if (next === 'denied') setState('blocked')
+        else if (next === 'error') {
+          setState('error')
+          clearTimeout(retryMicTimer)
+          retryMicTimer = setTimeout(update, 5000)
+        }
+        if (next !== 'off') onError?.(Object.assign(new Error('Mikrofón nie je dostupný.'), { name: next === 'denied' ? 'NotAllowedError' : 'NotReadableError' }))
+        else update()
+      },
+    })
+  }
+
   async function acquireMic() {
+    if (useNative) return acquireNative()
     wantMic = true
     if (node || acquiring) return acquiring
     acquiring = (async () => {
@@ -164,6 +213,7 @@ export function createWake({ onLevel, onState, onError, query = null, desktop = 
     if (!ws) return
     if (!wsOpen) return setState(retry ? 'reconnecting' : 'connecting')
     if (wantStream()) {
+      if (native) return setState(native.on ? 'streaming' : 'connecting')
       if (!node) {
         // Po chybe mikrofónu (nie zamietnutí) skúsi znova o 5 s, nie v slučke.
         const wait = failedAt + 5000 - Date.now()

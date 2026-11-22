@@ -2,6 +2,15 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.9.1 (2026-11-22)
+
+- **Discord a iné hovory už neprídu o mikrofón (Mac, Jarvis na ploche).** Keď si začal hovoriť s Jarvisom, hovor
+  v inej appke stratil mikrofón. Príčina bola v tom, ako mikrofón otvára jadro Safari v appke na ploche: pri každom
+  otvorení na chvíľu reštartovalo zvukové zariadenia celého počítača. Mikrofón teraz otvára appka sama, čistým vstupom,
+  ktorý sa ostatných appiek nedotkne. **Po aktualizácii treba appku na plochu postaviť znova** (aktualizácia to spraví).
+- **Vlna pri hovorení beží hneď.** Pri hovorení sa vlna v príkazovom riadku objavila až po pár sekundách, hoci hlas sa
+  už nahrával. Teraz reaguje od prvej chvíle a nahrávka má aj zlomok sekundy spred stlačenia, takže neodsekne prvú slabiku.
+
 ## 1.9.0 (2026-11-22)
 
 - **Vidíš, že Jarvis pracuje.** Keď robí niečo dlhšie, nad príkazovým riadkom sú bodky a jedna veta: čo práve robí,
