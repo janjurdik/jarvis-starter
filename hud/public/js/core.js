@@ -315,7 +315,7 @@ export async function createCore(canvas, opts = {}) {
 
   /**
    * Jedna snímka. f: { voice, pulse, boot, ignite, igniteT, shockT, wave, flares, cue,
-   *                    voiceState, listen, focus, toolNodes, film }
+   *                    voiceState, listen, focus, toolNodes, film, working }
    */
   function frame(T, f = {}) {
     if (!ready) return
@@ -326,7 +326,7 @@ export async function createCore(canvas, opts = {}) {
     const pulse = clamp(num(f.pulse))
     const boot = clamp(num(f.boot, 1))
     const vs = f.voiceState ?? (f.cue ? 'speaking' : 'idle')
-    const think = ramps.think.set(T, vs === 'thinking' ? 1 : vs === 'transcribing' ? 0.55 : 0).value(T)
+    const think = ramps.think.set(T, vs === 'thinking' ? 1 : vs === 'transcribing' ? 0.55 : f.working ? 0.3 : 0).value(T)
     const speak = ramps.speak.set(T, vs === 'speaking' ? 1 : 0).value(T)
     const listenEnv = ramps.listen.set(T, vs === 'listening' ? 1 : vs === 'wake' ? 0.55 : vs === 'transcribing' ? 0.3 : 0).value(T)
     // Hlasitosť mikrofónu: rýchly nábeh, pomalší dozvuk (len živý vstup, v capture je to funkcia rámcov).

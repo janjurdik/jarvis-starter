@@ -12,7 +12,7 @@
  * macOS: a launchd agent that runs `node scripts/hud.mjs` at login.
  * Windows: a small script in your Startup folder that does the same (no admin rights needed).
  */
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
 import { DATA_DIR, IS_MAC, IS_WIN, LABEL, LOG_DIR, REPO, has, parseArgs, sh } from './lib.mjs'
@@ -40,6 +40,7 @@ const macPlist = () => `<?xml version="1.0" encoding="UTF-8"?>
   <array>
     <string>${xml(NODE)}</string>
     <string>${xml(SCRIPT)}</string>
+    <string>--login</string>
   </array>
   <key>WorkingDirectory</key><string>${xml(REPO)}</string>
   <key>RunAtLoad</key><true/>
@@ -53,7 +54,7 @@ const macPlist = () => `<?xml version="1.0" encoding="UTF-8"?>
 `
 
 const vbq = (s) => `"${String(s).replace(/"/g, '""')}"`
-const winVbs = () => `' Starts the Jarvis HUD after login, without a console window. Created by scripts/autostart.mjs.\r\nSet shell = CreateObject("WScript.Shell")\r\nshell.CurrentDirectory = ${vbq(REPO)}\r\nshell.Run ${vbq(`"${NODE}" "${SCRIPT}"`)}, 0, False\r\n`
+const winVbs = () => `' Starts the Jarvis HUD after login, without a console window. Created by scripts/autostart.mjs.\r\nSet shell = CreateObject("WScript.Shell")\r\nshell.CurrentDirectory = ${vbq(REPO)}\r\nshell.Run ${vbq(`"${NODE}" "${SCRIPT}" --login`)}, 0, False\r\n`
 
 if (!IS_MAC && !IS_WIN) {
   console.error('Automatické spúšťanie je pripravené pre macOS a Windows.')
@@ -63,15 +64,34 @@ if (!IS_MAC && !IS_WIN) {
 const file = IS_MAC ? MAC_FILE : WIN_FILE
 const content = IS_MAC ? macPlist() : winVbs()
 
+/** The file as it is on the disk now (Windows Script Host files are UTF-16), or null. */
+const current = () => {
+  try {
+    const buf = readFileSync(file)
+    return buf[0] === 0xff && buf[1] === 0xfe ? buf.toString('utf16le').replace(/^\ufeff/, '') : buf.toString('utf8')
+  } catch {
+    return null
+  }
+}
+/** Windows Script Host reads paths with diacritics only from UTF-16 with a byte order mark. */
+const write = () => (IS_WIN ? writeFileSync(file, `\ufeff${content}`, 'utf16le') : writeFileSync(file, content))
+
 if (action === 'ensure') {
-  if (has(file) || existsSync(OFF_FILE)) process.exit(0)
+  if (existsSync(OFF_FILE)) process.exit(0)
+  // An older start at login of this very folder (from before `--login` existed) is brought up to date quietly.
+  // One that points at another folder belongs to another installation and stays as it is.
+  if (has(file)) {
+    const now = current()
+    if (!dry && now !== content && now?.includes(SCRIPT)) write()
+    process.exit(0)
+  }
   if (dry) {
     console.log(`Zapol by som spúšťanie po prihlásení: ${file}`)
     process.exit(0)
   }
   mkdirSync(dirname(file), { recursive: true })
   mkdirSync(LOG_DIR, { recursive: true })
-  writeFileSync(file, content)
+  write()
   console.log('Jarvis sa odteraz zapne sám po každom zapnutí počítača (vypnúť: npm run autostart -- remove).')
 } else if (action === 'install') {
   if (dry) {
@@ -81,7 +101,7 @@ if (action === 'ensure') {
   mkdirSync(dirname(file), { recursive: true })
   mkdirSync(LOG_DIR, { recursive: true })
   if (IS_MAC) await sh('/bin/launchctl', ['bootout', `gui/${userInfo().uid}/${MAC_LABEL}`])
-  writeFileSync(file, content)
+  write()
   rmSync(OFF_FILE, { force: true })
   // Registered for the next login. The HUD is not restarted now (start it with: npm run hud).
   console.log(`Hotovo. HUD sa po prihlásení spustí sám.\n  ${file}`)

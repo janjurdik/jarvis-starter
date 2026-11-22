@@ -318,6 +318,27 @@ export function createJobs({ api, ui = null, onChange, onFinished = null, captur
     get waiting() {
       return [...jobs.values()].filter((j) => j.status === 'needs_ok').length
     },
+    /**
+     * What Jarvis is working on in the background right now, for the line above the command bar:
+     * { job, label (the current step), sub (the job, and how many more run), since (ms) } or null.
+     * A job that waits for the user is not work, Jarvis asks about it in the conversation.
+     */
+    get working() {
+      const list = [...jobs.values()]
+        .filter((j) => j.status === 'running' || j.status === 'queued')
+        .sort((a, b) => (b.status === 'running') - (a.status === 'running') || (ts(b.startedAt) || 0) - (ts(a.startedAt) || 0))
+      const j = list[0]
+      if (!j) return null
+      const more = list.length - 1
+      const title = j.title || 'Úloha na pozadí'
+      const since = ts(j.startedAt)
+      return {
+        job: j.id,
+        label: j.step || (j.status === 'queued' ? 'Vo fronte' : 'Pracujem'),
+        sub: more ? `${title} a ${more} ${plural(more, 'ďalšia úloha', 'ďalšie úlohy', 'ďalších úloh')}` : title,
+        since: Number.isFinite(since) ? since : null,
+      }
+    },
     /** Of those, the ones that wait for an answer to a question, not for a yes. */
     get asking() {
       return [...jobs.values()].filter(isQuestion).length

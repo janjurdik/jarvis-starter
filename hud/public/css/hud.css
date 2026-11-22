@@ -811,6 +811,39 @@ body.capture .subtitle .w { transition: none; }
 
 .wave { width: 100%; height: 1.9rem; display: block; margin: 0.35rem 0 0.55rem; pointer-events: none; filter: drop-shadow(0 0 3px rgba(127, 243, 255, 0.8)); }
 
+/* What Jarvis is doing right now: dots and one line above the command bar, so a longer job never looks frozen. */
+.work-slot { position: relative; width: 100%; max-width: 60rem; height: 0; }
+.work {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.7rem;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem 0.7rem;
+  padding: 0.3rem 0.9rem;
+  border-radius: 1.2rem;
+  text-align: center;
+  text-shadow: 0 0 1.2rem rgba(3, 6, 9, 0.95), 0 0 0.4rem rgba(3, 6, 9, 0.8);
+  opacity: 0;
+  transition: opacity 0.35s, background 0.2s;
+  pointer-events: none;
+}
+.work[hidden] { display: none; }
+.work.is-on { opacity: 1; }
+.work.is-job { pointer-events: auto; cursor: pointer; }
+.work.is-job:hover { background: var(--fill); }
+.work .thinking { flex: none; height: 1.4rem; }
+.wk-t { font: 500 1.0625rem/1.3 var(--sans); color: var(--t1); overflow-wrap: anywhere; }
+.wk-s { font: 400 0.9375rem/1.3 var(--sans); color: var(--t3); overflow-wrap: anywhere; }
+.wk-c { flex: none; font: 500 0.875rem/1.3 var(--mono); color: var(--t3); font-variant-numeric: tabular-nums; }
+body.capture .work { display: none; }
+
 .cmd {
   position: relative;
   width: 100%;

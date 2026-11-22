@@ -53,6 +53,7 @@ export function createUI({ capture }) {
     labels: $('#labels'),
     subtitle: $('#subtitle'),
     wave: $('#wave'),
+    work: $('#work'),
     cmd: $('#cmd'),
     input: $('#cmd-input'),
     cmdWave: $('#cmd-wave'),
@@ -761,6 +762,44 @@ export function createUI({ capture }) {
     el.keys.innerHTML = (mode === 'none' ? [] : KEYSETS[mode] ?? KEYSETS.idle).map(([k, label, cls]) => `<span class="key${cls ? ` ${cls}` : ''}"><kbd>${k}</kbd>${label}</span>`).join('')
   }
 
+  // ── what Jarvis is doing right now, above the command bar ──
+  let workOff = null
+  /**
+   * work: null (nothing runs) or { label, sub, since (ms), job (id or null) }. Dots, what he does,
+   * what it belongs to and how long it has taken. The line fades out before it is removed.
+   */
+  function renderWork(work, nowMs) {
+    const node = el.work
+    if (!node) return
+    if (!work) {
+      if (cache.get('work') === null) return
+      cache.set('work', null)
+      node.classList.remove('is-on')
+      clearTimeout(workOff)
+      workOff = setTimeout(() => (node.hidden = true), 380)
+      return
+    }
+    const s = Number.isFinite(work.since) ? Math.max(0, Math.floor((nowMs - work.since) / 1000)) : null
+    const time = s === null || s < (work.job ? 1 : 5) ? '' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+    const key = `${work.job ?? ''}|${work.label ?? ''}|${work.sub ?? ''}|${time}`
+    if (cache.get('work') === key) return
+    const fresh = cache.get('work') === null || cache.get('work') === undefined
+    cache.set('work', key)
+    clearTimeout(workOff)
+    node.hidden = false
+    node.classList.toggle('is-job', Boolean(work.job))
+    node.dataset.job = work.job ?? ''
+    node.setAttribute('aria-label', work.job ? 'Jarvis pracuje, klik otvorí priebeh' : 'Jarvis pracuje')
+    node.innerHTML =
+      '<span class="thinking" aria-hidden="true"><i></i><i></i><i></i></span>' +
+      (work.label ? `<span class="wk-t">${esc(work.label)}</span>` : '') +
+      (work.sub ? `<span class="wk-s">${esc(work.sub)}</span>` : '') +
+      (time ? `<span class="wk-c">${time}</span>` : '')
+    // One frame hidden, so the fade in has something to start from.
+    if (fresh) requestAnimationFrame(() => node.classList.add('is-on'))
+    else node.classList.add('is-on')
+  }
+
   // ── orb: v pokoji statický (žiadne zápisy), pri reči a počúvaní pulzuje s hlasitosťou ──
   function renderOrb(state, level, T) {
     const active = state === 'speaking' || state === 'listening' || state === 'wake'
@@ -925,6 +964,7 @@ export function createUI({ capture }) {
     renderPromptCue,
     renderKeys,
     renderOrb,
+    renderWork,
     renderWave,
     renderMicWave,
     sizeCanvases,

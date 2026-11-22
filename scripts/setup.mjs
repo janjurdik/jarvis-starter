@@ -4,15 +4,16 @@
  * computer, puts Jarvis on screen and steps back: from there the setup is a conversation with
  * Jarvis himself (hud/server/persona.mjs, section Úvodné nastavenie).
  *
- *   node scripts/setup.mjs [--ai claude|codex|antigravity] [--surface desktop|web] [--no-hud] [--json]
+ *   node scripts/setup.mjs [--ai claude|codex|antigravity] [--surface desktop|app|browser] [--no-hud] [--json]
  *       1. packages of the HUD (npm install, once)
  *       2. the AI Jarvis runs on: Claude Code, Codex or Antigravity, whichever started this (or is installed)
  *       3. uv, the one helper the voice, Whisper and the video tools share
  *       4. speech: local Whisper chosen for this computer's hardware and free disk space
  *       5. yt-dlp and the default alarm song
- *       6. Jarvis on the desktop, starting with the computer from now on. On a Mac `--surface`
- *          says where: `desktop` (the default, Jarvis as the desktop itself, under the windows)
- *          or `web` (a full-screen browser window). The choice is kept in data/setup.json
+ *       6. Jarvis on the screen, starting with the computer from now on. `--surface` says where:
+ *          `desktop` (macOS only and the default there: Jarvis as the desktop itself, under the
+ *          windows), `app` (his own window with a Jarvis icon, like any other program) or
+ *          `browser` (a plain page in the user's browser). The choice is kept in data/setup.json
  *          (Settings on the desktop write `surface` to config/jarvis.json later, which wins).
  *     Every step is safe to repeat. A step that fails never stops the rest: it is listed at the
  *     end with what to do, and Jarvis works without it in the meantime.
@@ -28,7 +29,8 @@ import { join } from 'node:path'
 import { INSTALL_HINT, antigravityStatus } from '../hud/server/antigravity.mjs'
 import { PROVIDERS, cleanEnv } from '../hud/server/provider.mjs'
 import { STEPS, SETUP_FILE, getSetup, noteSetup } from '../hud/server/setup.mjs'
-import { DATA_DIR, IS_MAC, IS_WIN, REPO, WIN_POWERSHELL, findBin, hudAlive, parseArgs, sh } from './lib.mjs'
+import { normalizeSurface, surfacesFor } from '../hud/server/surface.mjs'
+import { DATA_DIR, IS_MAC, IS_WIN, PORT, REPO, WIN_POWERSHELL, findBin, hudAlive, parseArgs, sh } from './lib.mjs'
 
 const argv = process.argv.slice(2)
 const { flags } = parseArgs(argv)
@@ -191,8 +193,10 @@ if (uv) {
 }
 
 // 6. Jarvis on the desktop
-const wanted = String(opt('surface') ?? '').toLowerCase()
-if (wanted === 'desktop' || wanted === 'web') {
+// A place this computer does not have (the desktop outside macOS) becomes the app.
+const place = normalizeSurface(opt('surface'))
+const wanted = place && !surfacesFor().includes(place) ? 'app' : place
+if (wanted) {
   // Kept next to the setup state (like the AI): a config file would mean "Jarvis is set up", and he is not yet.
   let raw = {}
   try {
@@ -205,10 +209,16 @@ if (wanted === 'desktop' || wanted === 'web') {
 if (!flags.has('no-hud')) {
   say('Štartujem Jarvisa na ploche…')
   const r = await sh(process.execPath, [join(REPO, 'scripts', 'hud.mjs'), '--no-prepare'], { timeout: 90_000 })
-  const where = /appka Jarvis HUD na ploche/.test(r.out) ? 'Jarvis je na ploche (pod oknami, namiesto tapety).' : 'Jarvis beží v okne na celú obrazovku.'
+  const where = /appka Jarvis HUD na ploche/.test(r.out)
+    ? 'Jarvis je na ploche (pod oknami, namiesto tapety).'
+    : /stránka v prehliadači/.test(r.out)
+      ? `Jarvis je otvorený ako stránka v prehliadači: http://localhost:${PORT}`
+      : /ikona Jarvis je/.test(r.out)
+        ? `Jarvis beží vo vlastnom okne a má ikonu ${IS_MAC ? 'v Launchpade a v priečinku Aplikácie' : 'na pracovnej ploche a v ponuke Štart'}.`
+        : 'Jarvis beží v okne na celú obrazovku.'
   step('hud', await hudAlive(), (await hudAlive()) ? where : 'Obrazovku Jarvisa sa nepodarilo spustiť.', r.out.split('\n').slice(-2).join(' ') || 'Skús: node scripts/hud.mjs')
   // The desktop was asked for and this Mac could not build the app: say what to do, Jarvis runs in a window meanwhile.
-  if (IS_MAC && wanted !== 'web' && /xcode-select --install/.test(r.out)) step('desktop', false, 'Na plochu ma zatiaľ neviem položiť, bežím v okne.', 'Spusti: xcode-select --install, potom: node scripts/hud.mjs')
+  if (IS_MAC && (wanted ?? 'desktop') === 'desktop' && /xcode-select --install/.test(r.out)) step('desktop', false, 'Na plochu ma zatiaľ neviem položiť, bežím v okne.', 'Spusti: xcode-select --install, potom: node scripts/hud.mjs')
 }
 
 const setup = getSetup()

@@ -39,10 +39,13 @@ rozhovorom na ploche. Ty nevypĺňaš dotazník a na nič sa nepýtaš.
    - Chýba: **macOS** `brew install node` (keď je Homebrew), inak ho popros o inštaláciu LTS z https://nodejs.org. **Windows** `winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements`.
    - Po inštalácii Node treba tento program zavrieť a otvoriť znova a napísať `štart`.
 3. Len macOS: keď je priečinok v Stiahnutých, na Ploche alebo v Dokumentoch, systém tam rutinám na pozadí a budíku často nedovolí čítať. Povedz mu, nech priečinok vo Finderi presunie do domovského priečinka (napríklad `~/Jarvis`), otvorí ho znova a napíše `štart`. Ak ho chce nechať, pokračuj.
-4. Len macOS, jediná otázka pred prípravou: **„Chcete ma mať priamo na pracovnej ploche, alebo len ako stránku v prehliadači?"**
-   Odporuč plochu a povedz prečo jednou vetou: je tam stále, pod oknami namiesto tapety, a stačí zavrieť okná alebo stlačiť skratku. Keď nevie alebo je mu to jedno, plocha.
-   Odpoveď ide do prípravy ako `--surface desktop` alebo `--surface web`. Na Windows sa nepýtaj, tam Jarvis beží v okne na celú obrazovku.
-5. Spusti prípravu: `node scripts/setup.mjs --ai claude --surface desktop` (alebo `--ai codex`, `--ai antigravity`, podľa toho, kto si). Trvá dve až pätnásť minút, podľa internetu:
+4. Jediná otázka pred prípravou: **kde ma chce mať.** Polož ju jednou správou a ku každej možnosti daj jednu vetu:
+   - **Na pracovnej ploche** (len macOS, odporúčaná): Jarvis je tam stále, pod oknami namiesto tapety, stačí zavrieť okná alebo stlačiť skratku. `--surface desktop`
+   - **Ako samostatná appka**: vlastné okno ako každý iný program, otvára sa ikonou Jarvis (Mac: Launchpad a priečinok Aplikácie, Windows: pracovná plocha a ponuka Štart). `--surface app`
+   - **Ako stránka v prehliadači**: obyčajná karta v jeho prehliadači, ktorú si otvorí, keď chce. Povedz na rovinu, že hovoriť, zvoniť budíkom a pripomínať nahlas vie Jarvis, len keď je stránka otvorená. `--surface browser`
+
+   Na Macu odporuč plochu, na Windows appku (plocha tam nie je, neponúkaj ju). Keď nevie alebo je mu to jedno, ber odporúčanú. Zmeniť sa to dá kedykoľvek v Nastaveniach Jarvisa, časť Plocha.
+5. Spusti prípravu: `node scripts/setup.mjs --ai claude --surface desktop` (alebo `--ai codex`, `--ai antigravity`, podľa toho, kto si; `--surface` podľa odpovede). Trvá dve až pätnásť minút, podľa internetu:
    nainštaluje súčasti obrazovky, pomocníka `uv`, **lokálny Whisper** na rozpoznávanie reči (model vyberie podľa výkonu počítača
    a voľného miesta na disku; slabý alebo plný počítač ostane pri rozpoznávaní v prehliadači), **yt-dlp** a skladbu, ktorou
    budík zvoní, a nakoniec položí Jarvisa na plochu a zapne mu štart po prihlásení. Pri ploche na Macu si postaví malú appku
@@ -50,14 +53,16 @@ rozhovorom na ploche. Ty nevypĺňaš dotazník a na nič sa nepýtaš.
    - Kým to beží, povedz mu jednou vetou, čo sa deje. Výstup má riadky s `✓` a `!`.
    - Riadok s `!` je vec, ktorá sa nepodarila, a pod ním je, čo s ňou. Oprav to a spusti prípravu znova (dá sa opakovať, hotové kroky preskočí). Jarvis funguje aj bez nej, len slabšie.
    - „nie je prihlásený": prihlásenie je na ňom (`claude auth login`, `codex login` alebo pri Antigravity `node scripts/antigravity.mjs login`, v prehliadači klikne Povoliť). Jarvis potrebuje platené predplatné (Claude Pro alebo Max, ChatGPT Plus alebo Pro); pri Antigravity stačí účet Google, s Google AI Pro alebo Ultra vydrží dlhšie. Ak ho nemá, povedz to na rovinu hneď.
-6. Keď príprava skončí vetou, že Jarvis je na ploche, povedz mu: **„Som na ploche. Odteraz hovorte so mnou tam: podržte medzerník a hovorte, alebo píšte."** A že tento rozhovor ostáva na úpravy do hĺbky, keď chce vidieť každý krok.
+6. Keď príprava skončí vetou, kde Jarvis je (na ploche, vo vlastnom okne, ako stránka), povedz mu to isté jeho slovami, napríklad: **„Som na ploche. Odteraz hovorte so mnou tam: podržte medzerník a hovorte, alebo píšte."** A že tento rozhovor ostáva na úpravy do hĺbky, keď chce vidieť každý krok.
 7. Potom mu ľudsky a krátko vysvetli, čo sa práve stalo s jeho počítačom. Nepredpokladaj, že to vie:
-   - **Kde Jarvis je.** Na Macu s plochou: Jarvis teraz žije na ploche namiesto tapety, pod všetkými oknami. Keď okná zavrie alebo schová, je tam. V okne (Windows alebo voľba „stránka"): beží v okne na celú obrazovku, F11 ho zmenší.
-   - **Ako ho vyvolať.** Skratka `Control + Option + J` ho vytiahne nad okná, `Esc` ho vráti späť.
-   - **Krúžok v lište hore.** V lište úplne hore vpravo (pri hodinách) pribudol malý krúžok. To je menu Jarvisa: ukázať ho, Nastavenia, zobrazovať alebo skryť ikony na ploche, spúšťať po zapnutí počítača, vypnúť Jarvisa a vrátiť pôvodnú plochu.
-   - **Ikony na ploche.** Keď mu na ploche zavadzajú súbory a priečinky, cez krúžok ich skryje. Nič sa nemaže, ostávajú v priečinku Plocha a tou istou voľbou sa vrátia.
-   - **Nastavenia.** Ikona posuvníkov hore v strede obrazovky Jarvisa: hlas, oslovenie, počúvanie, mozog, tiché hodiny, plocha. Čipy vedľa nej povedia, čo robia, keď na ne prejde myšou.
-   - **Vypnutie.** Krúžok → „Vypnúť Jarvisa a vrátiť pôvodnú plochu". Zapne sa znova sám po prihlásení, alebo cez `node scripts/hud.mjs`.
+   Podľa toho, čo si vybral, povedz len to jeho:
+   - **Plocha (Mac).** Jarvis teraz žije na ploche namiesto tapety, pod všetkými oknami. Keď okná zavrie alebo schová, je tam. Skratka `Control + Option + J` ho vytiahne nad okná, `Esc` ho vráti späť. V lište úplne hore vpravo (pri hodinách) pribudol malý krúžok, to je menu Jarvisa: ukázať ho, Nastavenia, zobrazovať alebo skryť ikony na ploche, spúšťať po zapnutí počítača, vypnúť Jarvisa a vrátiť pôvodnú plochu. Keď mu na ploche zavadzajú súbory a priečinky, cez krúžok ich skryje: nič sa nemaže, ostávajú v priečinku Plocha a tou istou voľbou sa vrátia. Vypnutie: krúžok → „Vypnúť Jarvisa a vrátiť pôvodnú plochu".
+   - **Appka.** Jarvis je samostatné okno na celú obrazovku, `F11` (Mac: `Control + Command + F`) ho prepne na bežné okno a späť. Zavrie ho ako každé okno. Otvorí ho znova ikonou **Jarvis**: na Macu v Launchpade a v priečinku Aplikácie, na Windows na pracovnej ploche a v ponuke Štart. Po zapnutí počítača sa otvorí sám.
+   - **Stránka.** Jarvis je karta v jeho prehliadači na adrese `http://localhost:4545` (presný port je v `node scripts/hud.mjs --info`), nech si ju uloží medzi záložky. Na pozadí beží stále, aj po zapnutí počítača, ale okno sám neotvára. Hovoriť, zvoniť a pripomínať nahlas vie, len keď je stránka otvorená.
+
+   A pri každej voľbe:
+   - **Nastavenia.** Ikona posuvníkov hore v strede obrazovky Jarvisa: hlas, oslovenie, počúvanie, mozog, tiché hodiny, plocha (tam sa dá zmeniť aj to, kde Jarvis býva). Čipy vedľa nej povedia, čo robia, keď na ne prejde myšou.
+   - **Znova zapnúť.** Zapína sa sám po prihlásení, ručne cez `node scripts/hud.mjs`.
 
 Keď znova napíše `štart`: `node scripts/setup.mjs status`. Ak Jarvis na ploche nebeží, `node scripts/hud.mjs`. Ak nastavenie nie je dokončené, povedz mu, nech Jarvisovi povie „pokračuj".
 

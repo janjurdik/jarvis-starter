@@ -1,7 +1,8 @@
 # Jarvis na Windows
 
-Na Windows beží Jarvis rovnako ako na Macu, len namiesto natívnej appky na ploche používa okno prehliadača
-na celú obrazovku. Všetko ostatné (pamäť, hlas, rutiny) funguje rovnako.
+Na Windows beží Jarvis rovnako ako na Macu, len nevie byť tapetou plochy. Vyberáš z dvoch možností: **samostatná appka**
+(vlastné okno na celú obrazovku s ikonou Jarvis na pracovnej ploche a v ponuke Štart, odporúčaná) alebo **stránka
+v prehliadači**. Všetko ostatné (pamäť, hlas, rutiny) funguje rovnako.
 
 ## Čo treba
 
@@ -25,7 +26,12 @@ miesta na disku sa stiahne model na rozpoznávanie reči (0,5 až 1,6 GB) a prí
 nič nesťahuje a počúva cez prehliadač. Podrobnosti sú v `docs\HLAS.md`.
 
 - **F11** prepína celú obrazovku, **Alt+F4** okno zavrie.
-- Okno si pripni na panel úloh (pravý klik na ikonu → Pripnúť).
+- Pri voľbe appka (`"surface": "app"` v `config\jarvis.json`, alebo Nastavenia Jarvisa → Plocha) vznikne ikona **Jarvis**
+  na pracovnej ploche a v ponuke Štart. Otvorí okno, alebo vytiahne dopredu to, ktoré už beží. Ručne ju vytvorí
+  `node scripts\launcher.mjs install`, odstráni `node scripts\launcher.mjs remove`.
+- Pri voľbe stránka (`"surface": "browser"`) sa otvorí `http://localhost:4545` v tvojom prehliadači a po prihlásení
+  do Windows beží Jarvis len na pozadí, bez okna. Hovoriť a zvoniť vie, len keď je stránka otvorená.
+- Okno si môžeš pripnúť aj na panel úloh (pravý klik na ikonu → Pripnúť).
 - Na druhom monitore: presuň okno tam (Win+Shift+šípka) a stlač F11. HUD potom žije na jednom monitore a pracuješ na druhom.
 - Hlas funguje hneď: podrž medzerník a hovor. Pri prvom raze povoľ mikrofón.
 

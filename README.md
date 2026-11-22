@@ -33,16 +33,20 @@ a budík s rutinami by nefungovali.
 
 Priečinok sa takto dá mať v Claude otvorený natrvalo: je to obyčajný projekt, do ktorého sa kedykoľvek vrátiš.
 
-**4. Napíš `štart`.** AI sa spýta, či chceš Jarvisa priamo na pracovnej ploche (odporúčame), alebo len ako stránku
-v prehliadači, pripraví počítač a o pár minút sa Jarvis objaví. **Odvtedy už hovoríš s ním.** Predstaví sa, poobzerá sa
+**4. Napíš `štart`.** AI sa spýta, kde chceš Jarvisa mať: priamo na pracovnej ploche (na Macu, odporúčame), ako
+samostatnú appku s vlastnou ikonou, alebo len ako stránku v prehliadači. Potom pripraví počítač a o pár minút sa Jarvis objaví. **Odvtedy už hovoríš s ním.** Predstaví sa, poobzerá sa
 po počítači, aby ťa spoznal, spýta sa na to, čo nenájde, a spolu dotiahnete zvyšok.
 
 ### Čo sa po štarte zmení v počítači
 
-- **Jarvis žije na ploche.** Na Macu je namiesto tapety, pod všetkými oknami. Skratka `Control + Option + J` ho
-  vytiahne navrch, `Esc` ho vráti späť. Na Windows beží v okne na celú obrazovku.
-- **V lište hore pribudne malý krúžok.** To je menu Jarvisa: ukázať ho, Nastavenia, skryť alebo zobraziť ikony
-  na ploche, spúšťať po zapnutí počítača, vypnúť Jarvisa a vrátiť pôvodnú plochu.
+Záleží na tom, čo si vyberieš:
+
+- **Plocha (Mac).** Jarvis je namiesto tapety, pod všetkými oknami. Skratka `Control + Option + J` ho vytiahne navrch,
+  `Esc` ho vráti späť. V lište hore pribudne malý krúžok, menu Jarvisa: ukázať ho, Nastavenia, skryť alebo zobraziť
+  ikony na ploche, spúšťať po zapnutí počítača, vypnúť Jarvisa a vrátiť pôvodnú plochu.
+- **Appka (Mac aj Windows).** Jarvis je samostatné okno ako každý iný program. Otvoríš ho ikonou Jarvis: na Macu
+  v Launchpade, na Windows na pracovnej ploche a v ponuke Štart.
+- **Stránka v prehliadači.** Jarvis je karta na adrese `http://localhost:4545`. Hovoriť a zvoniť vie, len keď ju máš otvorenú.
 - **Nič sa nemaže.** Skryté ikony ostávajú v priečinku Plocha a tou istou voľbou sa vrátia. Jarvisa vypneš jedným klikom.
 
 ### Aktualizácie

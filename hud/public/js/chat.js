@@ -329,6 +329,18 @@ export function createChat({ onSend, capture = false, fileUrl: toFileUrl = null 
     return state
   }
 
+  /** The turn Jarvis is working on without saying anything yet: { label (the tool that runs, or null), since (ms) }. */
+  function work() {
+    let out = null
+    for (const t of turns.values()) {
+      if (t.state !== 'thinking' || t.history) continue
+      const tools = t.parts.flatMap((p) => (p.kind === 'tools' ? p.items : []))
+      const run = tools.filter((x) => x.status === 'run').pop()
+      out = { label: run ? run.label || run.name || null : null, since: t.at }
+    }
+    return out
+  }
+
   /** Uzly, na ktorých Jarvis práve pracuje: {node: since}. */
   function busyNodes() {
     const out = {}
@@ -412,5 +424,5 @@ export function createChat({ onSend, capture = false, fileUrl: toFileUrl = null 
     syncRows(model)
   }
 
-  return { apply, stopActive, loadHistory, setFilm, clear, activeState, busyNodes, frame, renderStatic, get size() { return turns.size } }
+  return { apply, stopActive, loadHistory, setFilm, clear, activeState, work, busyNodes, frame, renderStatic, get size() { return turns.size } }
 }

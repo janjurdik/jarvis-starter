@@ -183,7 +183,16 @@ export function createSettings({ onToast = () => {} } = {}) {
     const native = desk()?.native && desk().version >= 2
     const prefs = desk()?.prefs ?? {}
     const mac = d.platform === 'darwin'
-    const onDesk = d.surface !== 'web'
+    const surface = ['desktop', 'app', 'browser'].includes(d.surface) ? d.surface : mac ? 'desktop' : 'app'
+    const onDesk = surface === 'desktop'
+    const SURFACE = { desktop: 'Na ploche', app: 'Appka', browser: 'V prehliadači' }
+    const surfaceSeg = seg('surface', (d.surfaces ?? (mac ? ['desktop', 'app', 'browser'] : ['app', 'browser'])).map((id) => [id, SURFACE[id]]), surface)
+    const surfaceLead = {
+      desktop: 'Žijem na vašej ploche namiesto tapety, pod oknami. Keď všetko zavriete, som tam.',
+      app: `Som samostatná appka vo vlastnom okne. Otvoríte ma ikonou Jarvis ako každý iný program${mac ? ', nájdete ju v Launchpade' : ', je na pracovnej ploche a v ponuke Štart'}.`,
+      browser: `Som stránka vo vašom prehliadači na adrese ${esc(location.host)}. Hovoriť, zvoniť a pripomínať nahlas viem, len keď ju máte otvorenú.`,
+    }[surface]
+    const surfaceRow = row('Kde ma máte', surfaceSeg, 'Zmena platí od ďalšieho spustenia.')
 
     return {
       asistent: `<h3>Asistent</h3><p class="st-lead">Kto s vami hovorí. To isté stačí povedať: „volaj sa Friday", „hovor ženským hlasom".</p>
@@ -229,15 +238,20 @@ export function createSettings({ onToast = () => {} } = {}) {
         ${row('Váš mobil', `<input class="st-in" type="tel" data-call="to" placeholder="${call.to ? esc(call.to) : '+421…'}" spellcheck="false" autocomplete="off">`)}
         <div class="st-acts"><button type="button" class="st-btn" data-call-save>Uložiť</button><button type="button" class="st-btn is-quiet" data-call-test ${call.ready ? '' : 'disabled'}>Zavolať na skúšku</button><span class="st-call-msg" role="status"></span></div>`,
 
-      plocha: mac
-        ? `<h3>Plocha</h3><p class="st-lead">${onDesk ? 'Žijem na vašej ploche namiesto tapety, pod oknami. Keď všetko zavriete, som tam.' : 'Bežím v okne prehliadača. Na ploche namiesto tapety by som bol stále poruke.'}</p>
-        ${row('Kde ma máte', seg('surface', [['desktop', 'Na ploche'], ['web', 'V okne']], onDesk ? 'desktop' : 'web'), 'Zmena platí od ďalšieho spustenia.')}
-        ${native ? row('Ikony na ploche', toggle('data-desk="icons"', prefs.icons !== false), 'Keď ich skryjem, plocha patrí len mne. Súbory ostávajú v priečinku Plocha.') : ''}
-        ${native ? row('Spúšťať po zapnutí počítača', toggle('data-desk="login"', prefs.login === true), 'Som tu hneď po prihlásení.') : ''}
-        ${native ? row('Ukázať ma nad oknami', `<span class="st-val"><kbd>${esc(desk().hotkeyLabel ?? '⌃⌥J')}</kbd></span>`, 'Skratka ma vytiahne navrch, Esc ma vráti späť pod okná.') : ''}
-        <p class="st-note">${native ? 'V lište úplne hore vpravo je môj krúžok. Cez neho ma vyvoláte, načítate znova alebo vypnete a vrátite si pôvodnú plochu.' : 'Na plochu ma položí príkaz sh hud/desktop/build.sh --open v priečinku Jarvisa, alebo to povedzte AI, ktorá má ten priečinok otvorený.'}</p>`
-        : `<h3>Plocha</h3><p class="st-lead">Bežím v okne na celú obrazovku. F11 ho prepne na okno a späť.</p>
-        <p class="st-note">Zapínam sa sám po prihlásení do počítača. Vypnúť to vie príkaz node scripts/autostart.mjs remove v priečinku Jarvisa.</p>`,
+      plocha: `<h3>Plocha</h3><p class="st-lead">${surfaceLead}</p>
+        ${surfaceRow}
+        ${onDesk && native ? row('Ikony na ploche', toggle('data-desk="icons"', prefs.icons !== false), 'Keď ich skryjem, plocha patrí len mne. Súbory ostávajú v priečinku Plocha.') : ''}
+        ${onDesk && native ? row('Spúšťať po zapnutí počítača', toggle('data-desk="login"', prefs.login === true), 'Som tu hneď po prihlásení.') : ''}
+        ${onDesk && native ? row('Ukázať ma nad oknami', `<span class="st-val"><kbd>${esc(desk().hotkeyLabel ?? '⌃⌥J')}</kbd></span>`, 'Skratka ma vytiahne navrch, Esc ma vráti späť pod okná.') : ''}
+        <p class="st-note">${
+          onDesk
+            ? native
+              ? 'V lište úplne hore vpravo je môj krúžok. Cez neho ma vyvoláte, načítate znova alebo vypnete a vrátite si pôvodnú plochu.'
+              : 'Na plochu ma položí príkaz sh hud/desktop/build.sh --open v priečinku Jarvisa, alebo to povedzte AI, ktorá má ten priečinok otvorený.'
+            : surface === 'app'
+              ? `Okno je na celú obrazovku, ${mac ? '⌃⌘F' : 'F11'} ho prepne na bežné okno a späť. Po prihlásení do počítača sa otvorím sám.`
+              : 'Po prihlásení do počítača bežím potichu na pozadí a žiadne okno neotváram.'
+        }</p>`,
     }
   }
 

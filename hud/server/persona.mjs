@@ -15,7 +15,8 @@ import { lifeNote } from './life.mjs'
 import { getOrbState } from './orbs.mjs'
 import { STEPS, getSetup } from './setup.mjs'
 import { COMMON_PHRASES } from './tts.mjs'
-import { DOW_LONG, IS_WIN } from './util.mjs'
+import { resolveSurface } from './surface.mjs'
+import { DATA_DIR, DOW_LONG, IS_WIN } from './util.mjs'
 
 const PROFILE_MAX = 3500
 
@@ -74,7 +75,7 @@ Používateľ si ťa práve stiahol. Celé nastavenie je rozhovor s tebou tu na 
 - Najprv zisti sám, potom sa pýtaj. Čo sa dá nájsť v počítači, v pamäti, v konektoroch alebo na webe, na to sa nepýtaj. Zlá otázka: „Ako sa voláte?" Dobrá: „Podľa všetkého ste Martin a študujete informatiku. Sedí to?" Pýtaj sa len na to, čo sa zistiť nedá (ako ho oslovovať, čo chce, kedy vstáva) a na súhlas tam, kde ho treba.
 - Prácu rob cez agent_task so zadaním „Nastavenie, krok <názov>: postupuj podľa AGENTS.md, sekcia Kroky nastavenia." Úloha beží na pozadí, ty medzitým pokračuješ v rozhovore ďalšou otázkou. Nečakaj mlčky.
 - Úplne prvá správa (príde ako [systém: prvé spustenie]): predstav sa dvoma až tromi vetami, povedz, že sa najprv poobzeráš po počítači (len čítaš, nič nemeníš a nič z neho neodchádza), a spýtaj sa, či môžeš začať. Po súhlase spusti krok sken a hneď polož otázku kroku oslovenie.
-- Hneď v druhej odpovedi mu ľudsky ukáž, kde čo je, nech sa nestratí (dve až tri krátke vety, nie zoznam): ${process.platform === 'darwin' ? 'žiješ na jeho ploche namiesto tapety, pod oknami; skratka Control Option J ťa vytiahne navrch a Esc vráti späť; malý krúžok v lište úplne hore vpravo je tvoje menu (nastavenia, skrytie ikon na ploche, vypnutie a návrat pôvodnej plochy)' : 'bežíš v okne na celú obrazovku, F11 ho zmenší a vráti'}; ikona posuvníkov hore v strede otvára Nastavenia; podržaním medzerníka s tebou hovorí; čipy hore povedia, čo robia, keď na ne prejde myšou.
+- Hneď v druhej odpovedi mu ľudsky ukáž, kde čo je, nech sa nestratí (dve až tri krátke vety, nie zoznam): ${whereTour()}; ikona posuvníkov hore v strede otvára Nastavenia; podržaním medzerníka s tebou hovorí; čipy hore povedia, čo robia, keď na ne prejde myšou.
 - Krok ciel je jediná otvorená otázka: „Čo by som mal za vás robiť ako prvé?" Odpoveď ulož cez setup_note (goal) a cez remember. Nevymenúvaj mu ponuku možností. Čokoľvek povie, ide to: buď to vieš, alebo si to doprogramuješ.
 - Krok appky: zavolaj hud_focus s node appky, otvorí sa mapa jeho appiek. Povedz mu, nech klikne na všetko, čo používa, a že ostatné si napojíš sám. Čo sken našiel v počítači a ešte tam nie je, mu sám navrhni.
 - Pošta a kalendár sa pripájajú v aplikácii, cez ktorú ťa spustil (Claude: Nastavenia, Konektory; ChatGPT a Codex: pripojené aplikácie; Antigravity: MCP servery cez /mcp). Povedz presne, kde kliknúť, zapíš to do waiting a pokračuj ďalším krokom. Nestoj na mieste.
@@ -229,3 +230,12 @@ export const WARMUP_TEXT = '[systém: HUD sa práve spustil, toto je zahriatie s
 
 /** The nudge that makes Jarvis speak first on the very first start (a hidden turn, see server.mjs). */
 export const FIRST_RUN_TEXT = '[systém: prvé spustenie. Používateľ ťa práve prvýkrát vidí na svojej ploche. Privítaj ho podľa sekcie Úvodné nastavenie.]'
+
+/** Where Jarvis is on this computer, for the tour in his second reply, by the place the user chose (surface.mjs). */
+function whereTour() {
+  const { surface } = resolveSurface({ config: getConfig().surface ?? null, dataDir: DATA_DIR })
+  const mac = process.platform === 'darwin'
+  if (surface === 'desktop') return 'žiješ na jeho ploche namiesto tapety, pod oknami; skratka Control Option J ťa vytiahne navrch a Esc vráti späť; malý krúžok v lište úplne hore vpravo je tvoje menu (nastavenia, skrytie ikon na ploche, vypnutie a návrat pôvodnej plochy)'
+  if (surface === 'browser') return 'si stránka v jeho prehliadači; keď ju zavrie, bežíš potichu ďalej a vráti sa k tebe cez tú istú adresu, hovoriť a zvoniť však vieš, len keď je stránka otvorená'
+  return `si samostatná appka vo vlastnom okne na celú obrazovku, ${mac ? 'Control Command F' : 'F11'} ho zmenší a vráti; keď okno zavrie, otvorí ťa znova ikonou Jarvis ${mac ? 'v Launchpade' : 'na pracovnej ploche alebo v ponuke Štart'}`
+}

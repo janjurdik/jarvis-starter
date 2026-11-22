@@ -26,6 +26,7 @@ import { DATA_DIR, REPO, clean, errMsg, log, writeFileAtomic } from './util.mjs'
 import { defaultVoiceId, isPitch, isRate, resolveVoice, voiceById, voiceList } from './voices.mjs'
 import { aiProvider } from './provider.mjs'
 import { MODES, routingInfo } from './routing.mjs'
+import { normalizeSurface, resolveSurface, surfacesFor } from './surface.mjs'
 
 const bad = (message, status = 400) => Object.assign(new Error(message), { status })
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v)
@@ -108,16 +109,9 @@ export async function testCall() {
   }
 }
 
-/** Where Jarvis lives on this computer: on the desktop (the macOS app) or in a browser window. */
+/** Where Jarvis lives on this computer: desktop (the macOS app), app (his own window) or browser (a plain page). */
 export function surfaceOf(cfg = getConfig()) {
-  if (process.platform !== 'darwin') return 'web'
-  let asked = null
-  try {
-    asked = JSON.parse(readFileSync(join(DATA_DIR, 'setup.json'), 'utf8')).surface ?? null
-  } catch {
-    asked = null
-  }
-  return (cfg.surface ?? asked) === 'web' ? 'web' : 'desktop'
+  return resolveSurface({ config: cfg.surface ?? null, dataDir: DATA_DIR }).surface
 }
 
 export function settingsBody() {
@@ -154,6 +148,7 @@ export function settingsBody() {
     // What Jarvis runs on and how he picks the model for background jobs (routing.mjs).
     brain: { id: ai.id, name: ai.name, product: ai.product, plan: ai.plan, routing: routingInfo() },
     surface: surfaceOf(cfg),
+    surfaces: surfacesFor(),
     platform: process.platform,
     language: effectiveLang(cfg),
     // JARVIS_LANG in .env wins over the setting.
@@ -198,7 +193,7 @@ const inRange = (value, unit, min, max) => {
  */
 export function validateSettings(body, voices) {
   if (!isObj(body)) throw bad('telo musí byť JSON objekt')
-  onlyKeys(body, ['assistant', 'voice', 'user', 'quiet', 'stt', 'wake', 'language'], 'Nastavenia')
+  onlyKeys(body, ['assistant', 'voice', 'user', 'quiet', 'stt', 'wake', 'language', 'routing', 'surface'], 'Nastavenia')
   const patch = {}
 
   if (body.assistant !== undefined) {
@@ -270,8 +265,9 @@ export function validateSettings(body, voices) {
     patch.routing = body.routing
   }
   if (body.surface !== undefined) {
-    if (!['desktop', 'web'].includes(body.surface)) throw bad('surface: desktop alebo web')
-    patch.surface = body.surface
+    const surface = normalizeSurface(body.surface)
+    if (!surface || !surfacesFor().includes(surface)) throw bad(`surface: ${surfacesFor().join(', ')}`)
+    patch.surface = surface
   }
   if (body.wake !== undefined) {
     const on = isObj(body.wake) ? body.wake.on : body.wake

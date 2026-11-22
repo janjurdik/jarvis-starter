@@ -17,36 +17,35 @@
  * (JARVIS_PREPARE_WAIT_S, 15 minutes by default): after that the HUD opens anyway, the download
  * carries on in the background and Jarvis listens through the browser until it is done.
  *
- * Window: where the user wants Jarvis (`surface` in config/jarvis.json, or in data/setup.json as asked during setup).
+ * Window: where the user wants Jarvis (`surface` in config/jarvis.json, or in data/setup.json as asked
+ * during setup; hud/server/surface.mjs).
  *   desktop  macOS only, the default there: the "Jarvis HUD" app, Jarvis as the desktop under the
  *            windows. Built on first use (hud/desktop/build.sh, needs the Xcode command line tools).
- *   web      Chrome or Edge in app mode (a clean full-screen window without tabs). F11 or ⌃⌘F
- *            toggles full screen. Also what happens when the app cannot be built.
+ *   app      his own window like any other program: Chrome or Edge in app mode (a clean full-screen
+ *            window without tabs, F11 or ⌃⌘F toggles full screen) and a Jarvis icon to open it with
+ *            (scripts/launcher.mjs). Also what happens when the desktop app cannot be built.
+ *   browser  a plain page in the user's own browser. Nothing opens at login, the server just runs.
+ *
+ *   --front  what the Jarvis icon runs: open the window, or bring the open one forward
+ *   --login  what the start at login runs: like a plain start, except that a `browser` Jarvis opens no page
  */
 import { spawn } from 'node:child_process'
 import { mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { DATA_DIR, HUD_URL, IS_MAC, IS_WIN, LOG_DIR, PORT, REPO, findBin, has, hudAlive, parseArgs, postHud, sh, winSys } from './lib.mjs'
+import { DATA_DIR, HUD_URL, IS_MAC, IS_WIN, LOG_DIR, PORT, REPO, WIN_POWERSHELL, findBin, has, hudAlive, parseArgs, postHud, sh, winSys } from './lib.mjs'
 import { prepareNeeded, prepareRunning, readProgress } from '../hud/server/stt-plan.mjs'
+import { resolveSurface } from '../hud/server/surface.mjs'
+import { ensureLauncher } from './launcher.mjs'
 
 const { flags } = parseArgs()
 const PID_FILE = join(DATA_DIR, 'hud.pid')
 const MAC_APP = join(homedir(), 'Applications', 'Jarvis HUD.app')
 
-/** Where Jarvis lives: on the desktop (macOS app) or in a browser window. `--browser` forces the window once. */
-function surface() {
-  if (flags.has('browser') || !IS_MAC) return 'web'
-  // The config (Settings on the desktop) wins over what setup wrote down.
-  for (const file of [process.env.JARVIS_CONFIG || join(REPO, 'config', 'jarvis.json'), join(DATA_DIR, 'setup.json')]) {
-    try {
-      const value = JSON.parse(readFileSync(file, 'utf8')).surface
-      if (value === 'web' || value === 'desktop') return value
-    } catch {
-      // not there yet: the next one, then the default
-    }
-  }
-  return 'desktop'
+/** Where Jarvis lives: { surface: desktop | app | browser, raw: what was chosen }. `--browser` forces a window once. */
+function place() {
+  if (flags.has('browser')) return { surface: 'app', raw: null }
+  return resolveSurface({ configFile: process.env.JARVIS_CONFIG || join(REPO, 'config', 'jarvis.json'), dataDir: DATA_DIR })
 }
 
 /** Builds and installs the desktop app. False when this Mac cannot build it (no compiler) or the build failed. */
@@ -95,24 +94,59 @@ async function startServer() {
   return false
 }
 
+/** Opens the page in whatever opens http links on this computer. */
+function openDefault(url) {
+  if (IS_MAC) spawn('/usr/bin/open', [url], { detached: true, stdio: 'ignore' }).unref()
+  else if (IS_WIN) spawn(winSys('rundll32.exe'), ['url.dll,FileProtocolHandler', url], { detached: true, stdio: 'ignore' }).unref()
+  else spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref()
+}
+
+/** Best effort: the window of Jarvis that is already open comes forward. */
+async function bringForward() {
+  const profile = join(DATA_DIR, 'browser-profile')
+  if (IS_WIN) {
+    spawn(WIN_POWERSHELL, ['-NoProfile', '-NonInteractive', '-Command', "(New-Object -ComObject WScript.Shell).AppActivate('Jarvis') | Out-Null"], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+  } else if (IS_MAC) {
+    // The window belongs to a browser started with our own profile folder: that is how its process is found.
+    const r = await sh('/usr/bin/pgrep', ['-f', `user-data-dir=${profile}`], { timeout: 4000 })
+    const pid = String(r.out ?? '').split('\n').map((x) => Number(x.trim())).filter(Boolean).sort((a, b) => a - b)[0]
+    if (pid) await sh('/usr/bin/osascript', ['-e', `tell application "System Events" to set frontmost of (first process whose unix id is ${pid}) to true`], { timeout: 5000 })
+  }
+}
+
 async function openWindow() {
   const url = `http://localhost:${PORT}/`
-  if (surface() === 'desktop' && (has(MAC_APP) || (await buildMacApp()))) {
+  const { surface, raw } = place()
+  if (surface === 'desktop' && (has(MAC_APP) || (await buildMacApp()))) {
     spawn('/usr/bin/open', [MAC_APP], { detached: true, stdio: 'ignore' }).unref()
     return 'appka Jarvis HUD na ploche'
+  }
+  if (surface === 'browser') {
+    openDefault(url)
+    return `stránka v prehliadači (${url})`
+  }
+  // The icon is made only for somebody who chose the app: a Jarvis from before this choice existed keeps his window as it was.
+  let icon = ''
+  if (raw === 'app') {
+    const l = await ensureLauncher()
+    if (l.ok) icon = IS_MAC ? ', ikona Jarvis je v Launchpade a v priečinku Aplikácie' : ', ikona Jarvis je na pracovnej ploche a v ponuke Štart'
+    else console.log(`Ikonu Jarvis sa nepodarilo vytvoriť. ${l.error ?? ''}`.trim())
+  }
+  // Somebody clicked the icon while Jarvis is open: the same window comes forward, a second one would talk over the first.
+  if (flags.has('front') && (await clients())) {
+    await bringForward()
+    return 'okno Jarvisa, ktoré už je otvorené'
   }
   const bin = browserBin()
   if (bin) {
     // A separate profile keeps the HUD window (and its microphone permission) apart from everyday browsing.
     const profile = join(DATA_DIR, 'browser-profile')
     spawn(bin, [`--app=${url}`, '--start-fullscreen', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--autoplay-policy=no-user-gesture-required'], { detached: true, stdio: 'ignore', windowsHide: false }).unref()
-    return 'okno prehliadača na celú obrazovku'
+    return `samostatné okno Jarvisa na celú obrazovku${icon}`
   }
   // No Chromium browser found: fall back to whatever opens http links.
-  if (IS_MAC) spawn('/usr/bin/open', [url], { detached: true, stdio: 'ignore' }).unref()
-  else if (IS_WIN) spawn(winSys('rundll32.exe'), ['url.dll,FileProtocolHandler', url], { detached: true, stdio: 'ignore' }).unref()
-  else spawn('xdg-open', [url], { detached: true, stdio: 'ignore' }).unref()
-  return 'predvolený prehliadač'
+  openDefault(url)
+  return `predvolený prehliadač${icon}`
 }
 
 if (flags.has('status')) {
@@ -226,6 +260,9 @@ if (flags.has('server') || flags.has('restart')) {
   if (opened) await new Promise((r) => setTimeout(r, 2500))
   const ok = await postHud('/api/apps/open', { app: app || null })
   console.log(ok ? `Jarvis ukazuje Tvoje appky${opened ? ` (${opened})` : ''}: http://localhost:${PORT}/#appky` : `HUD sa neozval. Otvor http://localhost:${PORT}/#appky`)
+} else if (flags.has('login') && place().surface === 'browser') {
+  // A Jarvis who lives in a browser page opens nothing on his own: the page is there when the user wants it.
+  console.log(`HUD server beží, stránka je na http://localhost:${PORT}.`)
 } else {
   console.log(`HUD beží na http://localhost:${PORT}, otváram ${await openWindow()}.`)
 }

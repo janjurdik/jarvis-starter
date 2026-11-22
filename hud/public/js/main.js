@@ -475,6 +475,11 @@ function compute(T) {
   // Úlohy na pozadí: jemný prúd z uzla projekty do jadra, kým niečo beží.
   if (jobs?.active) f.toolNodes.projekty ??= jobsSince ?? (jobsSince = T)
   else jobsSince = null
+  // What he is doing right now: the turn in progress first, then work in the background. Hidden while
+  // he listens or speaks, the subtitle and the wave own that place then.
+  const quiet = vs === 'idle' || vs === 'thinking' || vs === 'wake'
+  f.work = !quiet || scene || CAPTURE ? null : (vs === 'thinking' ? chat.work() ?? { label: null, since: null } : null) ?? jobs?.working ?? null
+  f.working = Boolean(jobs?.working)
   for (const n of nodes) f.flares[n.id] = flareOf(live.flareTimes[n.id], T, T)
   if (CAPTURE) f.clock = new Date(captureClockBase + T * 1000)
   f.state = { app: null }
@@ -506,6 +511,7 @@ function renderFrame(T) {
   }
   const orbState = f.voiceState === 'idle' && status?.wake === true ? 'wake' : f.voiceState
   ui.renderOrb(orbState, f.voiceState === 'listening' ? f.listen : f.voice, T)
+  ui.renderWork(f.work, Date.now())
   ui.renderWave(f.wave, f.voice, T)
   ui.renderMicWave(f.listen, f.voiceState === 'listening' && !scene, T)
   // V pokoji stačí štítky posúvať každú druhú snímku (kamera sa hýbe pomaly).
@@ -1116,6 +1122,8 @@ function bindControls() {
     else pttStop()
   })
   ui.el.orb.addEventListener('click', (e) => e.preventDefault())
+  // The line above the command bar: a click on background work opens its progress.
+  ui.el.work?.addEventListener('click', () => ui.el.work.dataset.job && jobs?.open(ui.el.work.dataset.job))
   // Po kliknutí na čip alebo orb fokus preč, inak by medzerník „klikol" tlačidlo namiesto počúvania.
   for (const b of document.querySelectorAll('button')) b.addEventListener('mouseup', () => b.blur())
   document.getElementById('chip-film').addEventListener('click', () => setFilm(!film))

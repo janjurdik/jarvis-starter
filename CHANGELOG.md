@@ -2,6 +2,20 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.9.0 (2026-11-22)
+
+- **Vidíš, že Jarvis pracuje.** Keď robí niečo dlhšie, nad príkazovým riadkom sú bodky a jedna veta: čo práve robí,
+  na čom a ako dlho (napríklad „Čítam web · Plán výletu na víkend · 3:21"). Klik otvorí celý priebeh. Predtým pri
+  dlhšej úlohe obrazovka stála a nebolo jasné, či sa niečo deje.
+- **Jarvis ako samostatná appka.** Pri `štarte` si vyberáš z troch možností: na pracovnej ploche (Mac), ako samostatná
+  appka vo vlastnom okne, alebo ako stránka v prehliadači. Appka má ikonu Jarvis: na Macu v Launchpade a v priečinku
+  Aplikácie, na Windows na pracovnej ploche a v ponuke Štart. Klik ju otvorí, alebo vytiahne dopredu okno, ktoré už beží.
+  Zmeniť sa to dá kedykoľvek v Nastaveniach → Plocha.
+- **Stránka v prehliadači je naozaj len stránka.** Pri tejto voľbe sa Jarvis otvorí ako karta v tvojom prehliadači
+  a po zapnutí počítača beží potichu na pozadí, žiadne okno sám neotvára.
+- **Nastavenia sa ukladajú.** Prepínače „Model podľa úlohy" (Mozog) a „Kde ma máte" (Plocha) vo verzii 1.8 hlásili
+  chybu a zmena sa neuložila. Opravené.
+
 ## 1.8.1 (2026-11-22)
 
 - **O novej verzii sa dozvieš do hodiny.** Jarvis sa po novej verzii pozerá každú hodinu, doteraz to bolo raz za pol dňa.

@@ -27,8 +27,13 @@ Keď priečinok Jarvisa presunieš alebo zmeníš verziu Node, spusti build znov
 
 V ponuke (malý krúžok v lište hore) nájdeš: Ukázať Jarvisa nad oknami, Nastavenia Jarvisa, Zobrazovať ikony na ploche (zap/vyp),
 Spúšťať po zapnutí počítača (zap/vyp), Načítať Jarvisa znova, Otvoriť ako stránku v prehliadači, Vypnúť Jarvisa a vrátiť pôvodnú plochu.
-Tie isté dva prepínače sú aj v Nastaveniach Jarvisa v časti Plocha. Tam sa dá zvoliť aj to, či má Jarvis bývať na ploche,
-alebo v okne prehliadača (`surface` v `config/jarvis.json`: `desktop` alebo `web`).
+Tie isté dva prepínače sú aj v Nastaveniach Jarvisa v časti Plocha. Tam sa dá zvoliť aj to, kde má Jarvis bývať
+(`surface` v `config/jarvis.json`): na ploche (`desktop`), ako samostatná appka vo vlastnom okne s ikonou Jarvis
+v Launchpade (`app`), alebo ako stránka v prehliadači (`browser`). Staršia hodnota `web` znamená okno ako doteraz.
+
+Ikonu samostatnej appky (`~/Applications/Jarvis.app`) vytvára `node scripts/launcher.mjs install` a `scripts/hud.mjs`
+ju pri voľbe `app` obnoví pri každom štarte. Nepotrebuje nástroje Xcode: je to malý balík, ktorý spustí okno Jarvisa
+v Chrome, Edge, Brave alebo Arcu.
 
 - **Ikony na ploche.** Aby kliky išli priamo do HUD, dajú sa skryť ikony plochy (appka prepne nastavenie Findera).
   Súbory ostávajú v priečinku Plocha, len ich nevidno na tapete. Appka to nikdy nespraví sama, len keď to zapneš v ponuke.
