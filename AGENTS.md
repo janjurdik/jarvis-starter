@@ -44,7 +44,7 @@ rozhovorom na ploche. Ty nevypĺňaš dotazník a na nič sa nepýtaš.
    - **Ako samostatná appka**: vlastné okno ako každý iný program, otvára sa ikonou Jarvis (Mac: Launchpad a priečinok Aplikácie, Windows: pracovná plocha a ponuka Štart). `--surface app`
    - **Ako stránka v prehliadači**: obyčajná karta v jeho prehliadači, ktorú si otvorí, keď chce. Povedz na rovinu, že hovoriť, zvoniť budíkom a pripomínať nahlas vie Jarvis, len keď je stránka otvorená. `--surface browser`
 
-   Na Macu odporuč plochu, na Windows appku (plocha tam nie je, neponúkaj ju). Keď nevie alebo je mu to jedno, ber odporúčanú. Zmeniť sa to dá kedykoľvek v Nastaveniach Jarvisa, časť Plocha.
+   Na Macu odporuč plochu, na Windows appku (plocha tam nie je, neponúkaj ju). Keď nevie alebo je mu to jedno, ber odporúčanú. Zmeniť sa to dá kedykoľvek v Nastaveniach Jarvisa, časť Plocha: Jarvis sa presťahuje hneď, nové miesto sa otvorí a staré sa samo zavrie (plocha vráti ikony a skončí, okno appky sa zavrie, kartu v prehliadači si používateľ zavrie sám). Jarvis býva vždy len na jednom mieste.
 5. Spusti prípravu: `node scripts/setup.mjs --ai claude --surface desktop` (alebo `--ai codex`, `--ai antigravity`, podľa toho, kto si; `--surface` podľa odpovede). Trvá dve až pätnásť minút, podľa internetu:
    nainštaluje súčasti obrazovky, pomocníka `uv`, **lokálny Whisper** na rozpoznávanie reči (model vyberie podľa výkonu počítača
    a voľného miesta na disku; slabý alebo plný počítač ostane pri rozpoznávaní v prehliadači), **yt-dlp** a skladbu, ktorou

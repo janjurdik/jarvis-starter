@@ -59,7 +59,7 @@ Rozhovor na ploche beží stále na jednom modeli, aby bol rýchly. Úlohy na po
 | bežná | všetko medzi tým | Sonnet | bežné premýšľanie | tvoj predvolený model |
 | náročná | vytvoriť, napísať, naprogramovať, analyzovať | Opus | dôkladné premýšľanie | Gemini 4 Neon |
 
-Náročnosť určí Jarvis sám, keď úlohu spúšťa, a povie ju nahlas („Ľahká vec, beriem rýchly model."). Vidno ju aj v detaile úlohy.
+Náročnosť určí Jarvis sám a potichu, keď úlohu spúšťa. Nehovorí o nej, pri úlohe je len malým písmom názov modelu, ktorý na nej pracuje (v riadku nad príkazovým riadkom a v detaile úlohy).
 Zmeniť sa to dá v Nastaveniach → Mozog (Automaticky, Najsilnejší, Najrýchlejší), alebo v `config/jarvis.json` kľúčom
 `"routing": "auto" | "heavy" | "light"`. Riadok `JARVIS_JOB_MODEL=<model>` v `.env` routing vypne a všetko beží na tom jednom modeli.
 Rutina s vlastným `model` v `config/jarvis.json` si ho drží. Pravidlá sú v `hud/server/routing.mjs`, modely jednotlivých

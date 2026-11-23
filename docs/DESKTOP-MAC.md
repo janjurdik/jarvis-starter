@@ -30,10 +30,14 @@ Spúšťať po zapnutí počítača (zap/vyp), Načítať Jarvisa znova, Otvori�
 Tie isté dva prepínače sú aj v Nastaveniach Jarvisa v časti Plocha. Tam sa dá zvoliť aj to, kde má Jarvis bývať
 (`surface` v `config/jarvis.json`): na ploche (`desktop`), ako samostatná appka vo vlastnom okne s ikonou Jarvis
 v Launchpade (`app`), alebo ako stránka v prehliadači (`browser`). Staršia hodnota `web` znamená okno ako doteraz.
+Zmena v Nastaveniach platí hneď: nové miesto sa otvorí a staré sa zavrie. Appka na ploche sa o sťahovaní dozvie od stránky
+aj z vlastnej kontroly servera každé 3 sekundy (plochu zakrytú oknom na celú obrazovku systém uspí a stránka by to nepočula),
+vráti ikony plochy, vypne si spúšťanie po prihlásení a skončí.
 
 Ikonu samostatnej appky (`~/Applications/Jarvis.app`) vytvára `node scripts/launcher.mjs install` a `scripts/hud.mjs`
 ju pri voľbe `app` obnoví pri každom štarte. Nepotrebuje nástroje Xcode: je to malý balík, ktorý spustí okno Jarvisa
-v Chrome, Edge, Brave alebo Arcu.
+v Chrome, Edge, Brave alebo Arcu. Okno sa spúšťa cez systém (`open -n -a`), nie priamo z Node: inak by macOS žiadosť
+o kameru pripísal Node, ktorý ju dostať nemôže, a ovládanie rukami by ostalo visieť na zapínaní kamery.
 
 - **Ikony na ploche.** Aby kliky išli priamo do HUD, dajú sa skryť ikony plochy (appka prepne nastavenie Findera).
   Súbory ostávajú v priečinku Plocha, len ich nevidno na tapete. Appka to nikdy nespraví sama, len keď to zapneš v ponuke.

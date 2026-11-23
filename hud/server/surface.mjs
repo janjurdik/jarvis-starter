@@ -9,9 +9,16 @@
  *
  * `web` is what 1.8.0 called the window and still means it, so nobody's Jarvis moves on an update.
  * The choice is `surface` in config/jarvis.json (Settings) or, before Jarvis is set up, in data/setup.json.
+ *
+ * Jarvis lives in one place at a time. A change in Settings moves him at once: scripts/hud.mjs opens
+ * the new place and then asks the server to keep only that one (POST /api/surface/keep). The desktop
+ * app ends itself over its bridge, the app window is a browser of its own and is ended here, a plain
+ * browser tab is told that it can be closed.
  */
+import { spawn, spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const SURFACES = ['desktop', 'app', 'browser']
 
@@ -47,4 +54,53 @@ export function resolveSurface({ configFile, dataDir, config = undefined, platfo
     return { surface: surfacesFor(platform).includes(s) ? s : fallback, raw: String(raw).toLowerCase() }
   }
   return { surface: fallback, raw: null }
+}
+
+/** The folder of the browser profile the app window runs with. Its path in a command line is how the window is found. */
+export const appProfile = (dataDir) => join(dataDir, 'browser-profile')
+
+/** Process ids of the app window: the main process of the browser that runs with our own profile. */
+export function appWindowPids(dataDir, platform = process.platform) {
+  const profile = appProfile(dataDir)
+  try {
+    if (platform === 'win32') {
+      const ps = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('--user-data-dir=${profile.replace(/'/g, "''")}') -and $_.CommandLine.Contains('--app=') -and -not $_.CommandLine.Contains('--type=') } | ForEach-Object { $_.ProcessId }`
+      const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(ps, 'utf16le').toString('base64')], { encoding: 'utf8', timeout: 15_000, windowsHide: true })
+      return String(r.stdout ?? '').split(/\s+/).map(Number).filter(Boolean)
+    }
+    // It has the profile and the app address on its command line, its helper processes also have a --type.
+    const r = spawnSync('/bin/ps', ['-axo', 'pid=,command='], { encoding: 'utf8', timeout: 8000, maxBuffer: 8 * 1024 * 1024 })
+    return String(r.stdout ?? '')
+      .split('\n')
+      .filter((line) => line.includes(`--user-data-dir=${profile}`) && line.includes('--app=') && !line.includes('--type='))
+      .map((line) => Number(line.trim().split(/\s+/)[0]))
+      .filter((pid) => pid && pid !== process.pid)
+  } catch {
+    return []
+  }
+}
+
+/** Ends the app window. Returns how many processes were asked to end. */
+export function closeAppWindow(dataDir, platform = process.platform) {
+  let n = 0
+  for (const pid of appWindowPids(dataDir, platform)) {
+    try {
+      process.kill(pid, 'SIGTERM')
+      n++
+    } catch {
+      // gone already
+    }
+  }
+  return n
+}
+
+/**
+ * Jarvis moves: the launcher opens the place that is in the config now and closes the others.
+ * Detached, the HUD server does not wait for a window (or for the desktop app to be built).
+ */
+export function startMove({ env = process.env } = {}) {
+  if (env.JARVIS_NO_MOVE === '1') return false
+  const script = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'scripts', 'hud.mjs')
+  spawn(process.execPath, [script, '--move'], { cwd: dirname(dirname(script)), detached: true, stdio: 'ignore', windowsHide: true, env }).unref()
+  return true
 }

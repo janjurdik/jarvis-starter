@@ -18,7 +18,6 @@ import { aiProvider } from './provider.mjs'
 
 export const WEIGHTS = ['light', 'normal', 'heavy']
 export const MODES = ['auto', 'heavy', 'light']
-const WEIGHT_SAY = { light: 'ľahká úloha', normal: 'bežná úloha', heavy: 'náročná úloha' }
 
 // Wording that gives a job away. Heavy wins over light: „pozri maily a napíš odpovede" is writing.
 const HEAVY = /(vytvor|vyrob|naprogramuj|doprogramuj|postav|navrhni|nap[ií][sš]|prep[ií][sš]|refaktor|analyzuj|porovnaj|napl[aá]nuj|vymysli|vypracuj|re[sš]er[sš]|strat[eé]gi|prezent[aá]ci|dokument|report|skript|k[oó]d|appk|aplik[aá]ci|web|oprav|uprac|pretrie[dď]|vytvoř|naprogramuj|napiš|navrhni)/i
@@ -41,19 +40,20 @@ export function guessWeight(task) {
 /**
  * The weight, the model and the reasoning effort of one job.
  * `model` is an explicit model (a routine's own): it wins and no routing happens.
- * Returns { weight, model, effort, label } where label is what the user sees („ľahká úloha · Haiku").
+ * Returns { weight, model, effort, label } where label is the small note the user sees next to the job:
+ * the model only („Haiku"). How hard the job is stays inside, nobody has to hear it.
  */
 export function routeJob({ task, weight = null, model = null } = {}) {
   const provider = aiProvider()
   const fixed = model || process.env.JARVIS_JOB_MODEL || null
   const w = WEIGHTS.includes(weight) ? weight : guessWeight(task)
-  if (fixed) return { weight: w, model: fixed, effort: null, label: `${WEIGHT_SAY[w]} · ${nice(fixed)}` }
+  if (fixed) return { weight: w, model: fixed, effort: null, label: nice(fixed) }
   const mode = routingMode()
   const tier = mode === 'auto' ? w : mode
   const picked = provider.tiers?.[tier] ?? null
   const effort = provider.efforts?.[tier] ?? null
   const what = picked ? nice(picked) : effort ? `${provider.name}, ${{ low: 'rýchlo', medium: 'bežne', high: 'dôkladne', xhigh: 'veľmi dôkladne' }[effort] ?? effort}` : provider.name
-  return { weight: w, model: picked, effort, label: `${WEIGHT_SAY[w]} · ${what}` }
+  return { weight: w, model: picked, effort, label: what }
 }
 
 /** A model id as a name a person reads: „haiku" → „Haiku", „gemini-4-neon" → „Gemini 4 Neon". */

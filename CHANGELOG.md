@@ -2,6 +2,17 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.9.2 (2026-11-23)
+
+- **Prepnutie plocha, appka, prehliadač naozaj prepne.** Zmena v Nastaveniach → Plocha vo verzii 1.9 len uložila voľbu
+  a stará plocha bežala ďalej. Teraz sa Jarvis presťahuje hneď: nové miesto sa otvorí a staré sa samo zavrie (plocha
+  vráti ikony a skončí, okno appky sa zavrie). Jarvis býva vždy len na jednom mieste, aj po zapnutí počítača.
+- **Ovládanie rukami funguje aj v okne appky (Mac).** Kamera sa v samostatnom okne zapla, ale nedávala obraz, takže
+  ovládanie rukami ostalo visieť. macOS totiž žiadosť o kameru pripísal nesprávnemu programu. Opravené spúšťaním okna.
+- **Jarvis už nehovorí, aká je úloha náročná.** Model si vyberá sám a potichu. Pri úlohe je len malým písmom názov
+  modelu, ktorý na nej pracuje (v riadku nad príkazovým riadkom a v detaile úlohy).
+- **Po aktualizácii treba appku na plochu postaviť znova** (aktualizácia to spraví), inak sa plocha pri sťahovaní sama nezavrie.
+
 ## 1.9.1 (2026-11-22)
 
 - **Discord a iné hovory už neprídu o mikrofón (Mac, Jarvis na ploche).** Keď si začal hovoriť s Jarvisom, hovor

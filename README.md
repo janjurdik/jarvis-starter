@@ -65,7 +65,7 @@ s tvojimi úpravami. Nič nesťahuješ znova a o pamäť ani nastavenia nepríde
 - **Pošta, kalendár, úlohy.** Triedi poštu a ozve sa len pri dôležitom, upozorní pred stretnutím, stráži termíny a pripomienky.
 - **3D svet na ploche.** Každá väčšia vec v tvojom živote je orb. Pribúdajú a miznú podľa toho, čo naozaj používaš.
 - **Pracuje sám.** „Cez noc mi priprav…" a ráno to máš. Vidíš, čo práve robí, a vieš ho zastaviť. Čo má ísť von k ľuďom, vždy čaká na tvoje áno.
-- **Šetrí tvoje predplatné.** Pred každou úlohou povie, aká je náročná, a podľa toho si vyberie model: na pozretie pošty rýchly, na tvorbu najsilnejší.
+- **Šetrí tvoje predplatné.** Model si pre každú úlohu vyberie sám a potichu: na pozretie pošty rýchly, na tvorbu najsilnejší. Ktorý práve beží, vidno malým písmom pri úlohe.
 - **Odporúča sám.** Podľa toho, čo máš v počítači a v pošte, navrhne, čo sa oplatí pridať ďalej. Klikneš a spraví to.
 
 ## Čo si vieš pridať

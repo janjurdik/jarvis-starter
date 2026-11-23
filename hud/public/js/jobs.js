@@ -336,6 +336,7 @@ export function createJobs({ api, ui = null, onChange, onFinished = null, captur
         job: j.id,
         label: j.step || (j.status === 'queued' ? 'Vo fronte' : 'Pracujem'),
         sub: more ? `${title} a ${more} ${plural(more, 'ďalšia úloha', 'ďalšie úlohy', 'ďalších úloh')}` : title,
+        model: j.route || null,
         since: Number.isFinite(since) ? since : null,
       }
     },

@@ -27,6 +27,7 @@
  *   browser  a plain page in the user's own browser. Nothing opens at login, the server just runs.
  *
  *   --front  what the Jarvis icon runs: open the window, or bring the open one forward
+ *   --move   what Settings run after a change of the place: open the new one (the others then close)
  *   --login  what the start at login runs: like a plain start, except that a `browser` Jarvis opens no page
  */
 import { spawn } from 'node:child_process'
@@ -35,7 +36,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { DATA_DIR, HUD_URL, IS_MAC, IS_WIN, LOG_DIR, PORT, REPO, WIN_POWERSHELL, findBin, has, hudAlive, parseArgs, postHud, sh, winSys } from './lib.mjs'
 import { prepareNeeded, prepareRunning, readProgress } from '../hud/server/stt-plan.mjs'
-import { resolveSurface } from '../hud/server/surface.mjs'
+import { appWindowPids, resolveSurface } from '../hud/server/surface.mjs'
 import { ensureLauncher } from './launcher.mjs'
 
 const { flags } = parseArgs()
@@ -103,13 +104,11 @@ function openDefault(url) {
 
 /** Best effort: the window of Jarvis that is already open comes forward. */
 async function bringForward() {
-  const profile = join(DATA_DIR, 'browser-profile')
   if (IS_WIN) {
     spawn(WIN_POWERSHELL, ['-NoProfile', '-NonInteractive', '-Command', "(New-Object -ComObject WScript.Shell).AppActivate('Jarvis') | Out-Null"], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
   } else if (IS_MAC) {
     // The window belongs to a browser started with our own profile folder: that is how its process is found.
-    const r = await sh('/usr/bin/pgrep', ['-f', `user-data-dir=${profile}`], { timeout: 4000 })
-    const pid = String(r.out ?? '').split('\n').map((x) => Number(x.trim())).filter(Boolean).sort((a, b) => a - b)[0]
+    const pid = appWindowPids(DATA_DIR)[0]
     if (pid) await sh('/usr/bin/osascript', ['-e', `tell application "System Events" to set frontmost of (first process whose unix id is ${pid}) to true`], { timeout: 5000 })
   }
 }
@@ -133,7 +132,7 @@ async function openWindow() {
     else console.log(`Ikonu Jarvis sa nepodarilo vytvoriť. ${l.error ?? ''}`.trim())
   }
   // Somebody clicked the icon while Jarvis is open: the same window comes forward, a second one would talk over the first.
-  if (flags.has('front') && (await clients())) {
+  if (flags.has('front') && appWindowPids(DATA_DIR).length) {
     await bringForward()
     return 'okno Jarvisa, ktoré už je otvorené'
   }
@@ -141,7 +140,14 @@ async function openWindow() {
   if (bin) {
     // A separate profile keeps the HUD window (and its microphone permission) apart from everyday browsing.
     const profile = join(DATA_DIR, 'browser-profile')
-    spawn(bin, [`--app=${url}`, '--start-fullscreen', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--autoplay-policy=no-user-gesture-required'], { detached: true, stdio: 'ignore', windowsHide: false }).unref()
+    const args = [`--app=${url}?surface=app`, '--start-fullscreen', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--autoplay-policy=no-user-gesture-required']
+    // macOS decides about the camera and the microphone by the program that is responsible for a
+    // process. A browser started straight from Node belongs to Node, which can never be given the
+    // camera: the page then gets a camera without a picture and hand control hangs. Started through
+    // the system (open), the browser answers for itself, like when the user opens it.
+    const bundle = IS_MAC ? /^(.+\.app)\/Contents\/MacOS\//.exec(bin)?.[1] : null
+    if (bundle) spawn('/usr/bin/open', ['-n', '-a', bundle, '--args', ...args], { detached: true, stdio: 'ignore' }).unref()
+    else spawn(bin, args, { detached: true, stdio: 'ignore', windowsHide: false }).unref()
     return `samostatné okno Jarvisa na celú obrazovku${icon}`
   }
   // No Chromium browser found: fall back to whatever opens http links.
@@ -264,7 +270,13 @@ if (flags.has('server') || flags.has('restart')) {
   // A Jarvis who lives in a browser page opens nothing on his own: the page is there when the user wants it.
   console.log(`HUD server beží, stránka je na http://localhost:${PORT}.`)
 } else {
-  console.log(`HUD beží na http://localhost:${PORT}, otváram ${await openWindow()}.`)
+  const before = await clients()
+  const opened = await openWindow()
+  console.log(`HUD beží na http://localhost:${PORT}, otváram ${opened}.`)
+  // Jarvis lives in one place: once the new window is there (ten seconds at most), every other place closes.
+  const still = /už je otvorené/.test(opened)
+  for (let i = 0; !still && i < 20 && (await clients()) <= before; i++) await new Promise((r) => setTimeout(r, 500))
+  await postHud('/api/surface/keep', { keep: place().surface })
 }
 
 // Jarvis has to be there after every restart of the computer: the first manual start turns on the

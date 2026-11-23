@@ -45,6 +45,8 @@ const START_AT = Math.max(0, Number(params.get('at')) || 0)
 const MOCK = params.get('mock') === '1'
 /** Plocha Macu: natívna appka vloží window.__jarvisDesktop ešte pred načítaním stránky. */
 const DESKTOP = params.get('desktop') === '1' || Boolean(window.__jarvisDesktop?.native)
+// Which of the three places this window is: the desktop app, the app window (opened with ?surface=app) or a browser tab.
+const SURFACE = DESKTOP ? 'desktop' : params.get('surface') === 'app' ? 'app' : 'browser'
 const desk = () => window.__jarvisDesktop ?? null
 if (DESKTOP) document.documentElement.classList.add('jarvis-desktop')
 const DEMO = params.get('demo') === '1'
@@ -683,6 +685,18 @@ function connectEvents() {
   on('job', (job) => jobs?.apply(job))
   on('apps', (a) => applyApps(a))
   on('suggest', (s) => renderSuggest(s?.items))
+  // Jarvis moved to another place (Settings → Plocha): this one gives itself back.
+  on('surface', (s) => {
+    if (!s?.keep || s.keep === SURFACE) return
+    const where = s.keep === 'desktop' ? 'na plochu' : s.keep === 'app' ? 'do vlastného okna' : 'do prehliadača'
+    if (SURFACE === 'desktop') {
+      const d = window.__jarvisDesktop
+      if (typeof d?.leave === 'function') return d.leave()
+      return ui.toast(`Presťahoval som sa ${where}. Plochu vypnete cez krúžok v lište hore: Vypnúť Jarvisa a vrátiť pôvodnú plochu.`, { iconName: 'info', ms: 20_000 })
+    }
+    // The app window is closed by the server, a browser tab can only be closed by its owner.
+    if (SURFACE === 'browser') ui.toast(`Presťahoval som sa ${where}. Túto kartu môžete zavrieť.`, { iconName: 'info', ms: 20_000 })
+  })
   on('orbs', (o) => paint('orbs', () => applyOrbs(o)))
   on('settings', (st) => settings?.apply(st))
   on('job-feed', (m) => jobs?.feed(m.id, m.entry))

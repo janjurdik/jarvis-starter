@@ -765,7 +765,7 @@ export function createUI({ capture }) {
   // ── what Jarvis is doing right now, above the command bar ──
   let workOff = null
   /**
-   * work: null (nothing runs) or { label, sub, since (ms), job (id or null) }. Dots, what he does,
+   * work: null (nothing runs) or { label, sub, model, since (ms), job (id or null) }. Dots, what he does,
    * what it belongs to and how long it has taken. The line fades out before it is removed.
    */
   function renderWork(work, nowMs) {
@@ -781,7 +781,7 @@ export function createUI({ capture }) {
     }
     const s = Number.isFinite(work.since) ? Math.max(0, Math.floor((nowMs - work.since) / 1000)) : null
     const time = s === null || s < (work.job ? 1 : 5) ? '' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-    const key = `${work.job ?? ''}|${work.label ?? ''}|${work.sub ?? ''}|${time}`
+    const key = `${work.job ?? ''}|${work.label ?? ''}|${work.sub ?? ''}|${work.model ?? ''}|${time}`
     if (cache.get('work') === key) return
     const fresh = cache.get('work') === null || cache.get('work') === undefined
     cache.set('work', key)
@@ -794,6 +794,7 @@ export function createUI({ capture }) {
       '<span class="thinking" aria-hidden="true"><i></i><i></i><i></i></span>' +
       (work.label ? `<span class="wk-t">${esc(work.label)}</span>` : '') +
       (work.sub ? `<span class="wk-s">${esc(work.sub)}</span>` : '') +
+      (work.model ? `<span class="wk-m">${esc(work.model)}</span>` : '') +
       (time ? `<span class="wk-c">${time}</span>` : '')
     // One frame hidden, so the fade in has something to start from.
     if (fresh) requestAnimationFrame(() => node.classList.add('is-on'))

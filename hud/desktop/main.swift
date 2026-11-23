@@ -29,6 +29,8 @@ let CACHE_DIR = HOME.appendingPathComponent("Library/Caches/JarvisHUD", isDirect
 let LOG_PATH = HOME.appendingPathComponent("Library/Logs/jarvis-hud-desktop.log").path
 let SERVER_LOG_PATH = HOME.appendingPathComponent("Library/Logs/jarvis-hud-server.log").path
 let AGENT_URL = HOME.appendingPathComponent("Library/LaunchAgents/\(AGENT_LABEL).plist")
+/// When this copy of the app started (seconds since 1970), to tell a move that happened since from an older one.
+let APP_START = Date().timeIntervalSince1970
 let HOTKEY_LABEL = "⌃⌥J"
 
 // MARK: - Pomocné funkcie
@@ -104,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   var statusItem: NSStatusItem!
   let control = ControlOverlay()
   let mic = NativeMic()
+  var leaving = false
   var hotKeyRef: EventHotKeyRef?
   var signalSource: DispatchSourceSignal?
 
@@ -222,7 +225,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     (() => {
       const d = (window.__jarvisDesktop = window.__jarvisDesktop || {});
       d.native = true;
-      d.version = 3;
+      d.version = 4;
       // The microphone is opened by the app (a plain system input), not by the web view: the web
       // view's capture restarts the audio devices for every app and a call elsewhere loses its microphone.
       // The page sets d.onMicFrame(base64 of 1280 Int16 samples at 16 kHz, rms) and d.onMicState(state).
@@ -248,6 +251,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       d.setPref = (key, value) => d.post({ type: 'pref', key, value: !!value });
       d.prefsChanged = (prefs) => { d.prefs = prefs; emit({ type: 'prefs', prefs }); };
       d.dismiss = () => d.post({ type: 'dismiss' });
+      // Jarvis moved to another place (his own window, a browser page): the desktop gives itself back.
+      d.leave = () => d.post({ type: 'leave' });
       d.summon = () => d.post({ type: 'raise' });
       document.documentElement.classList.add('jarvis-desktop');
       d.setInsets(\(insetsJSON(currentInsets())));
@@ -475,10 +480,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   func checkServer() {
     var req = URLRequest(url: URL(string: HUD_ORIGIN + "/api/health")!)
     req.timeoutInterval = 2.5
-    URLSession.shared.dataTask(with: req) { [weak self] _, resp, _ in
+    URLSession.shared.dataTask(with: req) { [weak self] data, resp, _ in
       let ok = (resp as? HTTPURLResponse)?.statusCode == 200
-      Task { @MainActor in self?.serverStatus(ok) }
+      // The server says where Jarvis lives since the last move ("keep") and when that was decided.
+      // A move away from the desktop that happened while this app runs means: give the desktop back.
+      // The page hears it too, but a desktop covered by a full-screen window is put to sleep by the system.
+      var moved = false
+      if ok, let data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let keep = json["keep"] as? String, keep != "desktop", let at = json["keepAt"] as? Double
+      {
+        moved = at / 1000 > APP_START
+      }
+      Task { @MainActor in
+        self?.serverStatus(ok)
+        if moved { self?.leaveDesktop() }
+      }
     }.resume()
+  }
+
+  /// The user chose another place for Jarvis: no start at login from here any more, the desktop
+  /// icons come back and the app ends cleanly (launchd leaves a clean exit alone).
+  func leaveDesktop() {
+    if leaving { return }
+    leaving = true
+    log("sťahujem sa z plochy")
+    mic.stop()
+    defaults.set(false, forKey: "launchAtLogin")
+    setLoginItem(false)
+    if !desktopIconsVisible() { setDesktopIcons(visible: true) }
+    NSApp.terminate(nil)
   }
 
   func serverStatus(_ ok: Bool) {
@@ -537,8 +567,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     ticks += 1
     pushInsets()
     if window.frame != screen.frame { refit() }
-    // Server kontrolujeme každé 3 s, kým stránka nebeží, potom každých 9 s.
-    if !pageLoaded || ticks % 3 == 0 { checkServer() }
+    // The server is asked every 3 s: is it there, and has Jarvis moved somewhere else.
+    checkServer()
     dailyReload()
   }
 
@@ -641,6 +671,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       default: break
       }
       pushPrefs()
+    case "leave": leaveDesktop()
     case "mic":
       wireMic()
       if (body["on"] as? Bool) ?? false { mic.start() } else { mic.stop() }

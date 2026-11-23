@@ -46,6 +46,7 @@ import { initImports, loadImports, resolveAttachments, routeImportGet, routeImpo
 import { startUpdateWatch, updateInfo } from './server/updates.mjs'
 import { callProblems } from './server/call.mjs'
 import { getApps, saveApps } from './server/apps.mjs'
+import { closeAppWindow, normalizeSurface } from './server/surface.mjs'
 import { applyCall, applySettings, brainSettings, initSettings, previewVoice, settingsBody, testCall } from './server/settings.mjs'
 import { routeVideoGet, routeVideoPost, stopVideo } from './server/video.mjs'
 import { changeOrbs, getOrbs } from './server/orbs.mjs'
@@ -58,6 +59,8 @@ const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
 const HOST = process.env.HUD_HOST ?? '127.0.0.1'
 /** A secondary instance (tests, screenshots) keeps its hands off the saved state. */
 const PRIMARY = process.env.JARVIS_SECONDARY !== '1'
+/** Where Jarvis lives since the last move: { keep: desktop | app | browser, at: ms }. Null until somebody moved him. */
+let lastKeep = null
 const MOCK_ALL = process.env.JARVIS_MOCK === '1'
 const PUBLIC_DIR = join(ROOT, 'public')
 const MODULES_DIR = join(REPO, 'node_modules')
@@ -640,6 +643,16 @@ async function routePost(req, res, path) {
     spawn(bin, args, { stdio: 'ignore', detached: true, windowsHide: true }).on('error', (err) => log('hud', `odkaz sa neotvoril: ${errMsg(err)}`)).unref()
     return sendJson(res, 200, { ok: true })
   }
+  if (path === '/api/surface/keep') {
+    // The launcher opened Jarvis in his place: every other place gives itself back (server/surface.mjs).
+    const keep = normalizeSurface(body.keep)
+    if (!keep) return sendJson(res, 400, { ok: false, error: 'keep: desktop, app alebo browser' })
+    lastKeep = { keep, at: Date.now() }
+    send('surface', { keep })
+    const closed = keep === 'app' ? 0 : closeAppWindow(DATA_DIR)
+    log('hud', `Jarvis je teraz: ${keep}${closed ? ', okno appky zavreté' : ''}`)
+    return sendJson(res, 200, { ok: true, keep, clients: clientCount() })
+  }
   if (path === '/api/apps/open') {
     // Setup (scripts/hud.mjs --apps) or Jarvis: the camera flies to the Tvoje appky orb and the picker opens.
     const app = slug(body.app) || null
@@ -796,7 +809,8 @@ async function route(req, res) {
     if (file && (await serveFile(req, res, file, { cache: true, immutable: true }))) return
     return sendJson(res, 404, { ok: false, error: 'klip neexistuje' })
   }
-  if (path === '/api/health') return sendJson(res, 200, { ok: true, port: PORT, clients: clientCount(), primary: PRIMARY })
+  // keep and keepAt: where Jarvis lives since the last move and when it was decided (the desktop app reads it, server/surface.mjs).
+  if (path === '/api/health') return sendJson(res, 200, { ok: true, port: PORT, clients: clientCount(), primary: PRIMARY, ...(lastKeep ? { keep: lastKeep.keep, keepAt: lastKeep.at } : {}) })
 
   for (const mount of MOUNTS) {
     if (!path.startsWith(mount.prefix)) continue

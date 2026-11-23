@@ -26,7 +26,7 @@ import { DATA_DIR, REPO, clean, errMsg, log, writeFileAtomic } from './util.mjs'
 import { defaultVoiceId, isPitch, isRate, resolveVoice, voiceById, voiceList } from './voices.mjs'
 import { aiProvider } from './provider.mjs'
 import { MODES, routingInfo } from './routing.mjs'
-import { normalizeSurface, resolveSurface, surfacesFor } from './surface.mjs'
+import { normalizeSurface, resolveSurface, startMove, surfacesFor } from './surface.mjs'
 
 const bad = (message, status = 400) => Object.assign(new Error(message), { status })
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v)
@@ -379,6 +379,7 @@ export function applySettings(body, source = 'hud') {
     const patch = validateSettings(body, voiceList(cfg))
     if (patch.wake === true && !wakeAvailable()) throw bad('Hey Jarvis potrebuje lokálny prepis reči (pozri docs/HLAS.md)', 409)
     const voiceBefore = resolveVoice(cfg).id
+    const surfaceBefore = surfaceOf(cfg)
 
     const { wake, ...forConfig } = patch
     if (Object.keys(forConfig).length) {
@@ -396,6 +397,8 @@ export function applySettings(body, source = 'hud') {
     if (resolveVoice(now).id !== voiceBefore) warmCommonPhrases().catch(() => {})
     if ('language' in patch) restartStt()
     if ('stt' in patch) refreshStt()
+    // Another place for Jarvis: he moves now, not at the next start. The new place opens, the old one closes.
+    if ('surface' in patch && surfaceOf(now) !== surfaceBefore && startMove()) log('settings', `sťahujem sa: ${surfaceBefore} → ${surfaceOf(now)}`)
     log('settings', `${source}: ${Object.keys(patch).join(', ')}`)
     hooks.statusChanged()
     const body2 = settingsBody()

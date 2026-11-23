@@ -841,6 +841,7 @@ body.capture .subtitle .w { transition: none; }
 .work .thinking { flex: none; height: 1.4rem; }
 .wk-t { font: 500 1.0625rem/1.3 var(--sans); color: var(--t1); overflow-wrap: anywhere; }
 .wk-s { font: 400 0.9375rem/1.3 var(--sans); color: var(--t3); overflow-wrap: anywhere; }
+.wk-m { flex: none; font: 400 0.8125rem/1.3 var(--sans); color: var(--t3); opacity: 0.8; }
 .wk-c { flex: none; font: 500 0.875rem/1.3 var(--mono); color: var(--t3); font-variant-numeric: tabular-nums; }
 body.capture .work { display: none; }
 

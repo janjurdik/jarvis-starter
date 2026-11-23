@@ -178,8 +178,8 @@ export function createSettings({ onToast = () => {} } = {}) {
         : r.mode === 'light'
           ? 'Každú úlohu robím najrýchlejším modelom. Šetrí predplatné, na zložité veci je slabší.'
           : r.models
-            ? `Pred každou úlohou poviem, aká je. Ľahké veci (pozrieť poštu, kalendár) robím na ${esc(r.light ?? 'rýchlom modeli')}, ${r.normal ? `bežné na ${esc(r.normal)} ` : ''}a tvorbu či dlhú prácu na ${esc(r.heavy ?? 'najsilnejšom modeli')}.`
-            : 'Pred každou úlohou poviem, aká je. Pri ľahkých veciach premýšľam krátko, pri náročných dôkladne.'
+            ? `Model si vyberám sám a potichu. Ľahké veci (pozrieť poštu, kalendár) robím na ${esc(r.light ?? 'rýchlom modeli')}, ${r.normal ? `bežné na ${esc(r.normal)} ` : ''}a tvorbu či dlhú prácu na ${esc(r.heavy ?? 'najsilnejšom modeli')}. Ktorý práve beží, vidno malým písmom pri úlohe.`
+            : 'Pri ľahkých veciach premýšľam krátko, pri náročných dôkladne. Vyberám si sám a potichu.'
     const native = desk()?.native && desk().version >= 2
     const prefs = desk()?.prefs ?? {}
     const mac = d.platform === 'darwin'
@@ -192,7 +192,7 @@ export function createSettings({ onToast = () => {} } = {}) {
       app: `Som samostatná appka vo vlastnom okne. Otvoríte ma ikonou Jarvis ako každý iný program${mac ? ', nájdete ju v Launchpade' : ', je na pracovnej ploche a v ponuke Štart'}.`,
       browser: `Som stránka vo vašom prehliadači na adrese ${esc(location.host)}. Hovoriť, zvoniť a pripomínať nahlas viem, len keď ju máte otvorenú.`,
     }[surface]
-    const surfaceRow = row('Kde ma máte', surfaceSeg, 'Zmena platí od ďalšieho spustenia.')
+    const surfaceRow = row('Kde ma máte', surfaceSeg, 'Presťahujem sa hneď: nové miesto sa otvorí a toto sa samo zavrie.')
 
     return {
       asistent: `<h3>Asistent</h3><p class="st-lead">Kto s vami hovorí. To isté stačí povedať: „volaj sa Friday", „hovor ženským hlasom".</p>

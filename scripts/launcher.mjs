@@ -27,7 +27,7 @@ const MAC_APP = join(OVERRIDE ?? join(homedir(), 'Applications'), 'Jarvis.app')
 const WIN_VBS = join(DATA_DIR, 'jarvis-launcher.vbs')
 const WIN_ICON = join(REPO, 'hud', 'desktop', 'jarvis.ico')
 /** What makes this installation different from the default one has to travel with the icon. */
-const ENV_KEYS = ['PORT', 'HUD_PORT', 'JARVIS_DATA_DIR', 'JARVIS_MEMORY_DIR', 'JARVIS_CONFIG', 'JARVIS_BROWSER', 'JARVIS_NO_AUTOSTART']
+const ENV_KEYS = ['PORT', 'HUD_PORT', 'JARVIS_DATA_DIR', 'JARVIS_MEMORY_DIR', 'JARVIS_CONFIG', 'JARVIS_BROWSER', 'JARVIS_NO_AUTOSTART', 'JARVIS_LAUNCHER_DIR', 'JARVIS_NO_MOVE']
 
 const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
