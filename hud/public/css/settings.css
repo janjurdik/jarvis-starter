@@ -16,7 +16,7 @@
   backdrop-filter: blur(10px);
   opacity: 0;
   transition: opacity 0.35s ease;
-  font-family: var(--sans, 'Inter Tight', system-ui, sans-serif);
+  font-family: var(--sans, 'Mona Sans', system-ui, -apple-system, 'Segoe UI', sans-serif);
   color: var(--t1, rgba(234, 251, 255, 0.95));
 }
 .st[hidden] { display: none; }

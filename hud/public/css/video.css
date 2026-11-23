@@ -1,6 +1,6 @@
 /* The video theater: Jarvis analyses a video over the 3D world (hud/public/js/video.js).
    Same language as the rest of the HUD: dark glass, ice lines with amber for what Jarvis does himself,
-   Inter Tight for words and JetBrains Mono only for numbers. Shapes are cut at the corners (film HUD),
+   Mona Sans for words and JetBrains Mono only for numbers. Shapes are cut at the corners (film HUD),
    never rounded cards. Everything is sized in rem, so it scales with the screen like the HUD does. */
 
 .vt {

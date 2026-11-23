@@ -2,6 +2,11 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.9.6 (2026-11-23)
+
+- **Nové písmo: Mona Sans.** Celý Jarvis (hlavná obrazovka, Nastavenia, vnútro planét, appky aj sprievodca) je
+  vysádzaný písmom Mona Sans namiesto Inter Tight. Veľké hodiny majú upravený rozostup čísel, aby sa jednotky nezlievali.
+
 ## 1.9.5 (2026-11-23)
 
 - **Reštart už nezabije rozrobenú prácu.** Keď na pozadí beží úloha, reštart Jarvisa počká, kým dobehne, a spraví sa

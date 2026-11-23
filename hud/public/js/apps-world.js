@@ -75,7 +75,7 @@ function tileUrl(app) {
     g.scale(s / 24, s / 24)
     g.fill(new Path2D(shape.d))
   } else {
-    g.font = `700 ${shape.text.length > 1 ? s * 0.66 : s * 0.9}px "Inter Tight", system-ui, sans-serif`
+    g.font = `700 ${shape.text.length > 1 ? s * 0.66 : s * 0.9}px "Mona Sans", system-ui, -apple-system, sans-serif`
     g.textAlign = 'center'
     g.textBaseline = 'middle'
     g.fillText(shape.text, r, r + TILE * 0.02)

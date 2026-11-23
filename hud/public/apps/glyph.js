@@ -51,7 +51,7 @@ export function appSvg(app, cls = 'app-mark') {
   if (d) return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${d}"/></svg>`
   const text = String(app?.mono ?? app?.name?.[0] ?? '?').slice(0, 2)
   const size = text.length > 1 ? 11 : 14
-  return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="12" dy=".36em" text-anchor="middle" font-family="Inter Tight, system-ui, sans-serif" font-weight="700" font-size="${size}" fill="currentColor">${text.replace(/[<&>]/g, '')}</text></svg>`
+  return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="12" dy=".36em" text-anchor="middle" font-family="Mona Sans, system-ui, sans-serif" font-weight="700" font-size="${size}" fill="currentColor">${text.replace(/[<&>]/g, '')}</text></svg>`
 }
 
 /** The raw drawing for a canvas (Path2D): { d } for a glyph, { text } for letters. */

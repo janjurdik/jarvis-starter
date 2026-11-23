@@ -1,20 +1,11 @@
 /* J.A.R.V.I.S. HUD v2: stred je 3D svet, po stranách sklenené holografické dosky natočené k nemu. */
 
 @font-face {
-  font-family: 'Inter Tight';
+  font-family: 'Mona Sans';
   font-style: normal;
-  font-weight: 100 900;
+  font-weight: 200 900;
   font-display: block;
-  src: url('/fonts/inter-tight-latin-ext.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-  font-family: 'Inter Tight';
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: block;
-  src: url('/fonts/inter-tight-latin.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  src: url('/fonts/mona-sans-vf.woff2') format('woff2');
 }
 @font-face { font-family: 'JetBrains Mono'; font-weight: 400; font-display: block; src: url('/vendor/fonts/jetbrains-mono-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+2C60-2C7F, U+A720-A7FF; }
 @font-face { font-family: 'JetBrains Mono'; font-weight: 400; font-display: block; src: url('/vendor/fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2212, U+FEFF; }
@@ -36,7 +27,7 @@
   --fill-2: rgba(176, 246, 255, 0.09);
   --ice-a: rgba(127, 243, 255, 0.55);
   --glow: rgba(127, 243, 255, 0.5);
-  --sans: 'Inter Tight', system-ui, sans-serif;
+  --sans: 'Mona Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Okraje plochy Macu (menu lišta, Dock): nastaví ich appka Jarvis HUD.app, v prehliadači 0. */
@@ -213,7 +204,7 @@ button.chip:hover { background: var(--fill-2); color: var(--t1); }
 
 .clock { justify-self: end; display: flex; flex-direction: column; align-items: flex-end; gap: 0.2rem; }
 .clock-main { display: flex; align-items: baseline; gap: 0.15rem; }
-.clock-hm { font: 300 2rem/1 var(--sans); letter-spacing: -0.02em; color: var(--t1); }
+.clock-hm { font: 300 2rem/1 var(--sans); letter-spacing: -0.005em; color: var(--t1); }
 .clock-s { font: 500 0.9375rem/1 var(--mono); color: var(--ice); min-width: 1.4em; }
 .clock-date { font: 500 0.875rem/1 var(--sans); color: var(--t3); }
 
@@ -367,7 +358,7 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
 .hero-hm {
   grid-area: time;
   font: 200 4.75rem/0.84 var(--sans);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.012em;
   margin-left: -0.28rem;
   background: linear-gradient(180deg, #ffffff 20%, #bff8ff 75%, var(--ice) 130%);
   -webkit-background-clip: text;
@@ -1312,7 +1303,7 @@ body[data-voice='speaking'] .aw-hint, body[data-voice='listening'] .aw-hint, bod
 .rv-body h2 { margin: 12px 0 0; font-size: clamp(22px, 2.4vw, 30px); line-height: 1.12; font-weight: 600; letter-spacing: -0.02em; color: rgba(234, 251, 255, 0.96); }
 .rv-body p { margin: 8px 0 0; color: rgba(234, 251, 255, 0.7); font-size: 15px; line-height: 1.5; max-height: 6.6em; overflow: hidden; }
 .rv-actions { display: flex; gap: 8px; margin-top: 18px; }
-.rv-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 999px; border: 0; cursor: pointer; background: var(--c); color: #031c22; font: 600 14px/1 var(--sans, 'Inter Tight', system-ui, sans-serif); text-decoration: none; }
+.rv-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 999px; border: 0; cursor: pointer; background: var(--c); color: #031c22; font: 600 14px/1 var(--sans, 'Mona Sans', system-ui, -apple-system, 'Segoe UI', sans-serif); text-decoration: none; }
 .rv-btn .ic { width: 16px; height: 16px; }
 .rv-btn.ghost { background: rgba(234, 251, 255, 0.08); color: rgba(234, 251, 255, 0.9); }
 .rv-btn:hover { filter: brightness(1.1); }
