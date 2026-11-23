@@ -2,6 +2,17 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.9.4 (2026-11-23)
+
+- **Nové správy sa po aktualizácii neskryjú.** Keď sa server Jarvisa reštartoval (napríklad po aktualizácii) a okno
+  ostalo otvorené, nové správy sa v Rozhovore neukázali, prepisovali staré riadky. Opravené.
+- **Viac úloh naraz vidno naraz.** Každá bežiaca úloha má nad príkazovým riadkom vlastný riadok s bodkami a klik
+  otvorí práve ju. Doteraz bolo vidno len jednu.
+- **Vnútri planéty sa už nič neprekrýva.** Keď dobehne úloha, jej výsledok stlmí všetko za sebou. Titulky toho, čo
+  Jarvis hovorí, aj riadky s úlohami sa zmestia vedľa bočného panela, nie pod neho, a nápoveda im ustúpi.
+- **Planéta sa načíta aj po krátkom výpadku.** Keď server chvíľu neodpovedá, vnútro planéty to skúsi znova samo,
+  namiesto hlášky „Failed to fetch".
+
 ## 1.9.3 (2026-11-23)
 
 - **Jarvis o náročnosti úlohy naozaj mlčí.** Vo verzii 1.9.2 mu to nástroj na spúšťanie úloh stále pripomínal, takže

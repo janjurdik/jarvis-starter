@@ -764,38 +764,52 @@ export function createUI({ capture }) {
 
   // ── what Jarvis is doing right now, above the command bar ──
   let workOff = null
+  const WORK_ROWS = 3
   /**
-   * work: null (nothing runs) or { label, sub, model, since (ms), job (id or null) }. Dots, what he does,
-   * what it belongs to and how long it has taken. The line fades out before it is removed.
+   * work: a list of { label, sub, model, since (ms), job (id or null) }, empty when nothing runs.
+   * One line each: dots, what he does, what it belongs to, the model and how long it has taken.
+   * A click on a line of a background job opens that job. Above three lines the rest is a count.
+   * The lines fade out before they are removed.
    */
   function renderWork(work, nowMs) {
     const node = el.work
     if (!node) return
-    if (!work) {
+    const list = Array.isArray(work) ? work : work ? [work] : []
+    if (!list.length) {
       if (cache.get('work') === null) return
       cache.set('work', null)
       node.classList.remove('is-on')
+      document.body.classList.remove('has-work')
       clearTimeout(workOff)
       workOff = setTimeout(() => (node.hidden = true), 380)
       return
     }
-    const s = Number.isFinite(work.since) ? Math.max(0, Math.floor((nowMs - work.since) / 1000)) : null
-    const time = s === null || s < (work.job ? 1 : 5) ? '' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-    const key = `${work.job ?? ''}|${work.label ?? ''}|${work.sub ?? ''}|${work.model ?? ''}|${time}`
+    const rows = list.slice(0, WORK_ROWS).map((w) => {
+      const s = Number.isFinite(w.since) ? Math.max(0, Math.floor((nowMs - w.since) / 1000)) : null
+      const time = s === null || s < (w.job ? 1 : 5) ? '' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+      return { ...w, time }
+    })
+    const more = list.length - rows.length
+    const key = rows.map((w) => `${w.job ?? ''}|${w.label ?? ''}|${w.sub ?? ''}|${w.model ?? ''}|${w.time}`).join('§') + `§${more}`
     if (cache.get('work') === key) return
     const fresh = cache.get('work') === null || cache.get('work') === undefined
     cache.set('work', key)
     clearTimeout(workOff)
     node.hidden = false
-    node.classList.toggle('is-job', Boolean(work.job))
-    node.dataset.job = work.job ?? ''
-    node.setAttribute('aria-label', work.job ? 'Jarvis pracuje, klik otvorí priebeh' : 'Jarvis pracuje')
+    document.body.classList.add('has-work')
     node.innerHTML =
-      '<span class="thinking" aria-hidden="true"><i></i><i></i><i></i></span>' +
-      (work.label ? `<span class="wk-t">${esc(work.label)}</span>` : '') +
-      (work.sub ? `<span class="wk-s">${esc(work.sub)}</span>` : '') +
-      (work.model ? `<span class="wk-m">${esc(work.model)}</span>` : '') +
-      (time ? `<span class="wk-c">${time}</span>` : '')
+      rows
+        .map(
+          (w) =>
+            `<${w.job ? `button type="button" data-job="${esc(w.job)}" aria-label="Jarvis pracuje, klik otvorí priebeh"` : 'div'} class="wk-row${w.job ? ' is-job' : ''}">` +
+            '<span class="thinking" aria-hidden="true"><i></i><i></i><i></i></span>' +
+            (w.label ? `<span class="wk-t">${esc(w.label)}</span>` : '') +
+            (w.sub ? `<span class="wk-s">${esc(w.sub)}</span>` : '') +
+            (w.model ? `<span class="wk-m">${esc(w.model)}</span>` : '') +
+            (w.time ? `<span class="wk-c">${w.time}</span>` : '') +
+            `</${w.job ? 'button' : 'div'}>`,
+        )
+        .join('') + (more > 0 ? `<div class="wk-more">a ${more} ${plural(more, 'ďalšia úloha', 'ďalšie úlohy', 'ďalších úloh')}</div>` : '')
     // One frame hidden, so the fade in has something to start from.
     if (fresh) requestAnimationFrame(() => node.classList.add('is-on'))
     else node.classList.add('is-on')

@@ -73,6 +73,8 @@ export function createReveal({ onOpen, fileUrl = (u) => u }) {
     root.hidden = false
     root.dataset.kind = kind
     requestAnimationFrame(() => root.classList.add('is-on'))
+    // The card is the only thing to read now: whatever is open behind it (a planet, the apps) steps back.
+    document.body.classList.add('rv-on')
     const card = stage.querySelector('.rv-card')
     card.querySelector('[data-open]').addEventListener('click', () => {
       const id = current?.id
@@ -94,6 +96,7 @@ export function createReveal({ onOpen, fileUrl = (u) => u }) {
     if (!current) return
     clearTimeout(timer)
     root.classList.remove('is-on')
+    document.body.classList.remove('rv-on')
     current = null
     setTimeout(() => {
       if (current) return

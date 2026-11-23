@@ -210,7 +210,24 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     el.kitIn.innerHTML = panel.map(kitHtml).join('')
     el.kit.hidden = !panel.length
     root.classList.toggle('has-kit', panel.length > 0)
+    measureSides()
   }
+
+  // The spoken subtitle lives between the panel on the left and the inspector on the right: how much
+  // room each of them takes from the free zone goes to the page as --dz-kit and --dz-hero.
+  const voiceEl = document.getElementById('voice')
+  function measureSides() {
+    const zone = voiceEl?.getBoundingClientRect()
+    const side = (node, left) => {
+      if (!open || !zone || !node || node.hidden) return 0
+      const r = node.getBoundingClientRect()
+      if (!r.width || getComputedStyle(node).display === 'none') return 0
+      return Math.max(0, Math.round(left ? r.right - zone.left + 20 : zone.right - r.left + 20))
+    }
+    document.body.style.setProperty('--dz-kit', `${side(el.kit, true)}px`)
+    document.body.style.setProperty('--dz-hero', `${side(el.hero, false)}px`)
+  }
+  window.addEventListener('resize', measureSides)
 
   // The inspector and the panel hang under the header, wherever it really ends (a long name or a
   // second row of groups makes it taller), so they can never slide under it.
@@ -269,7 +286,12 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     } catch (err) {
       if (err?.name === 'AbortError') return
       if (err?.film) return close()
-      el.comment.textContent = `Toto sa teraz nedá načítať. (${err?.message ?? 'chyba'})`
+      // The server did not answer at all (it is restarting, an update): a few quiet tries before saying so.
+      if (err instanceof TypeError && tries++ < 4) {
+        retry = setTimeout(() => open && node === id && loadWorld(id), 1500)
+        return
+      }
+      el.comment.textContent = `Toto sa teraz nedá načítať. (${err?.message === 'Failed to fetch' ? 'server neodpovedá' : err?.message ?? 'chyba'})`
     }
   }
 
@@ -290,6 +312,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     el.heroIn.scrollTop = 0
     el.hero.hidden = false
     root.classList.add('has-hero')
+    measureSides()
     wireHero()
   }
 
@@ -328,6 +351,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     el.heroIn.textContent = ''
     el.hero.hidden = true
     root.classList.remove('has-hero')
+    measureSides()
   }
 
   /** Odkaz z inspektora: položka v tomto svete → prelet k nej, inak len jej detail. */
@@ -403,6 +427,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     data = null
     root.classList.remove('is-in')
     root.hidden = true
+    measureSides()
     onClose()
   }
 

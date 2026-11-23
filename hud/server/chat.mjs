@@ -19,7 +19,9 @@ let getSnapshot = () => ({})
 let getNames = () => []
 let getExtraContext = () => ''
 let mockAll = false
-let turnSeq = 0
+// Starts at the clock, not at zero: a window that stays open over a restart of the server (an update)
+// still holds the old turns, and a new turn with an old number would be written into an old row.
+let turnSeq = Math.floor(Date.now() / 1000) * 1000
 let saySeq = 0
 let current = null
 const history = []
