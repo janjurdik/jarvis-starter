@@ -2,6 +2,16 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.9.7 (2026-11-23)
+
+- **Rozhovor a výsledky úloh už nezmiznú.** Po načítaní okna znova (aj po reštarte Jarvisa) ostane celý rozhovor
+  vrátane kariet s výsledkami úloh, rutín a importov. Doteraz sa výsledky úloh neukladali vôbec a rozhovor neprežil reštart.
+- **Zmenu Jarvisa vidíš hneď.** Keď Jarvis (alebo ty) upraví jeho obrazovku, otvorené okno sa načíta znova samo. To isté
+  po reštarte a po aktualizácii. Ručne: `node scripts/hud.mjs --reload`.
+- **Jarvis je vždy len jeden.** Keď sa popri otvorenom Jarvisovi otvorí ďalšie okno (napríklad adresa v prehliadači),
+  hovorí a počúva len to prvé, druhé je na pozeranie a povie to. Úlohy na pozadí si už zmeny neoverujú otváraním
+  Jarvisa v Chrome.
+
 ## 1.9.6 (2026-11-23)
 
 - **Nové písmo: Mona Sans.** Celý Jarvis (hlavná obrazovka, Nastavenia, vnútro planét, appky aj sprievodca) je

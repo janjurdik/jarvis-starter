@@ -8,6 +8,8 @@
  *   npm run hud -- --restart  stop and start again (after changing .env). Waits for running background
  *                             jobs: the server then restarts itself when they are done (--now does not wait)
  *   npm run hud -- --status   is it running?
+ *   npm run hud -- --reload   the open window of Jarvis loads itself again (it also does so on its own
+ *                             when something in hud/public changes and after a restart of the server)
  *   npm run hud -- --info     installation summary from the running server (JSON)
  *   npm run hud -- --apps     open the HUD and fly to the Tvoje appky orb (the app picker), optionally
  *                             at one app: node scripts/hud.mjs --apps instagram
@@ -154,6 +156,12 @@ async function openWindow() {
   // No Chromium browser found: fall back to whatever opens http links.
   openDefault(url)
   return `predvolený prehliadač${icon}`
+}
+
+if (flags.has('reload')) {
+  const ok = await postHud('/api/reload', {})
+  console.log(ok ? 'Okno Jarvisa sa načíta znova.' : 'HUD nebeží. Spusti ho: node scripts/hud.mjs')
+  process.exit(ok ? 0 : 1)
 }
 
 if (flags.has('status')) {

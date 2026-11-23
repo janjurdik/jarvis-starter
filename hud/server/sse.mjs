@@ -3,7 +3,28 @@
  * Pomenované udalosti (event: chat|tts|voice|world|hud|snapshot|status|mode), `hud` má históriu ako v1.
  */
 const clients = new Set()
-const roles = new Map() // res → 'desktop' (appka Jarvis HUD.app na ploche) | 'browser'
+// res → 'desktop' (appka Jarvis HUD.app na ploche) | 'app' (the app window) | 'browser' (a plain tab)
+const roles = new Map()
+// res → { id, at }: who connected when. One window owns the voice: the desktop before the app window
+// before a browser tab, and among equals the one that has been there longest. Any other window open
+// at the same time (somebody opened the address in a browser) shows Jarvis but stays silent.
+const ids = new Map()
+let nextId = 0
+let ownerId = null
+const RANK = { desktop: 0, app: 1, browser: 2 }
+
+function pickOwner() {
+  let best = null
+  for (const res of clients) {
+    const me = { id: ids.get(res)?.id, at: ids.get(res)?.at ?? 0, rank: RANK[roles.get(res)] ?? 2 }
+    if (!best || me.rank < best.rank || (me.rank === best.rank && me.at < best.at)) best = me
+  }
+  const next = best?.id ?? null
+  if (next === ownerId) return
+  ownerId = next
+  const payload = frame('owner', { id: ownerId })
+  for (const res of clients) res.write(payload)
+}
 const hudHistory = []
 let hudSeq = 0
 let onConnect = () => []
@@ -52,13 +73,21 @@ export function openStream(req, res, { role = 'browser' } = {}) {
   res.write(frame('history', hudHistory))
   for (const [event, data] of onConnect()) res.write(frame(event, data))
   clients.add(res)
-  roles.set(res, role === 'desktop' ? 'desktop' : 'browser')
+  roles.set(res, RANK[role] === undefined ? 'browser' : role)
+  const id = `w${++nextId}`
+  ids.set(res, { id, at: Date.now() })
+  res.write(frame('you', { id }))
   if (role === 'desktop') onRoles()
+  pickOwner()
+  // The newcomer always hears who owns the voice, also when its arrival changed nothing.
+  res.write(frame('owner', { id: ownerId }))
   req.on('close', () => {
     clients.delete(res)
     const was = roles.get(res)
     roles.delete(res)
+    ids.delete(res)
     if (was === 'desktop') onRoles()
+    pickOwner()
   })
 }
 

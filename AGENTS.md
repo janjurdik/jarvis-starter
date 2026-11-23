@@ -187,7 +187,14 @@ Malé, čisté a len to, o čo požiadal.
 `node scripts/suggest.mjs add "Orb Financie" --why "V pošte chodia faktúry od troch dodávateľov." --say "Sprav mi orb Financie z faktúr v pošte."`
 Ukáže sa na ploche v časti Odporúčam a stačí naň kliknúť. `node scripts/suggest.mjs list` ukáže zoznam, `done <id>` vec odoberie. Čo našiel sken v počítači a čo čaká na pripojenie, ponúka Jarvis sám. Najviac jedno odporúčanie naraz a nič nestavaj, kým nepovie áno.
 
-Zásady: nepíš kód do zásoby, nepridávaj funkcie, o ktoré nežiadal, a jeho úpravy drž v jeho súboroch (rutiny, config, pamäť, orby v `data/`), aby ich aktualizácia nechala na pokoji. Po každej úprave kódu over, že Jarvis naštartuje (`node scripts/doctor.mjs`, `node scripts/hud.mjs --restart`), a povedz mu jednou vetou, čo je nové.
+Zásady: nepíš kód do zásoby, nepridávaj funkcie, o ktoré nežiadal, a jeho úpravy drž v jeho súboroch (rutiny, config, pamäť, orby v `data/`), aby ich aktualizácia nechala na pokoji. Po každej úprave kódu over, že Jarvis naštartuje (`node scripts/doctor.mjs`), a povedz mu jednou vetou, čo je nové.
+
+Keď upravuješ samého Jarvisa (jeho obrazovku alebo server), drž sa tohto:
+
+- **Zmena obrazovky** (`hud/public/`): otvorené okno Jarvisa sa načíta znova samo, hneď ako súbor uložíš. Používateľ zmenu vidí bez toho, aby niečo robil. Keby sa nenačítalo: `node scripts/hud.mjs --reload`.
+- **Zmena servera** (`hud/server/`, `hud/server.mjs`, `.env`): `node scripts/hud.mjs --restart` až na konci práce (sekcia Reštart Jarvisa). Okno sa po reštarte načíta samo a rozhovor v ňom ostane.
+- **Nikdy neotváraj Jarvisa v prehliadači, aby si si zmenu overil** (žiadne `localhost:4545` v Chrome ani inde). Vznikol by druhý Jarvis vedľa toho, ktorý používateľ má. Over si to inak: `node --check <súbor>`, `node scripts/doctor.mjs`, odpoveď servera cez `curl -s http://127.0.0.1:<port>/api/...` (port je v `node scripts/hud.mjs --info`), a keď potrebuješ vidieť výsledok, snímka obrazovky: `node scripts/control.mjs shot` (macOS).
+- Na konci povedz jednou vetou, čo sa zmenilo a kde to na obrazovke nájde.
 Na úpravy, pri ktorých chce vidieť každý krok, je pohodlnejšie otvoriť tento priečinok v Claude Code alebo Codexe než hovoriť na ploche.
 
 ## Import dát

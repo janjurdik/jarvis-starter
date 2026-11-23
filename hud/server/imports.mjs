@@ -452,8 +452,11 @@ export async function applyDecisions(raw) {
     )
     if (card.ok) {
       const turn = `import-${Date.now().toString(36)}`
-      deps.send('chat', { turn, phase: 'card', card: card.card })
-      deps.send('chat', { turn, phase: 'done', text: '', ms: 0, stopped: false })
+      if (deps.standaloneCard) deps.standaloneCard(turn, card.card)
+      else {
+        deps.send('chat', { turn, phase: 'card', card: card.card })
+        deps.send('chat', { turn, phase: 'done', text: '', ms: 0, stopped: false })
+      }
     }
   }
   deps.sendHud({ type: 'done', text: `Ľudia · ${created} ${plural(created, 'nový', 'noví', 'nových')}${merged ? `, ${merged} ${plural(merged, 'spojený', 'spojení', 'spojených')}` : ''}`, icon: 'memory', say: null, heard: null, node: 'ludia', source: 'jarvis' })

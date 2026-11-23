@@ -282,7 +282,11 @@ let people = null
 let jobsSince = null
 let micState = 'off'
 /** Jeden prehrávač hlasu: appka na ploche, inak karta v prehliadači, keď appka nebeží. */
-const ownsAudio = () => DESKTOP || !(Number(status?.desktop) > 0)
+// One window owns the voice (the server decides: the desktop before the app window before a browser
+// tab, the oldest among equals). A second window opened next to it shows Jarvis but stays silent.
+let myWindow = null
+let voiceOwner = null
+const ownsAudio = () => (myWindow && voiceOwner ? myWindow === voiceOwner : DESKTOP || !(Number(status?.desktop) > 0))
 
 // Pokojový režim plochy: bez vstupu a bez Jarvisa ~30 fps a nižšie DPR, CSS animácie stoja.
 const IDLE_AFTER_S = 20
@@ -644,7 +648,7 @@ function renderStatusChips() {
 }
 
 function connectEvents() {
-  const source = new EventSource(`/api/events${DESKTOP ? '?client=desktop' : ''}`)
+  const source = new EventSource(`/api/events?client=${SURFACE}`)
   const on = (name, fn) =>
     source.addEventListener(name, (e) => {
       try {
@@ -687,6 +691,49 @@ function connectEvents() {
   on('job', (job) => jobs?.apply(job))
   on('apps', (a) => applyApps(a))
   on('suggest', (s) => renderSuggest(s?.items))
+  // Which window am I and which one speaks. A window that is not the owner says so once and stays quiet.
+  let saidSecond = false
+  let secondTimer = 0
+  const ownerChanged = () => {
+    clearTimeout(secondTimer)
+    if (ownsAudio()) return void wake?.start()
+    wake?.stop()
+    if (speech?.speaking()) speech.stop()
+    // Said once, and only when it still holds a moment later (windows come and go while one reloads).
+    secondTimer = setTimeout(() => {
+      if (ownsAudio() || saidSecond || CAPTURE || scene) return
+      saidSecond = true
+      ui.toast('Jarvis už beží v inom okne. Toto okno je len na pozeranie, hovorí a počúva to prvé.', { iconName: 'info', ms: 12_000 })
+    }, 2500)
+  }
+  on('you', (m) => {
+    myWindow = m?.id ?? null
+  })
+  on('owner', (m) => {
+    voiceOwner = m?.id ?? null
+    ownerChanged()
+  })
+  // The page changed (somebody edited Jarvis, an update) or the server started again: load it again,
+  // once Jarvis is neither listening nor speaking. The conversation comes back from the server.
+  let bootId = null
+  let reloading = false
+  const reloadSoon = () => {
+    if (reloading || CAPTURE || scene) return
+    reloading = true
+    const started = now()
+    const go = () => {
+      const busy = Boolean(ptt) || speech?.speaking() || speech?.recording
+      if (busy && now() - started < 30) return void setTimeout(go, 700)
+      location.reload()
+    }
+    go()
+  }
+  on('reload', () => reloadSoon())
+  on('boot', (b) => {
+    if (!b?.id) return
+    if (bootId && b.id !== bootId) reloadSoon()
+    bootId = b.id
+  })
   // Jarvis moved to another place (Settings → Plocha): this one gives itself back.
   on('surface', (s) => {
     if (!s?.keep || s.keep === SURFACE) return
@@ -1447,7 +1494,8 @@ async function main() {
       },
       onError: (err) => console.warn('mikrofón:', err?.message ?? err),
     })
-    wake.start()
+    // Only the window that owns the voice listens for the wake word (a second window would take the microphone over).
+    if (ownsAudio()) wake.start()
   }
 
   // Plná kvalita: každý rAF. Pokoj na ploche: časovač 24 fps bez rAF (hlavné vlákno sa nebudí 120x za

@@ -4,6 +4,8 @@
  * module turns that into SSE events exactly as described in docs/API.md.
  */
 import { spawn } from 'node:child_process'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { autoCard } from './autocards.mjs'
 import { normalizeCard } from './cards.mjs'
 import { logTurn } from './chatlog.mjs'
@@ -12,7 +14,7 @@ import { clientCount, send, sendHud } from './sse.mjs'
 import { state } from './state.mjs'
 import { HIDDEN_TOOLS, NODES, toolMeta } from './tools-meta.mjs'
 import { SentenceSplitter, speechQueue, warmTts } from './tts.mjs'
-import { IS_MAC, clean, errMsg, log, slug } from './util.mjs'
+import { BRAIN_DIR, IS_MAC, clean, errMsg, log, slug } from './util.mjs'
 
 let brain = null
 let getSnapshot = () => ({})
@@ -35,6 +37,55 @@ export function initChat(opts) {
   getNames = opts.getNames ?? getNames
   getExtraContext = opts.getExtraContext ?? getExtraContext
   mockAll = Boolean(opts.mockAll)
+  loadHistory()
+}
+
+// ── the conversation as the user sees it, kept over a reload of the window and a restart of the server ──
+
+const HISTORY_FILE = join(BRAIN_DIR, 'chat-history.json')
+const HISTORY_MAX = 40
+let historyTimer = null
+
+function loadHistory() {
+  if (history.length) return
+  try {
+    const saved = JSON.parse(readFileSync(HISTORY_FILE, 'utf8'))
+    for (const h of Array.isArray(saved) ? saved.slice(-HISTORY_MAX) : []) if (h && h.turn !== undefined && h.at) history.push(h)
+  } catch {
+    // no conversation yet
+  }
+}
+
+function saveHistory() {
+  clearTimeout(historyTimer)
+  historyTimer = setTimeout(() => {
+    try {
+      mkdirSync(BRAIN_DIR, { recursive: true })
+      writeFileSync(HISTORY_FILE, JSON.stringify(history.filter((h) => !h.film)), { mode: 0o600 })
+    } catch (err) {
+      log('chat', `históriu rozhovoru sa nepodarilo uložiť: ${errMsg(err)}`)
+    }
+  }, 300)
+  historyTimer.unref?.()
+}
+
+function remember(entry) {
+  history.push(entry)
+  while (history.length > HISTORY_MAX) history.shift()
+  saveHistory()
+}
+
+/**
+ * A card that stands on its own in the conversation: the result of a background job, a routine's
+ * word, a new version, a finished import. It goes to the open windows and into the history, so a
+ * window that is reloaded (or opened later) still shows it.
+ */
+export function standaloneCard(turn, card, extra = {}) {
+  send('chat', { turn, phase: 'card', card, ...extra })
+  // A card on its own is a finished turn: without this the chat keeps showing the thinking dots under it.
+  send('chat', { turn, phase: 'done', text: '', ms: 0, stopped: false })
+  if (state.film) return
+  remember({ turn, via: 'text', user: null, attachments: [], jarvis: '', tools: [], cards: [card], at: new Date().toISOString(), ms: 0, stopped: false, error: null, film: false })
 }
 
 // ── hlasový stav ─────────────────────────────────────────────────────────
@@ -194,8 +245,7 @@ function finish(turn, { error = null, stopped = false, meta = {} } = {}) {
   else send('chat', { turn: turn.id, phase: 'done', text: turn.text.trim(), ms, stopped })
   const entry = historyEntry(turn)
   Object.defineProperty(entry, '_turn', { value: turn, enumerable: false })
-  history.push(entry)
-  if (history.length > 20) history.shift()
+  remember(entry)
   // Real conversations are kept for the evening summary (data/chat). Filming and mock turns are not.
   if (!turn.mock && !turn.film && !error && !turn.hidden) logTurn({ user: turn.attachments.length ? `${turn.user} [prílohy: ${turn.attachments.map((a) => a.rel).join(', ')}]` : turn.user, jarvis: entry.jarvis, via: turn.via, tools: entry.tools.map((t) => t.name), at: turn.at }).catch(() => {})
   const m = {

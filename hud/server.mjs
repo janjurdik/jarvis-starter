@@ -15,7 +15,7 @@
 import './server/env.mjs'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { chmodSync, createReadStream, readFileSync, statSync } from 'node:fs'
+import { chmodSync, createReadStream, readFileSync, statSync, watch } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { networkInterfaces } from 'node:os'
@@ -25,7 +25,7 @@ import { Brain, EFFORT, MODEL } from './server/brain.mjs'
 import { AntigravityBrain } from './server/brain-antigravity.mjs'
 import { CodexBrain } from './server/brain-codex.mjs'
 import { aiProvider } from './server/provider.mjs'
-import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onVoiceChange, sayText, sendChat, setVoice, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
+import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onVoiceChange, sayText, sendChat, setVoice, standaloneCard, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
 import { CONFIG_FILE, getConfig } from './server/config.mjs'
 import { createJob, initJobs, jobDetail, jobFile, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob, waitNudge } from './server/jobs.mjs'
 import { normalizeCard } from './server/cards.mjs'
@@ -376,7 +376,36 @@ function firstRun() {
   }
   setTimeout(tick, 2500)
 }
+/** One id per start of this server: a window that sees another one knows the server restarted and loads itself again. */
+const BOOT_ID = `${Date.now().toString(36)}-${process.pid}`
+
+/**
+ * An open window loads itself again when the page it shows has changed: Jarvis (or the user) edited
+ * something in hud/public, an update arrived. Nobody has to find a reload button and nobody has to
+ * open Jarvis a second time just to see a change. Quiet for a moment first, an edit touches several files.
+ */
+let reloadTimer = null
+function reloadWindows(why) {
+  clearTimeout(reloadTimer)
+  reloadTimer = setTimeout(() => {
+    log('hud', `okná sa načítajú znova (${why})`)
+    send('reload', { why })
+  }, 1200)
+  reloadTimer.unref?.()
+}
+if (process.env.JARVIS_NO_WATCH !== '1') {
+  try {
+    watch(join(REPO, 'hud', 'public'), { recursive: true }, (_event, file) => {
+      if (!file || /(^|[\\/])\.|~$|\.(tmp|swp)$/.test(String(file))) return
+      reloadWindows(`zmena v hud/public/${String(file).replace(/\\/g, '/')}`)
+    }).on('error', () => {})
+  } catch {
+    // a system without recursive watching: `node scripts/hud.mjs --reload` still works
+  }
+}
+
 const greeting = () => [
+  ['boot', { id: BOOT_ID }],
   ['status', statusBody()],
   ['mode', { film: state.film }],
   ['voice', { state: voiceState(), heard: null, level: null, turn: currentTurnId() }],
@@ -451,9 +480,7 @@ async function postAnnounce(req, res) {
   if (!text && !body.say) return sendJson(res, 400, { ok: false, error: 'chýba text' })
   const card = normalizeCard({ kind: 'text', title, icon: slug(body.icon) || 'routine', node: slug(body.node) || 'rutiny', text: text.replace(/\s+/g, ' ').slice(0, 400), accent: 'ice' }, `c-r${++announceSeq}-${Date.now().toString(36)}`)
   if (card.ok) {
-    send('chat', { turn: `routine-${announceSeq}`, phase: 'card', card: card.card })
-    // A card on its own is a finished turn: without this the chat keeps showing the thinking dots under it.
-    send('chat', { turn: `routine-${announceSeq}`, phase: 'done', text: '', ms: 0, stopped: false })
+    standaloneCard(`routine-${announceSeq}-${Date.now().toString(36)}`, card.card)
   }
   sendHud({ type: 'done', text: `${title} · pripravené`, icon: 'routine', say: null, heard: null, node: 'rutiny', source: 'jarvis' })
   const spoken = clean(body.say, 900) || clean(text, 900)
@@ -645,6 +672,11 @@ async function routePost(req, res, path) {
     spawn(bin, args, { stdio: 'ignore', detached: true, windowsHide: true }).on('error', (err) => log('hud', `odkaz sa neotvoril: ${errMsg(err)}`)).unref()
     return sendJson(res, 200, { ok: true })
   }
+  if (path === '/api/reload') {
+    // `node scripts/hud.mjs --reload`: every open window of Jarvis loads itself again.
+    reloadWindows('na požiadanie')
+    return sendJson(res, 200, { ok: true, clients: clientCount() })
+  }
   if (path === '/api/surface/keep') {
     // The launcher opened Jarvis in his place: every other place gives itself back (server/surface.mjs).
     const keep = normalizeSurface(body.keep)
@@ -783,7 +815,7 @@ async function route(req, res) {
   if (path.startsWith('/api/') && site !== undefined && site !== 'same-origin' && site !== 'none') return sendJson(res, 403, { ok: false, error: 'cudzia stránka' })
 
   if (path === '/api/update') return sendJson(res, 200, { ok: true, ...(await updateInfo()) })
-  if (path === '/api/events') return openStream(req, res, { role: url.searchParams.get('client') === 'desktop' ? 'desktop' : 'browser' })
+  if (path === '/api/events') return openStream(req, res, { role: url.searchParams.get('client') ?? 'browser' })
   if (path === '/api/status') return sendJson(res, 200, statusBody())
   if (path === '/api/setup') return sendJson(res, 200, await setupBody())
   if (path === '/api/mode') return sendJson(res, 200, { film: state.film })
@@ -948,8 +980,7 @@ async function drainAnnounce() {
         `c-${job.id}-${Date.now().toString(36)}`,
       )
       if (res.ok) {
-        send('chat', { turn: `job-${job.id}`, phase: 'card', card: res.card, job: job.id })
-        send('chat', { turn: `job-${job.id}`, phase: 'done', text: '', ms: 0, stopped: false })
+        standaloneCard(`job-${job.id}-${Date.now().toString(36)}`, res.card, { job: job.id })
       }
       sendHud({ type: job.status === 'done' ? 'done' : 'alert', text: `${title} · ${jobState(job)}`, icon: job.status === 'done' ? 'check' : 'alarm', say: null, heard: null, node: 'projekty', source: 'jarvis' })
       pushSnapshot('úloha').catch(() => {})
@@ -984,6 +1015,7 @@ initJobs({
 if (PRIMARY) loadJobs().catch(() => {})
 
 initImports({
+  standaloneCard,
   send,
   sendHud,
   createJob,
@@ -1066,8 +1098,7 @@ server.listen(PORT, HOST, async () => {
       onAvailable: ({ version, summary }) => {
         const card = normalizeCard({ kind: 'text', title: `Nová verzia Jarvisa ${version}`, icon: 'routine', node: 'rutiny', text: clean(summary, 400) || 'Je dostupná nová verzia.', caption: 'Povedz „aktualizuj Jarvisa"', accent: 'ice' }, `c-u-${Date.now().toString(36)}`)
         if (card.ok) {
-          send('chat', { turn: `update-${version}`, phase: 'card', card: card.card })
-          send('chat', { turn: `update-${version}`, phase: 'done', text: '', ms: 0, stopped: false })
+          standaloneCard(`update-${version}`, card.card)
         }
         sendHud({ type: 'info', text: `Nová verzia ${version}`, icon: 'routine', say: null, heard: null, node: 'rutiny', source: 'jarvis' })
         if (clientCount() > 0) {
