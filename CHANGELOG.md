@@ -2,6 +2,11 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.9.3 (2026-11-23)
+
+- **Jarvis o náročnosti úlohy naozaj mlčí.** Vo verzii 1.9.2 mu to nástroj na spúšťanie úloh stále pripomínal, takže
+  to občas spomenul. Pripomienka je preč, model ostáva malým písmom pri úlohe.
+
 ## 1.9.2 (2026-11-23)
 
 - **Prepnutie plocha, appka, prehliadač naozaj prepne.** Zmena v Nastaveniach → Plocha vo verzii 1.9 len uložila voľbu

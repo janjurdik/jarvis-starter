@@ -148,7 +148,7 @@ serveMcp({
       },
       handler: async ({ task, title, weight }) => {
         const r = await hud('job_task', { task, title, weight })
-        return r.isError ? r : `Úloha ${r.job.id} „${r.job.title}" ${r.job.status === 'queued' ? 'čaká vo fronte' : 'beží'}${r.job.route ? ` (${r.job.route})` : ''}. Povedz jednu vetu, v ktorej zaznie aj to, aká je úloha náročná a na čom ju robíš, a skonči. Výsledok HUD ohlási sám.`
+        return r.isError ? r : `Úloha ${r.job.id} „${r.job.title}" ${r.job.status === 'queued' ? 'čaká vo fronte' : 'beží'}. Povedz jednu vetu, že si sa do toho pustil, a skonči. O náročnosti úlohy ani o modeli nehovor, používateľ ich vidí pri úlohe sám. Výsledok HUD ohlási sám.`
       },
     },
     {
