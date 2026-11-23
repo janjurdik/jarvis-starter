@@ -27,6 +27,13 @@ Ako sa s používateľom hovorí:
 
 ---
 
+## Reštart Jarvisa
+
+`node scripts/hud.mjs --restart` počká, kým dobehnú úlohy na pozadí, a server sa potom reštartuje sám. Reštart totiž
+každú bežiacu úlohu ukončí. Keď reštart potrebuje úloha, ktorú práve robíš (zmenil si kód servera), zavolaj ho na konci
+práce a úlohu ukonči: server sa reštartuje hneď po nej. Prepínač `--now` (reštart ihneď, aj cez bežiace úlohy) z úlohy
+nikdy nepoužívaj.
+
 ## Keď používateľ napíše `štart`
 
 (aj `start`, `začni`, `nastav jarvisa` a podobne)

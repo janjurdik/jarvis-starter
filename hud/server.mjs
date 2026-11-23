@@ -61,6 +61,8 @@ const HOST = process.env.HUD_HOST ?? '127.0.0.1'
 const PRIMARY = process.env.JARVIS_SECONDARY !== '1'
 /** Where Jarvis lives since the last move: { keep: desktop | app | browser, at: ms }. Null until somebody moved him. */
 let lastKeep = null
+/** Set while a restart waits for the jobs in the background to finish (POST /api/restart). */
+let restartTimer = null
 const MOCK_ALL = process.env.JARVIS_MOCK === '1'
 const PUBLIC_DIR = join(ROOT, 'public')
 const MODULES_DIR = join(REPO, 'node_modules')
@@ -732,6 +734,27 @@ async function routePost(req, res, path) {
       if (!brain) return sendJson(res, 409, { ok: false, error: 'mock režim, mozog nebeží' })
       brain.restart('ručný reštart').catch((err) => log('brain', errMsg(err)))
       return sendJson(res, 202, { ok: true })
+    case '/api/restart': {
+      // `node scripts/hud.mjs --restart` asks first. A restart ends every job in the background, and a
+      // job that restarts the HUD itself would end in the middle of its own restart. So while something
+      // runs, the restart waits: the server does it on its own once the last job is done.
+      if (!isLocal(req)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
+      const busy = listJobs().filter((j) => j.status === 'running' || j.status === 'queued').length
+      if (!busy) return sendJson(res, 200, { ok: true, deferred: false })
+      if (!restartTimer) {
+        log('hud', `reštart počká na ${busy} bežiacu úlohu`)
+        restartTimer = setInterval(() => {
+          const left = listJobs().filter((j) => j.status === 'running' || j.status === 'queued').length
+          if (left) return
+          clearInterval(restartTimer)
+          restartTimer = null
+          log('hud', 'úlohy dobehli, reštartujem sa')
+          spawn(process.execPath, [join(REPO, 'scripts', 'hud.mjs'), '--restart', '--now'], { cwd: REPO, detached: true, stdio: 'ignore', windowsHide: true, env: process.env }).unref()
+        }, 2000)
+        restartTimer.unref()
+      }
+      return sendJson(res, 200, { ok: true, deferred: true, jobs: busy })
+    }
     case '/api/quit':
       // Lets `node scripts/hud.mjs --stop` end the server no matter who started it.
       if (!isLocal(req)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })

@@ -2,6 +2,12 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.9.5 (2026-11-23)
+
+- **Reštart už nezabije rozrobenú prácu.** Keď na pozadí beží úloha, reštart Jarvisa počká, kým dobehne, a spraví sa
+  potom sám. Doteraz reštart bežiace úlohy prerušil, a keď si ho vyžiadala úloha sama (po úprave Jarvisa), ukončila
+  sa v polovici a Jarvis ostal vypnutý.
+
 ## 1.9.4 (2026-11-23)
 
 - **Nové správy sa po aktualizácii neskryjú.** Keď sa server Jarvisa reštartoval (napríklad po aktualizácii) a okno

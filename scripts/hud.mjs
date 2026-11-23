@@ -5,7 +5,8 @@
  *   npm run hud               start the server (if it is not running) and open the HUD
  *   npm run hud -- --server   only the server, no window (used at login together with the Mac app)
  *   npm run hud -- --stop     stop the server
- *   npm run hud -- --restart  stop and start again (after changing .env)
+ *   npm run hud -- --restart  stop and start again (after changing .env). Waits for running background
+ *                             jobs: the server then restarts itself when they are done (--now does not wait)
  *   npm run hud -- --status   is it running?
  *   npm run hud -- --info     installation summary from the running server (JSON)
  *   npm run hud -- --apps     open the HUD and fly to the Tvoje appky orb (the app picker), optionally
@@ -196,6 +197,21 @@ if (flags.has('stop')) {
   process.exit(0)
 }
 if (flags.has('restart')) {
+  // A restart ends the jobs in the background. While one runs, the server restarts itself after it
+  // (also when the job itself asked for the restart: it would otherwise end halfway). `--now` does not wait.
+  if (!flags.has('now') && (await hudAlive())) {
+    let answer = null
+    try {
+      const res = await fetch(`${HUD_URL}/api/restart`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(5000) })
+      answer = res.ok ? await res.json() : null
+    } catch {
+      answer = null
+    }
+    if (answer?.deferred) {
+      console.log(`Na pozadí ešte beží úloha (${answer.jobs}). HUD sa reštartuje sám, hneď ako dobehne. Ihneď: node scripts/hud.mjs --restart --now`)
+      process.exit(0)
+    }
+  }
   await stopServer()
   await new Promise((r) => setTimeout(r, 600))
 }
