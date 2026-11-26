@@ -35,6 +35,7 @@ Presne to, čo pôjde von nabudúce, ukáže Nastavenia → Asistent → „Čo 
 
 - Nastavenia → Asistent → Anonymné štatistiky (zapíše `"telemetry": false` do `config/jarvis.json`).
 - Alebo v `.env`: `JARVIS_TELEMETRY=0`, prípadne `DO_NOT_TRACK=1`.
+- Alebo povedz Jarvisovi „vypni štatistiky". Vypnúť ich vie sám, zapnúť znova len ty v Nastaveniach alebo v `config/jarvis.json`.
 
 Vypnuté znamená, že neodíde nič, ani správa o vypnutí. Vedľajšia inštancia (`JARVIS_SECONDARY=1`), skúšobný mozog
 (`JARVIS_MOCK=1`) a testy neposielajú nikdy.

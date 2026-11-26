@@ -69,3 +69,16 @@ test('a failed ping keeps the counts for the next one', async () => {
   assert.equal(_test.read().counts.text, 4)
   assert.equal(_test.read().id, 'a'.repeat(32))
 })
+
+test('the brain may turn statistics off, never back on', async () => {
+  const before = readFileSync(process.env.JARVIS_CONFIG, 'utf8')
+  const { brainSettings } = await import('../hud/server/settings.mjs')
+  const on = await brainSettings({ set: { telemetry: true } })
+  assert.equal(on.ok, false)
+  assert.match(on.error, /len používateľ/)
+  assert.equal(JSON.parse(readFileSync(process.env.JARVIS_CONFIG, 'utf8')).telemetry, undefined, 'nothing was written')
+  const off = await brainSettings({ set: { telemetry: false } })
+  assert.equal(off.ok, true)
+  assert.equal(JSON.parse(readFileSync(process.env.JARVIS_CONFIG, 'utf8')).telemetry, false)
+  writeFileSync(process.env.JARVIS_CONFIG, before)
+})

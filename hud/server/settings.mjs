@@ -455,6 +455,9 @@ export async function previewVoice(body) {
  * HTTP API makes, without it the current values. The answer is short, the brain reads it aloud-ish.
  */
 export async function brainSettings(body) {
+  // Anonymous statistics: the brain may turn them off for the user, never back on. Only the user does
+  // that himself, in Settings or in config/jarvis.json.
+  if (body?.set?.telemetry === true) return { ok: false, error: 'Anonymné štatistiky môže zapnúť len používateľ sám: Nastavenia, časť Asistent, Anonymné štatistiky. Ja ich viem len vypnúť.' }
   const full = body?.set === undefined || body.set === null ? settingsBody() : await applySettings(body.set, 'jarvis')
   return {
     ok: true,
