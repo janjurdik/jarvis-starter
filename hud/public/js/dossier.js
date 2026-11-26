@@ -644,5 +644,12 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     if (open && inner.keys.size === 0 && performance.now() - lastInput > IDLE_MS) close()
   }, 5000)
 
-  return { open: openNode, close, back, setFilm, setOrbs, frame, isOpen: () => open, node: () => node, data: () => data }
+  /** The orb's content changed while it is open (a stráž was checked, a routine filled it): load it again, unless an item is being read. */
+  function refresh(id) {
+    if (!open || node !== id || sel >= 0 || !el.hero.hidden) return false
+    loadWorld(id)
+    return true
+  }
+
+  return { open: openNode, close, back, refresh, setFilm, setOrbs, frame, isOpen: () => open, node: () => node, data: () => data }
 }

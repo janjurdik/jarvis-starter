@@ -9,6 +9,8 @@
  *   - a calendar event that starts in a few minutes,
  *   - tasks with a deadline today that are still open late in the afternoon.
  *
+ * It also starts the check of a due stráž (data/watches.json, docs/STRAZE.md) in the background.
+ *
  * When something is due, Jarvis says it in the HUD (or through the speakers when no HUD window is
  * open) and sends a system notification. A reminder or
  * an event marked as urgent (text starting with "!") also rings the user's mobile, when calls are
@@ -33,6 +35,7 @@ import { MEMORY_DIR, todos } from '../hud/server/memory/index.mjs'
 import { isoDay } from '../hud/server/util.mjs'
 import { callReady } from '../hud/server/call.mjs'
 import { garminAuto } from '../hud/server/garmin/index.mjs'
+import { kickWatches } from '../hud/server/watches.mjs'
 import { DATA_DIR, IS_MAC, LOG_DIR, callOut, hudListeners, notify, parseArgs, postHud, quietNow } from './lib.mjs'
 
 const { flags } = parseArgs()
@@ -81,6 +84,8 @@ function keepAwakeForAlarm() {
 if (!dry && !flags.has('json')) keepAwakeForAlarm()
 // Garmin: starts a background sync when one is due (every 3 h, more often on a morning while last night's sleep is missing). Returns at once, never throws.
 if (!dry && !flags.has('json')) garminAuto(cfg, now)
+// Stráže (docs/STRAZE.md): a due watch starts its check in the background. Returns at once, never throws.
+if (!dry && !flags.has('json')) kickWatches({ now })
 const today = isoDay(now)
 const minutesNow = now.getHours() * 60 + now.getMinutes()
 const DIR = join(DATA_DIR, 'pulse')

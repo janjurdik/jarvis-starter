@@ -233,7 +233,7 @@ async function world(node) {
   // What Jarvis wrote for this orb (data/orbs/<id>.json): its own items and the component panel.
   const content = orbContent(node)
   if (content?.items) {
-    w.items.push(...content.items.map((it) => ({ id: it.id, t: it.t, s: it.s ?? it.from ?? null, img: null, imp: it.imp, g: it.g, k: 'orb', text: it.text ?? null, from: it.from ?? null, at: it.at ?? null, reply: it.reply ?? null, say: it.say ?? null })))
+    w.items.push(...content.items.map((it) => ({ id: it.id, t: it.t, s: it.s ?? it.from ?? null, img: null, imp: it.imp, g: it.g, k: 'orb', text: it.text ?? null, from: it.from ?? null, at: it.at ?? null, reply: it.reply ?? null, say: it.say ?? null, act: it.act ?? null })))
     const keys = new Set(w.groups.map((g) => g.key))
     for (const g of content.groups ?? []) if (!keys.has(g.key)) w.groups.push(g), keys.add(g.key)
     for (const it of content.items) if (!keys.has(it.g)) w.groups.push({ key: it.g, label: it.g }), keys.add(it.g)
@@ -329,7 +329,7 @@ async function itemDetail(node, id) {
       chips: it.g && it.g !== 'iné' ? [it.g] : [],
       paragraphs,
       sections: it.reply ? [{ title: 'Navrhovaná odpoveď', text: it.reply }] : [],
-      actions: it.say ? [{ label: it.reply ? 'Uprav odpoveď' : 'Vybav to', say: it.say }] : [],
+      actions: it.say ? [{ label: it.act || (it.reply ? 'Uprav odpoveď' : 'Vybav to'), say: it.say }] : [],
     }
   }
   if (it.k === 'routine') {

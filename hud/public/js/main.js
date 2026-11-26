@@ -128,8 +128,12 @@ function refreshNodes() {
 
 function applyOrbs(o) {
   if (!o || !Array.isArray(o.custom)) return
+  const before = orbState?.content ?? {}
   orbState = { hidden: o.hidden ?? [], pinned: o.pinned ?? [], custom: o.custom, content: o.content ?? {} }
   refreshNodes()
+  // The orb that is open right now got new content: its inside redraws too.
+  const open = dossier?.isOpen() ? dossier.node() : null
+  if (open && orbState.content[open]?.updatedAt && orbState.content[open].updatedAt !== before[open]?.updatedAt) dossier.refresh?.(open)
 }
 
 /** Počty vnútorných svetov: krátko čaká pri štarte, inak sa doplnia neskôr. */

@@ -154,6 +154,8 @@ function cleanContent(raw) {
         text: cleanBlock(it.text, 4000),
         reply: cleanBlock(it.reply, 2000),
         say: clean(it.say, 200),
+        // The label of the button that sends `say` (default „Vybav to").
+        act: clean(it.act, 28),
       })
     })
     .filter(Boolean)

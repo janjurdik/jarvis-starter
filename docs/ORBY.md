@@ -76,8 +76,8 @@ Vlastný obsah môže mať aj vstavaný orb: stráž pošty takto plní Poštu.
   jeden bod; body sú rozložené v pravidelných kruhoch, dôležitejšie (`imp` od 0 do 1) sú väčšie a bližšie k stredu.
   Klik na bod otvorí detail. Čím viac doň napíšeš, tým je užitočnejší:
   `from` (od koho), `at` (kedy), `text` (samotný obsah, nie len nadpis: čo v maile stojí, kto čo chce, do kedy; odseky
-  oddeľ prázdnym riadkom, najviac 4 000 znakov), `reply` (odpoveď, ktorú navrhuješ) a `say` (veta, ktorú tlačidlo
-  v detaile povie Jarvisovi). Čísla v `value` môžu byť čísla aj text.
+  oddeľ prázdnym riadkom, najviac 4 000 znakov), `reply` (odpoveď, ktorú navrhuješ), `say` (veta, ktorú tlačidlo
+  v detaile povie Jarvisovi) a `act` (nápis na tom tlačidle, predvolene „Vybav to"). Čísla v `value` môžu byť čísla aj text.
 - S `--folder` sa k tomu pridajú poznámky z priečinka v pamäti.
 
 ### Komponenty
