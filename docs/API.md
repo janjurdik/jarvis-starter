@@ -15,12 +15,16 @@ curl -s localhost:4545/api/setup         # what is installed and configured
 
 Everything is open from loopback. POST requests from a browser must come from the HUD page itself (same Origin).
 With `HUD_HOST=0.0.0.0` other machines need the token from `data/brain/token` (header `x-hud-token` or `?token=`).
+The token is never accepted through the Mobil tunnel (the tunnel's host name, or any `cf-*` header from cloudflared):
+there only the login counts.
 
 From outside (the phone through the Mobil tunnel, docs/MOBIL.md) every request needs the session cookie
-`jarvis_session` from `POST /api/remote/login`. Without it only the login page, its assets, the manifest and the icons
+`__Host-jarvis_session` from `POST /api/remote/login` (the 1.10.0 name `jarvis_session` is still accepted in 1.10.1
+and moved to the new name on first use). Without it only the login page, its assets, the manifest and the icons
 load; pages redirect to `/m/login.html?next=…`, everything else answers `401`. With it a phone gets what a local page
 gets (reads, POSTs, `WS /api/mic`), except the `/api/remote/*` management endpoints and the loopback-only ones
-(`event`, `announce`, `brain/hud`, `control`, `restart`, `quit`, …). The tunnel's host name is accepted only while
+(`event`, `announce`, `brain/hud`, `control`, `restart`, `quit`, `surface/keep`, …). An event stream from outside is
+always a `phone` or a `browser`, never the `desktop` or the `app`. The tunnel's host name is accepted only while
 the tunnel runs; anything served through it is `cache-control: private`.
 
 ## Endpoints
@@ -175,13 +179,13 @@ one retry with the newest yt-dlp when the pinned one no longer understands a sit
 | Method and path | What it does |
 |---|---|
 | `GET /api/remote/session` | Anyone: `{ local, loggedIn, enabled, device }`. The login page asks it first. |
-| `POST /api/remote/login` | `{ email, password, next? }` → `200 { ok, device, next }` and `set-cookie: jarvis_session=…; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000`. `401` wrong email or password (one message for both), `403` mobile access off, `429 { retryAfter }` with a `retry-after` header while the address (or everybody) waits. |
+| `POST /api/remote/login` | `{ email, password, next? }` → `200 { ok, device, next }` and two cookies: `__Host-jarvis_session=…; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000` and the known-device cookie `__Host-jarvis_device=…` (same flags, 400 days, survives a logout; `logout-all` and a new password forget it). `401` wrong email or password (one message for both), `403` mobile access off, `429 { retryAfter }` with a `retry-after` header while the address (IPv6: its /64) or everybody waits; a known device is not stopped by the lock for everybody. A device that logs in for the first time is announced on the computer (notification, LOG, card). |
 | `POST /api/remote/logout` | This device logs out. |
 | `POST /api/remote/alive` | `{ id }` (the window id from SSE `you`): the phone page is still in front and keeps Jarvis's voice. |
-| `GET /api/remote/status` | Loopback: `{ enabled, email, hasPassword, passwordMin, mode: quick\|named, hostname, hasToken, devices: [{ id, device, created, seen }], tunnel: { state: off\|starting\|running\|error, mode, url, error, installing }, cloudflared, address }`. A phone gets only `{ local: false, enabled }`. |
-| `POST /api/remote/settings` | Loopback and only from a browser page (Origin required): `{ email?, password?, password2?, mode?, hostname?, token?, enabled? }`. A new password logs every device out. Never reachable from the brain's `settings` tool. |
+| `GET /api/remote/status` | Loopback: `{ enabled, email, hasPassword, passwordMin, passwordLong, mode: quick\|named, hostname, hasToken, devices: [{ id, device, created, seen }], known: [{ device, created, lastLogin, active }], lock: { until } \| null, tunnel: { state: off\|starting\|running\|error, mode, url, error, installing }, cloudflared, address }`. A phone gets only `{ local: false, enabled }`. |
+| `POST /api/remote/settings` | Loopback and only from a browser page (Origin required): `{ email?, password?, password2?, mode?, hostname?, token?, enabled? }`. Password: at least 12 characters with three of small letters, capitals, digits and other characters, or at least 16. A new password logs every device out and forgets the known devices. Every change of email or password is announced on the computer. Never reachable from the brain's `settings` tool. |
 | `POST /api/remote/tunnel` | Loopback: `{ action: start \| stop \| restart \| show, mode? }`. `start` turns mobile access on (needs email and password), `stop` turns it off and logs every device out, `show` opens Settings → Mobil on the screen (SSE `world { panel: "settings", tab: "mobil" }`). |
-| `POST /api/remote/logout-all` | Loopback: every device logs out → `{ count }`. |
+| `POST /api/remote/logout-all` | Loopback: every device logs out and the known devices are forgotten → `{ count }`. |
 | `WS /api/events/ws` | The SSE stream of `/api/events` over a WebSocket, one text message per write, same frames. Used by pages opened through the tunnel (a Cloudflare quick tunnel holds back SSE). `?client=phone` makes the window a phone: while it says it is alive (`{"alive":"<id>"}` or `POST /api/remote/alive`, every 20 s) it owns the voice. |
 
 ### Record mode

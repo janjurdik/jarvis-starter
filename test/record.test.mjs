@@ -279,3 +279,17 @@ test('record: the page encodes its microphone frames as a WAV the server reads',
   assert.equal(parsed.data.readInt16LE(0), 7)
   assert.equal(parsed.data.readInt16LE(1280 * 2), -9)
 })
+
+test('record: a start from anything but a click on this screen is announced, and the server decides who started it', () => {
+  const at = new Date(2026, 10, 26, 14, 5).getTime()
+  for (const [via, how] of [['voice', /v rozhovore/], ['phone', /z mobilu/], ['cli', /príkazom/]]) {
+    const n = rec.startNotice({ via, title: 'Záznam', startedAt: at })
+    assert.equal(n.title, 'Jarvis nahráva mikrofón a obrazovku')
+    assert.match(n.text, how)
+    assert.match(n.text, /14:05/)
+  }
+  assert.match(rec.startNotice({ via: 'phone', title: 'Porada', startedAt: at }).text, /„Porada"/)
+  const src = readFileSync(join(import.meta.dirname, '..', 'hud', 'server', 'record.mjs'), 'utf8')
+  assert.match(src, /if \(s\.via !== 'page'\) announceStart\(s\)/)
+  assert.match(src, /startRecording\(\{ title: body\.title, via \}\)/, 'the body cannot claim it was the page')
+})

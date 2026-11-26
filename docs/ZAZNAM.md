@@ -28,6 +28,8 @@ ChatGPT alebo Gemini), tak ako všetko, o čom sa s ňou rozprávate. Nikam inam
 „Počúvaj ma", „nahrávaj", „zapni záznam", alebo klik na čip **Záznam** hore. Jarvis nahráva mikrofón aj obrazovku a
 medzitým s vami normálne hovorí: pýtajte sa, zadávajte mu veci, záznam beží ďalej. Nie je to pomocník na porady, nič
 do rozhovoru nevkladá sám. Kým nahráva, čip svieti na červeno s časom (na telefóne malá bodka nad riadkom na písanie).
+Keď sa záznam nespustil klikom na tejto obrazovke (hlasom alebo v rozhovore, z mobilu, príkazom), príde na počítači
+aj oznámenie „Jarvis nahráva mikrofón a obrazovku" s tým, ako sa spustil.
 
 „Stačí", „ukonči záznam" alebo druhý klik na čip záznam ukončí. Potom Jarvis na pozadí:
 

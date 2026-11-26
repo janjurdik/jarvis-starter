@@ -110,6 +110,7 @@ export function createUI({ capture }) {
     `<span class="chip chip-life" id="chip-life" data-tip="Pamäť|Poznámky o vás, z ktorých čerpám. Sú len vo vašom počítači, v priečinku memory.">${icon('pamat')}<span>Pamäť</span></span>`,
     `<button type="button" class="chip chip-hands is-off" id="chip-hands" data-tip="Ovládanie rukami|Zapne kameru. Kurzor ide za dlaňou a štipnutím prstov kliknete. Obraz neopúšťa počítač." aria-label="Ovládanie rukami" aria-pressed="false">${icon('kamera')}<span>Ruky</span></button>`,
     `<button type="button" class="chip chip-film" id="chip-film" data-tip="Režim natáčania|Skryjem súkromné veci (mená, správy, obsah pamäte), aby ste mohli nahrávať alebo zdieľať obrazovku. Klávesa N.">${icon('film')}<span>Natáčanie</span></button>`,
+    `<button type="button" class="chip chip-mobile" id="chip-mobile" data-tip="Mobil zapnutý|Som dostupný aj z mobilu cez tunel Cloudflare, pre toho, kto pozná váš e-mail a heslo. Klik otvorí Nastavenia, časť Mobil." hidden>${icon('mobile')}<span>Mobil zapnutý</span></button>`,
     `<button type="button" class="chip chip-set" id="chip-set" data-tip="Nastavenia|Hlas, oslovenie, počúvanie, mozog a plocha." aria-label="Nastavenia">${icon('sliders')}</button>`,
     `<button type="button" class="chip chip-jobs" id="chip-jobs" data-tip="Úlohy na pozadí|Na čom práve pracujem sám. Klik ich ukáže." hidden>${icon('projekty')}<span></span></button>`,
     `<span class="chip chip-app" id="chip-app" hidden>${icon('app')}<span></span></span>`,
@@ -157,6 +158,7 @@ export function createUI({ capture }) {
     film: $('#chip-film'),
     app: $('#chip-app'),
     jobs: $('#chip-jobs'),
+    mobile: $('#chip-mobile'),
   }
   const setChip = (key, node, { cls, html, hidden = false, title }) => {
     set(`${key}:cls`, node, `chip ${node.dataset.base ?? (node.dataset.base = node.className.replace(/\s*is-\w+/g, '').replace(/^chip\s*/, ''))}${cls ? ` ${cls}` : ''}`, 'className')
@@ -505,6 +507,15 @@ export function createUI({ capture }) {
       title: memBad ? 'Pamäť sa nedá načítať' : memEmpty ? 'Pamäť je prázdna. Otvor priečinok Jarvisa v Claude a napíš „štart".' : stale ? 'Pamäť: údaje sú staršie ako 45 min' : 'Pamäť pripojená',
     })
     setChip('film', chip.film, { cls: film ? 'is-on' : 'is-off', html: `${icon('film')}<span>Natáčanie</span>` })
+    // The door to the phone stays visible as long as it is open: amber while the tunnel starts or fails.
+    const remote = status?.remote
+    const mobileOn = remote?.on === true
+    setChip('mobile', chip.mobile, {
+      hidden: !mobileOn,
+      cls: remote?.state === 'running' ? '' : 'is-warn',
+      html: `${icon('mobile')}<span>${remote?.state === 'running' ? 'Mobil zapnutý' : remote?.state === 'error' ? 'Mobil, tunel nejde' : 'Mobil sa zapína'}</span>`,
+      title: remote?.state === 'running' ? 'Tunel beží.' : remote?.state === 'error' ? 'Tunel sa nespustil, podrobnosti sú v Nastaveniach.' : 'Tunel sa otvára.',
+    })
   }
 
   /**

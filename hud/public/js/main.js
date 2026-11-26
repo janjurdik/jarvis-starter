@@ -1492,6 +1492,7 @@ async function main() {
   bindFolds()
   settings = createSettings({ onToast: (text) => ui.toast(esc(text), { kind: 'warn', iconName: 'sliders', ms: 5000 }) })
   document.getElementById('chip-set')?.addEventListener('click', () => settings.open())
+  document.getElementById('chip-mobile')?.addEventListener('click', () => settings.open('mobil'))
   if (!scene && location.hash.startsWith('#appky')) focusNode('appky', decodeURIComponent(location.hash.split('/')[1] ?? '') || null)
   // First run: the memory is empty until the onboarding in Claude is done.
   // The first setup is a conversation with Jarvis right here. On the very first start he speaks first;

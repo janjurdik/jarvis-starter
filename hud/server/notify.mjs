@@ -12,6 +12,8 @@ import { IS_MAC, IS_WIN, winSys } from './util.mjs'
 
 /** A notification from the scripting tools of the system. Never throws. */
 export function osNotify(title, body) {
+  // Tests and throwaway instances (JARVIS_NO_NOTIFY=1) must not pop notifications on the machine that runs them.
+  if (process.env.JARVIS_NO_NOTIFY === '1') return
   const head = String(title).replace(/\s+/g, ' ').slice(0, 80)
   const text = String(body).replace(/\s+/g, ' ').slice(0, 220)
   if (IS_MAC) {

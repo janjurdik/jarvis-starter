@@ -15,18 +15,74 @@
  */
 import { EventEmitter } from 'node:events'
 import { WebSocketServer } from 'ws'
-import { RemoteAuth, clearCookie, clientIp, isPage, isPhone, openPath, safeNext } from './remote.mjs'
+import { notice } from './notice.mjs'
+import { DEVICE_COOKIE, RemoteAuth, clearCookie, clientIp, isPage, isPhone, openPath, placeHint, readCookie, safeNext } from './remote.mjs'
 import { openStream, send, touchWindow } from './sse.mjs'
 import { cloudflaredBin, cloudflaredVersion, createTunnel } from './tunnel.mjs'
 import { log, readJson, sendJson } from './util.mjs'
 
-export const auth = new RemoteAuth()
+const clock = (ms) => new Date(ms).toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+/**
+ * What the user sees on the computer when the mobile access changes. Nothing here stops anything:
+ * a new device, a new password and an open login are allowed, they are just never silent.
+ */
+function onAuthEvent(kind, info = {}) {
+  if (kind === 'device') {
+    notice({
+      title: 'Nové zariadenie v Mobile',
+      text: `${info.device || 'Zariadenie'} sa ku mne prvýkrát prihlásilo o ${clock(info.at ?? Date.now())}${info.place ? ` (${info.place})` : ''}. Ak ste to neboli vy, v Nastaveniach, časť Mobil, zmeňte heslo a odhláste všetky zariadenia.`,
+      log: 'Mobil · nové zariadenie',
+      icon: 'shield',
+    })
+  } else if (kind === 'credentials') {
+    const what = info.first ? 'Prihlásenie pre Mobil je nastavené' : info.password && info.email ? 'E-mail aj heslo pre Mobil sú zmenené' : info.password ? 'Heslo pre Mobil je zmenené' : 'E-mail pre Mobil je zmenený'
+    notice({
+      title: what,
+      text: `${what} (${clock(Date.now())}).${info.password && !info.first ? ' Všetky zariadenia sú odhlásené.' : ''} Ak ste to nemenili vy, otvorte Nastavenia, časť Mobil.`,
+      log: info.first ? 'Mobil · prihlásenie nastavené' : info.password ? 'Mobil · heslo zmenené' : 'Mobil · e-mail zmenený',
+      icon: 'shield',
+    })
+  } else if (kind === 'lock') {
+    notice({
+      title: 'Prihlasovanie do Mobilu je zatvorené',
+      text: `Prišlo priveľa nesprávnych prihlásení z rôznych adries, preto som prihlasovanie zatvoril do ${clock(info.until ?? Date.now())}. Vaše zariadenia, ktoré sa už prihlásili, sa dostanú aj tak. Ak to trvá, Mobil v Nastaveniach vypnite.`,
+      log: 'Mobil · prihlasovanie zatvorené',
+      icon: 'alarm',
+      accent: 'red',
+    })
+  }
+}
+
+export const auth = new RemoteAuth({ onEvent: onAuthEvent })
 let tunnel = null
 let installedCache = null
+let announcedUrl = null
 
-/** Called once by the server. The primary instance opens the tunnel again when mobile access was on. */
-export function initMobile({ port, primary }) {
-  tunnel = createTunnel({ port, config: () => auth.tunnelConfig() })
+/**
+ * Called once by the server. The primary instance opens the tunnel again when mobile access was on.
+ * `onStatus` hears every change of the tunnel (the server puts it into /api/status for the top bar).
+ */
+export function initMobile({ port, primary, onStatus = () => {} }) {
+  tunnel = createTunnel({
+    port,
+    config: () => auth.tunnelConfig(),
+    onChange: (st) => {
+      // The address on the computer, once per address: the tunnel is a door to this computer and is never open unseen.
+      if (st.state === 'running' && st.url && st.url !== announcedUrl) {
+        announcedUrl = st.url
+        notice({
+          title: 'Mobil zapnutý',
+          text: `Tunel beží na adrese ${st.url.replace(/^https:\/\//, '')}. Kto sa prihlási vaším e-mailom a heslom, ovláda cez mňa tento počítač. Vypína sa v Nastaveniach, časť Mobil.`,
+          log: 'Mobil · tunel beží',
+          icon: 'globe',
+          accent: 'ice',
+        })
+      }
+      if (st.state === 'off') announcedUrl = null
+      onStatus(mobileState())
+    },
+  })
   if (primary && auth.enabled()) {
     log('tunnel', 'mobilný prístup je zapnutý, otváram tunel')
     tunnel.start().catch(() => {})
@@ -34,6 +90,21 @@ export function initMobile({ port, primary }) {
 }
 
 export const stopMobile = () => tunnel?.stop()
+
+/** For the top bar of the HUD: is the door to the phone open? { on, state, url }. */
+export function mobileState() {
+  const t = tunnel?.status() ?? { state: 'off' }
+  return { on: auth.enabled(), state: auth.enabled() ? t.state : 'off', url: auth.enabled() && t.state === 'running' ? t.url : null }
+}
+
+/**
+ * The role a stream of events may have. Only a window on this computer is the desktop or the app (they
+ * own the voice and the notifications); a window from outside is the phone page or a browser tab.
+ */
+export function streamRole(requested, local) {
+  if (local) return ['phone', 'desktop', 'app', 'browser'].includes(requested) ? requested : 'browser'
+  return requested === 'phone' ? 'phone' : 'browser'
+}
 /** Host names of the running tunnel: the server answers to them only while it runs. */
 export const tunnelHosts = () => tunnel?.hosts() ?? []
 export const sessionFor = (req, res = null) => auth.sessionFor(req, res)
@@ -44,7 +115,7 @@ export { isPhone, openPath }
  * exactly like an EventSource (hud/public/js/events.js). A Cloudflare quick tunnel buffers
  * server-sent events, a WebSocket passes. Pings find a phone that vanished without closing.
  */
-export function attachEventsSocket(server, { allow }) {
+export function attachEventsSocket(server, { allow, isLocal = () => false }) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false })
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://hud.local')
@@ -77,8 +148,7 @@ export function attachEventsSocket(server, { allow }) {
           // not ours
         }
       })
-      const role = url.searchParams.get('client')
-      openStream(closed, res, { role: ['phone', 'desktop', 'app'].includes(role) ? role : 'browser' })
+      openStream(closed, res, { role: streamRole(url.searchParams.get('client'), isLocal(req)) })
     })
   })
   setInterval(() => {
@@ -142,13 +212,14 @@ export async function routeMobile(req, res, path, { local, session, originOk }) 
 
   if (path === '/api/remote/login') {
     const body = await readJson(req, 4096)
-    const r = await auth.login({ email: body.email, password: body.password, ip: clientIp(req), agent: req.headers['user-agent'] })
+    const r = await auth.login({ email: body.email, password: body.password, ip: clientIp(req), agent: req.headers['user-agent'], deviceToken: readCookie(req, DEVICE_COOKIE), place: local ? '' : placeHint(req) })
     if (!r.ok) {
       const headers = r.retryAfter ? { 'retry-after': String(r.retryAfter) } : {}
       for (const [k, v] of Object.entries(headers)) res.setHeader(k, v)
       return sendJson(res, r.status, { ok: false, error: r.error, retryAfter: r.retryAfter ?? null })
     }
-    res.setHeader('set-cookie', r.cookie)
+    // The session first, then the known-device cookie, which outlives logouts.
+    res.setHeader('set-cookie', [r.cookie, r.deviceCookie])
     return sendJson(res, 200, { ok: true, device: r.session.device, next: safeNext(body.next) })
   }
   if (path === '/api/remote/logout') {

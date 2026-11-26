@@ -359,6 +359,25 @@ async function freeDisk() {
 
 // ── start, chunks, stop ──────────────────────────────────────────────────
 
+/** How a recording was started, for the notification on the computer. */
+export const VIA_TEXT = { voice: 'na požiadanie v rozhovore so mnou', phone: 'z mobilu', cli: 'príkazom v tomto počítači' }
+const VIA_SHORT = { voice: 'z rozhovoru', phone: 'z mobilu', cli: 'príkazom' }
+
+export function startNotice(s) {
+  const how = VIA_TEXT[s.via] ?? `cez ${s.via}`
+  return { title: 'Jarvis nahráva mikrofón a obrazovku', text: `Záznam${s.title && s.title !== DEFAULT_TITLE ? ` „${s.title}"` : ''} sa spustil ${how} o ${localTime(s.startedAt)}. Zastavíte ho čipom Záznam hore alebo vetou „stačí".` }
+}
+
+function announceStart(s) {
+  try {
+    const n = startNotice(s)
+    opts.notify?.({ title: n.title, body: n.text })
+    opts.sendHud?.({ type: 'alert', text: `Záznam beží · ${VIA_SHORT[s.via] ?? s.via}`, icon: 'alarm', say: null, heard: null, node: null, source: 'jarvis' })
+  } catch (err) {
+    log('record', `oznámenie o zázname sa nepodarilo: ${errMsg(err)}`)
+  }
+}
+
 /**
  * Starts a recording, or returns the running one (a second "nahrávaj" does not start another).
  * title: what it is (optional, the job names it otherwise). via: who started it (voice, page, cli).
@@ -409,6 +428,8 @@ export async function startRecording({ title = '', via = 'page' } = {}) {
   await save(s, true)
   log('record', `${id} začal (${s.via})`)
   emit(s)
+  // A recording that did not start with a click on this screen is never silent: a notification says so and how.
+  if (s.via !== 'page') announceStart(s)
   startTimers()
   return { ok: true, session: pubSession(s) }
 }
@@ -960,10 +981,11 @@ const chunkError = (res, err) => sendJson(res, err.status ?? 500, { ok: false, e
 
 /**
  * POST /api/record/start {title?}, /api/record/stop {id?}, /api/record/finish {id},
+ * `via` is who started it as the server sees the request (page, phone, cli).
  * /api/record/chunk?id=&kind=audio|video|frame&seq=&at=&part=&final=1 (raw body).
  * Returns true when the request was handled.
  */
-export async function routeRecordPost(req, res, url) {
+export async function routeRecordPost(req, res, url, { via = 'cli' } = {}) {
   const path = url.pathname
   if (!path.startsWith('/api/record/')) return false
   try {
@@ -977,7 +999,8 @@ export async function routeRecordPost(req, res, url) {
       return true
     }
     const body = await readJson(req, 8000)
-    if (path === '/api/record/start') sendJson(res, 200, await startRecording({ title: body.title, via: body.via ?? 'page' }))
+    // `via` comes from the server (who really asked), never from the body.
+    if (path === '/api/record/start') sendJson(res, 200, await startRecording({ title: body.title, via }))
     else if (path === '/api/record/stop') sendJson(res, 200, { ok: true, session: await stopRecording({ id: body.id ? String(body.id) : null }) })
     else if (path === '/api/record/finish') sendJson(res, 200, { ok: true, session: await finishAgain(String(body.id ?? '')) })
     else sendJson(res, 404, { ok: false, error: `nenájdené: POST ${path}` })

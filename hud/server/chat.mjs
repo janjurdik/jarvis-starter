@@ -345,7 +345,7 @@ function sinkFor(turn) {
 export const currentTurnId = () => (current?.active ? current.id : null)
 
 /** Bežiaci turn pre úlohy na pozadí (zdedia silent a mock). */
-export const currentTurnInfo = () => (current?.active ? { id: current.id, silent: current.silent, mock: current.mock } : null)
+export const currentTurnInfo = () => (current?.active ? { id: current.id, silent: current.silent, mock: current.mock, hidden: current.hidden === true, via: current.via } : null)
 
 const userTurnListeners = new Set()
 /** Called with (text, via) for every message the user sends (the recording marks where he talked to Jarvis). */

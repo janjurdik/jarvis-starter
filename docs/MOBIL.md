@@ -12,7 +12,9 @@ Zvonka pustí Jarvis len toho, kto sa prihlási tvojím e-mailom a heslom.
 Najjednoduchšie je povedať Jarvisovi „chcem ťa v mobile". Prevedie ťa tým sám. Ručne:
 
 1. Na ploche otvor Nastavenia (posuvníky hore), časť **Mobil**.
-2. Zadaj e-mail a heslo (aspoň 10 znakov, také, ktoré nikde inde nepoužívaš) a klikni **Uložiť prihlásenie**.
+2. Zadaj e-mail a heslo a klikni **Uložiť prihlásenie**. Heslo má aspoň 12 znakov a z toho tri druhy (malé a veľké
+   písmená, číslice, iné znaky), alebo aspoň 16 znakov, napríklad štyri slová za sebou. Slovo s rokom na konci
+   (`Bratislava2024`) neprejde. Také, ktoré nikde inde nepoužívaš.
    Heslo sa píše len sem, nikdy do rozhovoru s Jarvisom.
 3. Zapni **Mobilný prístup**. Prvýkrát si Jarvis doinštaluje program `cloudflared` a o pár sekúnd ukáže adresu a QR kód.
 4. Naskenuj QR kód telefónom, prihlás sa a pridaj si Jarvisa na plochu:
@@ -54,11 +56,25 @@ Token sa uloží do `data/brain/tunnel-token` a do stránky sa už nikdy nevrát
 - Kto pozná e-mail a heslo, ovláda cez Jarvisa tento počítač: číta pamäť a spúšťa úlohy. Preto silné heslo,
   ktoré nikde inde nepoužívaš.
 - Heslo sa neukladá. V `data/brain/remote.json` je len jeho odtlačok (scrypt s náhodnou soľou).
-- Prihlásenie je náhodný kľúč v cookie, ku ktorej sa stránka ani iný web nedostane (HttpOnly, Secure, SameSite=Strict).
-  Na počítači je z neho uložený len odtlačok.
-- Zlé heslo: po piatich pokusoch čaká adresa 30 sekúnd, potom zakaždým dvakrát dlhšie, až hodinu. Keď prídu
-  zlé pokusy z mnohých adries naraz, prihlasovanie sa na 10 minút zavrie pre všetkých.
-- Nové heslo alebo vypnutie Mobilu odhlási všetky zariadenia. Tlačidlo **Odhlásiť všetky zariadenia** je v Nastaveniach.
+- Prihlásenie je náhodný kľúč v cookie, ku ktorej sa stránka ani iný web nedostane (`__Host-`, HttpOnly, Secure,
+  SameSite=Strict). Na počítači je z neho uložený len odtlačok.
+- Každé prihlásenie nechá v telefóne aj druhú cookie, **známe zariadenie** (400 dní, prežije odhlásenie). Podľa nej
+  Jarvis vie, že je to tvoj telefón, a pustí ho, aj keď je prihlasovanie pre ostatných zavreté.
+- Zlé heslo: po piatich pokusoch čaká adresa 30 sekúnd, potom zakaždým dvakrát dlhšie, až hodinu. Pri IPv6 sa
+  počíta celá sieť /64 ako jedna adresa. Keď prídu zlé pokusy z mnohých adries naraz, prihlasovanie sa zavrie pre
+  všetky nové zariadenia, najprv na 10 minút a pri ďalšom útoku v ten istý deň zakaždým na dvojnásobok (najviac 12
+  hodín). Známe zariadenia sa prihlásia aj vtedy, s vlastnou brzdou. Na počítači o tom príde oznámenie.
+- Nové heslo, vypnutie Mobilu alebo **Odhlásiť všetky zariadenia** (v Nastaveniach) odhlási všetky zariadenia. Nové
+  heslo a tlačidlo zabudnú aj známe zariadenia: každé sa potom prihlási ako nové.
+- Nič sa nedeje potichu. Na počítači príde oznámenie, riadok v LOGu a karta, keď sa prvýkrát prihlási nové zariadenie
+  (aké a kedy), keď sa zmení e-mail alebo heslo, keď sa spustí tunel (s adresou) a keď sa prihlasovanie zavrie. Kým
+  tunel beží, je v lište hore čip **Mobil zapnutý**, klik naň otvorí Nastavenia, časť Mobil. Tam je pri každom
+  zariadení, kedy sa naposledy prihlásilo.
+- Token HUD (`data/brain/token`, pre `HUD_HOST=0.0.0.0` v domácej sieti) cez tunel neplatí. Z internetu sa dá dostať
+  dnu len prihlásením.
+- Nesprávne prihlásenia sa zapisujú do logu so zariadením a krajinou, z ktorej prišli (ak ju Cloudflare pozná), nikdy s heslom.
+- `cloudflared` z GitHubu má Jarvis pripnutý na overenú verziu a pred spustením skontroluje jeho odtlačok SHA-256.
+  Homebrew a winget ostávajú, ako boli.
 - Zvonka sa nedá zmeniť nič, čo sa týka samotného prístupu (heslo, tunel, zariadenia), ani vnútorné veci, ktoré smú
   len programy na počítači. Nastavenia, časť Mobil, mení len obrazovka na počítači.
 - Nič z tunela sa neukladá v medzipamäti Cloudflare.

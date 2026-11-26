@@ -198,6 +198,7 @@
 
 /* Mobil: the address for the phone as a QR code beside a few lines on how to use it. */
 .st-rl em .is-warn { color: var(--amber, #ffb25c); }
+.st-note.is-warn { color: var(--amber, #ffb25c); }
 .st-mob { display: flex; align-items: center; gap: 1.4rem; padding: 1.1rem 0; box-shadow: inset 0 1px 0 rgba(176, 246, 255, 0.08); }
 .st-qr { flex: none; width: 9.5rem; height: 9.5rem; padding: 0.45rem; border-radius: 1rem; background: #eafbff; box-shadow: 0 0 2rem rgba(127, 243, 255, 0.18); }
 .st-qr svg { display: block; width: 100%; height: 100%; border-radius: 0.5rem; }

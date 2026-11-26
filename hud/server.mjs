@@ -55,7 +55,7 @@ import { addSuggestion, dismissSuggestion, suggestContextNote, suggestions } fro
 import { FIRST_RUN_TEXT, addressOf } from './server/persona.mjs'
 import { startTelemetry, telemetryInfo } from './server/telemetry.mjs'
 import { getOrbState } from './server/orbs.mjs'
-import { attachEventsSocket, auth as remoteAuth, deny, initMobile, isPhone, openPath, routeMobile, sessionFor, stopMobile, tunnelHosts } from './server/mobile.mjs'
+import { attachEventsSocket, auth as remoteAuth, deny, initMobile, isPhone, mobileState, openPath, routeMobile, sessionFor, stopMobile, streamRole, tunnelHosts } from './server/mobile.mjs'
 import { kickWatches } from './server/watches.mjs'
 import { brainRecord, initRecordings, noteTalk, routeRecordGet, routeRecordPost } from './server/record.mjs'
 
@@ -200,8 +200,24 @@ function hostAllowed(req) {
 const sessions = new WeakMap()
 const hasSession = (req) => Boolean(sessions.get(req))
 
-/** The token is 192 random bits from the header, or ?token= where headers cannot be set (EventSource). */
+/**
+ * A request that came through the mobile tunnel: its Host is the tunnel's address, or cloudflared
+ * added Cloudflare's own headers. Through the tunnel only the login counts, never the HUD token.
+ */
+const CF_HEADERS = ['cf-connecting-ip', 'cf-ray', 'cf-ipcountry', 'cf-visitor', 'cf-warp-tag-id']
+function viaTunnel(req) {
+  if (tunnelHosts().includes(hostName(req))) return true
+  if (CF_HEADERS.some((h) => req.headers[h] !== undefined)) return true
+  return /cloudflare/i.test(String(req.headers['cdn-loop'] ?? ''))
+}
+
+/**
+ * The token is 192 random bits from the header, or ?token= where headers cannot be set (EventSource).
+ * It is for a network the user opened on purpose (HUD_HOST=0.0.0.0, JARVIS_ALLOWED_HOSTS), never for
+ * the internet: through the tunnel it is refused, there the phone logs in.
+ */
 function remoteTokenOk(req, url = null) {
+  if (viaTunnel(req)) return false
   const given = req.headers['x-hud-token'] ?? url?.searchParams.get('token') ?? ''
   return Boolean(given) && tokenOk(given, HUD_TOKEN)
 }
@@ -218,6 +234,16 @@ function originOk(req) {
   } catch {
     return false
   }
+}
+
+/**
+ * Who starts a recording, decided here and not by the body: a click on the page on this computer
+ * (`page`, the browser sends its Origin), the phone or the network (`phone`), or a program on this
+ * computer (`cli`). Anything but the click on this screen also gets a notification (server/record.mjs).
+ */
+function recordVia(req) {
+  if (!isLocal(req)) return 'phone'
+  return req.headers.origin !== undefined && originOk(req) ? 'page' : 'cli'
 }
 
 /** POST len z loopbacku (z vlastnej stránky), zo siete s x-hud-token alebo s prihlásením z mobilu. */
@@ -308,7 +334,7 @@ setOnRolesChange(() => {
 })
 initSettings({ statusChanged, primary: PRIMARY })
 // Jarvis on the phone: login and the Cloudflare tunnel (docs/MOBIL.md). Opens the tunnel again when it was on.
-initMobile({ port: PORT, primary: PRIMARY })
+initMobile({ port: PORT, primary: PRIMARY, onStatus: () => statusChanged() })
 // Anonymous statistics, once a day: counts and choices only (server/telemetry.mjs, docs/TELEMETRIA.md).
 startTelemetry({
   primary: PRIMARY,
@@ -367,6 +393,8 @@ function statusBody() {
     memory: memoryStatus(),
     brainInfo: b ? { pid: b.pid, startMs: b.startMs, turns: b.turns, lastError: b.lastError, mcp: b.mcp, limit: b.limit } : null,
     primary: PRIMARY,
+    // The door to the phone: the top bar shows it while it is open (server/mobile.mjs).
+    remote: mobileState(),
     clients: clientCount(),
     desktop: desktopCount(),
     uptimeS: Math.round((Date.now() - BOOTED) / 1000),
@@ -616,6 +644,11 @@ async function routePost(req, res, path) {
   if (path === '/api/brain/hud') {
     if (!isLocal(req) || !tokenOk(req.headers['x-brain-token'], BRAIN_TOKEN)) return sendJson(res, 403, { ok: false, error: 'zlý token' })
     const body = await readJson(req, 64_000)
+    // Is the brain answering the user's own message right now (said or typed in the HUD), or speaking on its own?
+    if (body.action === 'turn') {
+      const t = currentTurnInfo()
+      return sendJson(res, 200, { ok: true, user: Boolean(t && !t.hidden && !t.mock), via: t?.via ?? null })
+    }
     if (body.action === 'memory_changed') {
       pushSnapshot('zápis do pamäte').catch(() => {})
       return sendJson(res, 200, { ok: true })
@@ -664,7 +697,7 @@ async function routePost(req, res, path) {
   if (!allowPost(req)) return sendJson(res, 403, { ok: false, error: 'POST len z localhostu alebo s x-hud-token' })
   if (path === '/api/stt') return postStt(req, res)
   // Record mode: start, stop and the chunks of sound and screen from the page (server/record.mjs).
-  if (await routeRecordPost(req, res, new URL(req.url ?? '/', 'http://hud.local'))) return
+  if (await routeRecordPost(req, res, new URL(req.url ?? '/', 'http://hud.local'), { via: recordVia(req) })) return
   // Uploads (streamed bodies), imports and the people review: server/imports.mjs.
   if (await routeImportPost(req, res, new URL(req.url ?? '/', 'http://hud.local'), { local: isLocal(req), film: state.film })) return
   // The video theater: open a link, seek, play and pause (server/video.mjs).
@@ -720,6 +753,8 @@ async function routePost(req, res, path) {
   }
   if (path === '/api/surface/keep') {
     // The launcher opened Jarvis in his place: every other place gives itself back (server/surface.mjs).
+    // Only from this computer: a page from outside must not close the windows here.
+    if (!isLocal(req)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
     const keep = normalizeSurface(body.keep)
     if (!keep) return sendJson(res, 400, { ok: false, error: 'keep: desktop, app alebo browser' })
     lastKeep = { keep, at: Date.now() }
@@ -868,7 +903,8 @@ async function route(req, res) {
   if (path.startsWith('/api/') && site !== undefined && site !== 'same-origin' && site !== 'none') return sendJson(res, 403, { ok: false, error: 'cudzia stránka' })
 
   if (path === '/api/update') return sendJson(res, 200, { ok: true, ...(await updateInfo()) })
-  if (path === '/api/events') return openStream(req, res, { role: url.searchParams.get('client') ?? 'browser' })
+  // Only a window on this computer may be the desktop or the app (they own the voice and the notifications).
+  if (path === '/api/events') return openStream(req, res, { role: streamRole(url.searchParams.get('client') ?? 'browser', isLocal(req)) })
   if (path === '/api/status') return sendJson(res, 200, statusBody())
   if (path === '/api/setup') return sendJson(res, 200, await setupBody())
   if (path === '/api/mode') return sendJson(res, 200, { film: state.film })
@@ -1081,6 +1117,7 @@ if (PRIMARY) setInterval(() => kickWatches(), 60_000).unref()
 initRecordings({
   send,
   sendHud,
+  notify: systemNotify,
   createJob,
   listJobs,
   clients: clientCount,
@@ -1132,7 +1169,7 @@ attachMic(server, {
 })
 onVoiceChange(onVoice)
 // The event stream over a WebSocket, for pages opened through the mobile tunnel (server/mobile.mjs).
-attachEventsSocket(server, { allow: (req, url) => hostAllowed(req) && originOk(req) && (isLocal(req) || remoteTokenOk(req, url) || Boolean(sessionFor(req))) })
+attachEventsSocket(server, { allow: (req, url) => hostAllowed(req) && originOk(req) && (isLocal(req) || remoteTokenOk(req, url) || Boolean(sessionFor(req))), isLocal })
 
 server.on('error', (err) => {
   console.error(err.code === 'EADDRINUSE' ? `✗ port ${PORT} je obsadený. Beží už HUD? Iný port: PORT=4546 npm start` : `✗ ${err.message}`)

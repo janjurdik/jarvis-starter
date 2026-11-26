@@ -76,12 +76,18 @@ function mobileSection(m, port) {
     ? `<div class="st-mob"><div class="st-qr">${qrSvg(m.address, { label: 'QR kód adresy Jarvisa' })}</div><div class="st-mob-t"><b>Naskenujte ma mobilom</b><span class="st-url">${esc(m.address.replace(/^https:\/\//, '').replace(/\/$/, ''))}</span><em>Prihláste sa e-mailom a heslom a pridajte si ma na plochu: na iPhone v Safari Zdieľať a Pridať na plochu, na Androide v Chrome ponuka a Pridať na plochu.</em>${named ? '' : '<em>Táto adresa sa mení pri každom spustení tunela. Trvalú dá vlastný tunel Cloudflare.</em>'}<div class="st-acts is-flat"><button type="button" class="st-btn is-quiet" data-mob-copy="${esc(m.address)}">Kopírovať adresu</button></div></div></div>`
     : ''
   const devices = m.devices ?? []
-  const devList = devices.length ? devices.map((d) => `${esc(d.device)}${d.seen ? `, naposledy ${esc(when(d.seen))}` : ''}`).join('<br>') : 'Zatiaľ žiadne.'
+  // Every device that ever logged in, with when it last logged in; sessions from before 1.10.1 have no known device yet.
+  const known = m.known ?? []
+  const rows = known.length
+    ? known.map((d) => `${esc(d.device)}: naposledy prihlásené ${esc(when(d.lastLogin) || 'neznámo kedy')}${d.active ? '' : ', teraz odhlásené'}`)
+    : devices.map((d) => `${esc(d.device)}: prihlásené ${esc(when(d.created) || 'neznámo kedy')}${d.seen ? `, naposledy aktívne ${esc(when(d.seen))}` : ''}`)
+  const devList = rows.length ? rows.join('<br>') : 'Zatiaľ žiadne.'
+  const lock = m.lock?.until ? `<p class="st-note is-warn">Prihlasovanie z nových zariadení je zatvorené do ${esc(when(m.lock.until))}: prišlo priveľa nesprávnych pokusov z rôznych adries. Zariadenia, ktoré sa už prihlásili, sa dostanú aj tak.</p>` : ''
   return `<h3>Mobil</h3><p class="st-lead">Rozhovor, hlas a úlohy aj v mobile, odkiaľkoľvek. Mobil sa ku mne pripája cez šifrovaný tunel Cloudflare a pustí len toho, kto pozná váš e-mail a heslo. Tu na počítači heslo netreba.</p>
     ${row('Mobilný prístup', toggle('data-mob-on', m.enabled, { disabled: !ready }), state, 'is-tall')}
     ${qr}
     ${row('E-mail', `<input class="st-in" type="email" data-mob="email" maxlength="200" value="${esc(m.email ?? '')}" placeholder="vas@email.sk" spellcheck="false" autocomplete="username">`)}
-    ${row('Heslo', `<input class="st-in" type="password" data-mob="password" maxlength="200" placeholder="${m.hasPassword ? 'nastavené, nové napíšte sem' : `aspoň ${m.passwordMin ?? 10} znakov`}" autocomplete="new-password">`)}
+    ${row('Heslo', `<input class="st-in" type="password" data-mob="password" maxlength="200" placeholder="${m.hasPassword ? 'nastavené, nové napíšte sem' : `aspoň ${m.passwordMin ?? 12} znakov`}" autocomplete="new-password">`, `Aspoň ${m.passwordMin ?? 12} znakov a z toho tri druhy: malé a veľké písmená, číslice, iné znaky. Alebo aspoň ${m.passwordLong ?? 16} znakov, napríklad štyri slová za sebou.`, 'is-tall')}
     ${row('Heslo znova', `<input class="st-in" type="password" data-mob="password2" maxlength="200" placeholder="pre istotu ešte raz" autocomplete="new-password">`)}
     <div class="st-acts"><button type="button" class="st-btn" data-mob-save>Uložiť prihlásenie</button><span class="st-call-msg" data-mob-msg="login" role="status"></span></div>
     ${row('Tunel', seg('mobmode', [['quick', 'Rýchly'], ['named', 'Vlastný Cloudflare']], named ? 'named' : 'quick'), named ? 'Trvalá adresa na vašej doméne cez váš účet Cloudflare.' : 'Bez účtu a bez nastavovania. Adresa sa mení pri každom spustení.', 'is-tall')}
@@ -94,8 +100,10 @@ function mobileSection(m, port) {
         : ''
     }
     ${row('Prihlásené zariadenia', `<span class="st-val">${devices.length}</span>`, devList, 'is-tall')}
-    <div class="st-acts"><button type="button" class="st-btn is-quiet" data-mob-logout ${devices.length ? '' : 'disabled'}>Odhlásiť všetky zariadenia</button><span class="st-call-msg" data-mob-msg="devices" role="status"></span></div>
-    <p class="st-note">Kto pozná tento e-mail a heslo, ovláda cez mňa tento počítač: číta vašu pamäť a spúšťa úlohy. Zvoľte silné heslo, ktoré nikde inde nepoužívate. Heslo píšte len sem, nikdy do rozhovoru so mnou.</p>`
+    ${lock}
+    <div class="st-acts"><button type="button" class="st-btn is-quiet" data-mob-logout ${devices.length || known.length ? '' : 'disabled'}>Odhlásiť všetky zariadenia</button><span class="st-call-msg" data-mob-msg="devices" role="status"></span></div>
+    <p class="st-note">Kto pozná tento e-mail a heslo, ovláda cez mňa tento počítač: číta vašu pamäť a spúšťa úlohy. Zvoľte silné heslo, ktoré nikde inde nepoužívate. Heslo píšte len sem, nikdy do rozhovoru so mnou.</p>
+    <p class="st-note">O každom novom zariadení, zmene hesla a spustení tunela vám dám vedieť oznámením na tomto počítači. Odhlásiť všetky zariadenia zabudne aj tie, ktoré sa už prihlásili: každé sa potom prihlási ako nové.</p>`
 }
 
 export function createSettings({ onToast = () => {} } = {}) {

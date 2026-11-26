@@ -6,16 +6,16 @@ import { request } from 'node:http'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { Limiter, RemoteAuth, clientIp, deviceName, hashPassword, isPage, openPath, readCookie, safeNext, verifyPassword } from '../hud/server/remote.mjs'
-import { isConnected, parseError, parseQuickUrl, releaseAsset } from '../hud/server/tunnel.mjs'
+import { DEVICE_COOKIE, Limiter, RemoteAuth, addressKey, clientIp, deviceName, hashPassword, isPage, openPath, passwordProblem, placeHint, readCookie, safeNext, sessionToken, verifyPassword } from '../hud/server/remote.mjs'
+import { CLOUDFLARED_SHA256, CLOUDFLARED_VERSION, QUICK_CONFIG, isConnected, parseError, parseQuickUrl, releaseAsset, releaseUrl, verifyAsset } from '../hud/server/tunnel.mjs'
 
 const FAST = { N: 1024, r: 8, p: 1, keylen: 64 }
 const PASSWORD = 'Kocur-na-strome-42'
 
-function makeAuth(name, now = () => Date.now()) {
+function makeAuth(name, now = () => Date.now(), extra = {}) {
   const dir = join(TMP, `remote-${name}`)
   mkdirSync(dir, { recursive: true })
-  return new RemoteAuth({ file: join(dir, 'remote.json'), tokenFile: join(dir, 'tunnel-token'), now, scryptParams: FAST })
+  return new RemoteAuth({ file: join(dir, 'remote.json'), tokenFile: join(dir, 'tunnel-token'), now, scryptParams: FAST, ...extra })
 }
 
 /** A request as the auth module sees it: headers and the socket's address. */
@@ -25,6 +25,7 @@ function fakeRes() {
   return { headers, headersSent: false, setHeader: (k, v) => (headers[k.toLowerCase()] = v) }
 }
 const tokenOf = (cookie) => /jarvis_session=([^;]+)/.exec(cookie)[1]
+const deviceOf = (cookie) => /__Host-jarvis_device=([^;]+)/.exec(cookie)[1]
 
 test('password: scrypt with a salt, right and wrong password, no account', async () => {
   const a = await hashPassword(PASSWORD, FAST)
@@ -41,7 +42,7 @@ test('password: scrypt with a salt, right and wrong password, no account', async
 test('credentials: checks, hash on disk only, a new password logs every device out', async () => {
   const auth = makeAuth('creds')
   await assert.rejects(auth.setCredentials({ email: 'nie-je-email' }), /E-mail/)
-  await assert.rejects(auth.setCredentials({ email: 'ja@example.com', password: 'kratke', password2: 'kratke' }), /aspoň 10/)
+  await assert.rejects(auth.setCredentials({ email: 'ja@example.com', password: 'kratke', password2: 'kratke' }), /aspoň 12/)
   await assert.rejects(auth.setCredentials({ email: 'ja@example.com', password: PASSWORD, password2: 'iné heslo 12345' }), /nezhodujú/)
   await assert.rejects(auth.setCredentials({ email: 'ja@example.com', password: 'aaaaaaaaaaaa', password2: 'aaaaaaaaaaaa' }), /uhádnuť/)
   await assert.rejects(auth.setEnabled(true), /e-mail a heslo/)
@@ -84,7 +85,9 @@ test('sessions: cookie flags, lookup, 30 days sliding, logout, turning off close
   clock += 20 * 86_400_000
   const res = fakeRes()
   assert.ok(auth.sessionFor(req, res))
-  assert.match(res.headers['set-cookie'] ?? '', /Max-Age=2592000/)
+  // A phone of 1.10.0 (cookie without the __Host- prefix) moves to the new name and the old one is cleared.
+  assert.match(String(res.headers['set-cookie'] ?? ''), /__Host-jarvis_session=[^;]+; Path=\/; Max-Age=2592000/)
+  assert.match(String(res.headers['set-cookie'] ?? ''), /(^|,)jarvis_session=; Path=\/; Max-Age=0/)
   clock += 25 * 86_400_000
   assert.ok(auth.sessionFor(req), 'sliding: 25 days after the last use it still holds')
   clock += 31 * 86_400_000
@@ -144,6 +147,136 @@ test('login answers 429 while an address waits, also for the right password', as
   assert.equal((await auth.login({ email: 'ja@example.com', password: PASSWORD, ip: '5.5.5.5' })).ok, true)
 })
 
+test('addresses: IPv4 per address, IPv6 per /64, mapped IPv4 as IPv4', () => {
+  assert.equal(addressKey('203.0.113.7'), '203.0.113.7')
+  assert.equal(addressKey('::ffff:203.0.113.7'), '203.0.113.7')
+  assert.equal(addressKey('2001:db8:1:2:aaaa::1'), '2001:db8:1:2::/64')
+  assert.equal(addressKey('2001:0db8:0001:0002:ffff:ffff:ffff:ffff'), '2001:db8:1:2::/64')
+  assert.equal(addressKey('[2001:db8:1:2::9]'), '2001:db8:1:2::/64')
+  assert.equal(addressKey('2001:db8::1'), '2001:db8:0:0::/64')
+  assert.notEqual(addressKey('2001:db8:1:3::1'), addressKey('2001:db8:1:2::1'))
+})
+
+test('login brakes count a whole IPv6 /64 as one address', async () => {
+  const auth = makeAuth('v6')
+  await auth.setCredentials({ email: 'ja@example.com', password: PASSWORD, password2: PASSWORD })
+  await auth.setEnabled(true)
+  // Five wrong tries, each from another address of the same /64.
+  for (let i = 1; i <= 5; i++) assert.equal((await auth.login({ email: 'ja@example.com', password: `zle-heslo-${i}x`, ip: `2001:db8:aa:bb::${i.toString(16)}` })).status, 401)
+  const next = await auth.login({ email: 'ja@example.com', password: PASSWORD, ip: '2001:db8:aa:bb:ffff::77' })
+  assert.equal(next.status, 429, 'a new address in the same /64 is braked too')
+  assert.equal((await auth.login({ email: 'ja@example.com', password: PASSWORD, ip: '2001:db8:aa:cc::1' })).ok, true, 'another /64 is not')
+})
+
+test('known device: logs in while the login is closed for everybody, survives logout, forgotten by logout-all and a new password', async () => {
+  const events = []
+  let clock = Date.parse('2026-11-26T12:00:00Z')
+  const limiter = new Limiter({ globalMax: 6, onLock: (x) => events.push(['lock', x.ms]) })
+  const auth = makeAuth('known', () => clock, { limiter, onEvent: (kind, info) => events.push([kind, info.device ?? null]) })
+  await auth.setCredentials({ email: 'ja@example.com', password: PASSWORD, password2: PASSWORD })
+  await auth.setEnabled(true)
+  assert.deepEqual(events.shift(), ['credentials', null])
+  const phone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Version/18.0 Mobile Safari/604.1'
+  const first = await auth.login({ email: 'ja@example.com', password: PASSWORD, ip: '198.51.100.1', agent: phone })
+  assert.equal(first.ok, true)
+  assert.equal(first.newDevice, true)
+  assert.deepEqual(events.shift(), ['device', 'iPhone, Safari'], 'a new device is announced')
+  for (const flag of ['__Host-jarvis_device=', 'HttpOnly', 'Secure', 'SameSite=Strict', 'Path=/', `Max-Age=${400 * 86400}`]) assert.ok(first.deviceCookie.includes(flag), flag)
+  const dev = deviceOf(first.deviceCookie)
+  assert.ok(!(await import('node:fs')).readFileSync(auth.file, 'utf8').includes(dev), 'only the hash of the device token is stored')
+  await auth.logout(fakeReq({ cookie: `__Host-jarvis_session=${tokenOf(first.cookie)}` }))
+  // Strangers from six addresses close the login for everybody.
+  for (let i = 0; i < 6; i++) await auth.login({ email: 'ja@example.com', password: `utok-${i}-heslo`, ip: `203.0.113.${i}` })
+  assert.deepEqual(events.shift(), ['lock', 600_000])
+  const stranger = await auth.login({ email: 'ja@example.com', password: PASSWORD, ip: '192.0.2.9' })
+  assert.equal(stranger.status, 429, 'a new device waits like everybody')
+  assert.ok(auth.summary().lock?.until > clock)
+  // Even when the shared checks are all busy, the known device has its own slot.
+  for (let i = 0; i < 4; i++) limiter.begin(`busy-${i}`)
+  const owner = await auth.login({ email: 'ja@example.com', password: PASSWORD, ip: '192.0.2.9', agent: phone, deviceToken: dev })
+  assert.equal(owner.ok, true, 'the owner with a known device gets in during the lock')
+  assert.equal(owner.newDevice, false)
+  assert.equal(deviceOf(owner.deviceCookie), dev, 'the same device cookie, renewed')
+  assert.equal(events.length, 0, 'a known device is not announced again')
+  for (let i = 0; i < 4; i++) limiter.end(`busy-${i}`)
+  // A known device that guesses wrong is braked on its own, and never closes the login for others.
+  for (let i = 0; i < 5; i++) await auth.login({ email: 'ja@example.com', password: `zle-${i}-heslo`, ip: '192.0.2.9', deviceToken: dev })
+  assert.equal((await auth.login({ email: 'ja@example.com', password: PASSWORD, ip: '192.0.2.9', deviceToken: dev })).status, 429)
+  assert.equal(auth.summary().known.length, 1)
+  assert.ok(auth.summary().known[0].lastLogin)
+  clock += 2 * 3_600_000
+  // "Odhlásiť všetky zariadenia" forgets known devices.
+  await auth.logoutAll()
+  assert.equal(auth.summary().known.length, 0)
+  const again = await auth.login({ email: 'ja@example.com', password: PASSWORD, ip: '192.0.2.10', agent: phone, deviceToken: dev })
+  assert.equal(again.newDevice, true, 'after logout-all the old device cookie is worth nothing')
+  assert.deepEqual(events.shift(), ['device', 'iPhone, Safari'])
+  // A new password forgets them too.
+  await auth.setCredentials({ password: 'Nove-heslo-pre-mobil', password2: 'Nove-heslo-pre-mobil' })
+  assert.deepEqual(events.shift(), ['credentials', null])
+  assert.equal(auth.summary().known.length, 0)
+})
+
+test('the lock for everybody grows on repeat and is forgotten after a quiet day', () => {
+  const locks = []
+  const l = new Limiter({ globalMax: 3, globalLock: 600_000, onLock: (x) => locks.push(x.ms) })
+  let t = 10_000_000
+  const flood = () => {
+    for (let i = 0; i < 3; i++) l.fail(`10.1.${locks.length}.${i}`, t)
+  }
+  flood()
+  assert.equal(l.check('1.2.3.4', t).retryAfter, 600)
+  t += 601_000
+  assert.equal(l.check('1.2.3.4', t).ok, true)
+  flood()
+  assert.equal(l.check('1.2.3.4', t).retryAfter, 1200)
+  t += 1_201_000
+  flood()
+  assert.equal(l.check('1.2.3.4', t).retryAfter, 2400)
+  assert.deepEqual(locks, [600_000, 1_200_000, 2_400_000], 'the owner hears of each lock once')
+  assert.equal(l.check('1.2.3.4', t, { known: true }).ok, true, 'a known device passes the lock')
+  // A day without a lock: back to 10 minutes.
+  t += 2_401_000 + 86_400_000
+  flood()
+  assert.equal(l.check('1.2.3.4', t).retryAfter, 600)
+  // Never longer than the ceiling.
+  const seen = []
+  const capped = new Limiter({ globalMax: 1, globalLock: 600_000, globalLockMax: 3_600_000, onLock: (x) => seen.push(x.ms) })
+  let c = 0
+  for (let i = 0; i < 8; i++) {
+    capped.fail(`9.9.${i}.1`, c)
+    c = capped.globalUntil + 1
+  }
+  assert.deepEqual(seen, [600_000, 1_200_000, 2_400_000, 3_600_000, 3_600_000, 3_600_000, 3_600_000, 3_600_000])
+})
+
+test('password policy: 12 characters and three kinds, or 16, never a word with a year', () => {
+  assert.match(passwordProblem('Kratke-1'), /aspoň 12/)
+  assert.match(passwordProblem('bratislava2024'), /tri z týchto/)
+  assert.match(passwordProblem('Bratislava2024'), /rokom na konci/, 'a capital, a word and a year is still a word and a year')
+  assert.match(passwordProblem('Bratislava2024!'), /rokom na konci/)
+  assert.match(passwordProblem('hesloheslohe'), /tri z týchto/)
+  assert.match(passwordProblem('ja@example.com', 'ja@example.com'), /e-mail/)
+  assert.match(passwordProblem('aaaaaaaaaaaaaaaaa'), /uhádnuť/)
+  assert.equal(passwordProblem('Kocur-na-strome-42'), null)
+  assert.equal(passwordProblem('Lietadlo#Kava7'), null)
+  assert.equal(passwordProblem('kava lietadlo strom more'), null, 'four words in a row are long enough')
+})
+
+test('cloudflared download: a pinned release, SHA-256 for every file Jarvis may fetch, a valid quick config', () => {
+  assert.match(CLOUDFLARED_VERSION, /^\d{4}\.\d{1,2}\.\d+$/)
+  for (const [os, cpu] of [['darwin', 'arm64'], ['darwin', 'x64'], ['win32', 'x64'], ['win32', 'ia32'], ['linux', 'x64'], ['linux', 'arm64'], ['linux', 'arm'], ['linux', 'ia32']]) {
+    const a = releaseAsset(os, cpu)
+    assert.match(CLOUDFLARED_SHA256[a.name]?.file ?? '', /^[0-9a-f]{64}$/, a.name)
+    if (a.tgz) assert.match(CLOUDFLARED_SHA256[a.name].bin, /^[0-9a-f]{64}$/, `${a.name} inner program`)
+  }
+  assert.equal(releaseUrl('cloudflared-linux-amd64'), `https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64`)
+  assert.throws(() => verifyAsset('cloudflared-linux-amd64', Buffer.from('nie je to cloudflared')), /odtlačok/)
+  assert.throws(() => verifyAsset('cloudflared-neznamy', Buffer.from('x')), /nemám overený/)
+  // Not empty for cloudflared: one real key besides the comment.
+  assert.match(QUICK_CONFIG, /^no-autoupdate: true$/m)
+})
+
 test('gate helpers: open paths, pages, next, client address, device names', () => {
   assert.equal(openPath('GET', '/m/login.html'), true)
   assert.equal(openPath('GET', '/m/manifest.json'), true)
@@ -162,7 +295,11 @@ test('gate helpers: open paths, pages, next, client address, device names', () =
   assert.equal(safeNext('https://evil.example'), '/')
   assert.equal(clientIp(fakeReq({ 'cf-connecting-ip': '203.0.113.7' })), '203.0.113.7')
   assert.equal(clientIp(fakeReq({ 'cf-connecting-ip': '203.0.113.7' }, '192.168.1.20')), '192.168.1.20', 'only a request from this computer may name another address')
-  assert.equal(readCookie(fakeReq({ cookie: 'a=1; jarvis_session=abc' })), 'abc')
+  assert.equal(readCookie(fakeReq({ cookie: 'a=1; jarvis_session=abc' }), 'jarvis_session'), 'abc')
+  assert.equal(readCookie(fakeReq({ cookie: `__Host-jarvis_session=${'a'.repeat(43)}` })), 'a'.repeat(43))
+  assert.deepEqual(sessionToken(fakeReq({ cookie: `jarvis_session=${'b'.repeat(43)}` })), { token: 'b'.repeat(43), legacy: true })
+  assert.equal(placeHint(fakeReq({ 'cf-ipcountry': 'sk' })), 'SK')
+  assert.equal(placeHint(fakeReq({ 'cf-ipcountry': 'XX' })), '')
   assert.equal(deviceName('Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Chrome/141.0 Mobile Safari/537.36'), 'Android, Chrome')
   assert.equal(deviceName('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) CriOS/141.0 Mobile/15E148 Safari/604.1'), 'iPhone, Chrome')
 })
@@ -261,7 +398,8 @@ test('server: localhost stays open, outside needs the login, account endpoints s
   const fake = join(dir, 'cloudflared')
   writeFileSync(fake, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "cloudflared version 2026.9.1 (built x)"; exit 0; fi\necho "INF |  https://fake-quick-words.trycloudflare.com  |" >&2\nsleep 0.3\necho "INF Registered tunnel connection connIndex=0 location=test protocol=quic" >&2\nexec sleep 600\n')
   chmodSync(fake, 0o755)
-  const s = await startServer({ JARVIS_DATA_DIR: join(dir, 'data'), JARVIS_MEMORY_DIR: join(dir, 'memory'), JARVIS_CONFIG: join(dir, 'jarvis.json'), JARVIS_CLOUDFLARED: fake })
+  const HUD_TOKEN = 'b'.repeat(48)
+  const s = await startServer({ JARVIS_DATA_DIR: join(dir, 'data'), JARVIS_MEMORY_DIR: join(dir, 'memory'), JARVIS_CONFIG: join(dir, 'jarvis.json'), JARVIS_CLOUDFLARED: fake, JARVIS_HUD_TOKEN: HUD_TOKEN, JARVIS_ALLOWED_HOSTS: 'jarvis.lan' })
   t.after(() => s.child.kill())
   // node:http, not fetch: fetch does not let a test set the Host header a tunnel sends.
   const get = (path, headers = {}) => raw(s.port, 'GET', path, headers)
@@ -315,6 +453,19 @@ test('server: localhost stays open, outside needs the login, account endpoints s
   const cookie = ok.headers.get('set-cookie')
   for (const flag of ['HttpOnly', 'Secure', 'SameSite=Strict']) assert.ok(cookie.includes(flag), flag)
   const session = { ...tunnelHost, cookie: cookie.split(';')[0] }
+  assert.match(cookie, /^__Host-jarvis_session=/, 'the session cookie keeps to this host')
+  assert.match(cookie, /__Host-jarvis_device=[^;]+; Path=\/; Max-Age=\d+; HttpOnly; Secure; SameSite=Strict/, 'a known-device cookie comes with the login')
+
+  // The HUD token is for a network opened on purpose, never for the tunnel: there only the login counts.
+  const tok = { 'x-hud-token': HUD_TOKEN }
+  assert.equal((await get('/api/status', remote({ ...tunnelHost, ...tok }))).status, 401, 'token through the tunnel')
+  assert.equal((await get(`/api/status?token=${HUD_TOKEN}`, remote(tunnelHost))).status, 401, '?token= through the tunnel')
+  assert.equal((await get('/api/status', { host: tunnelHost.host, ...tok })).status, 401, 'the tunnel host alone marks the tunnel')
+  assert.equal((await get('/api/status', { host: 'jarvis.lan', 'cf-ray': '8f00-AMS', ...tok })).status, 401, 'Cloudflare headers alone mark the tunnel')
+  assert.equal((await post('/api/chat', { text: 'x', mock: true }, remote({ ...tunnelHost, ...tok, origin: 'https://fake-quick-words.trycloudflare.com' }))).status, 401)
+  assert.equal((await get('/api/status', { host: 'jarvis.lan', ...tok })).status, 200, 'on the LAN (HUD_HOST=0.0.0.0) the token still works')
+  assert.equal((await get('/api/status', { host: 'jarvis.lan' })).status, 401)
+  assert.equal((await get('/api/status', remote({ ...session, ...tok }))).status, 200, 'with the session the token does not matter')
 
   // With the session: what a local page gets.
   assert.equal((await get('/api/status', remote(session))).status, 200)
@@ -356,6 +507,38 @@ test('server: localhost stays open, outside needs the login, account endpoints s
     })
   assert.equal(await wsOpen(remote(tunnelHost)), 403)
   assert.equal(await wsOpen(remote(session)), 'stream')
+  // The token in the address does not open the socket through the tunnel either.
+  const tokenWs = await new Promise((done) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${s.port}/api/events/ws?client=phone&token=${HUD_TOKEN}`, { headers: remote(tunnelHost) })
+    ws.on('open', () => (ws.close(), done('open')))
+    ws.on('unexpected-response', (_q, r) => done(r.statusCode))
+    ws.on('error', () => done('error'))
+  })
+  assert.equal(tokenWs, 403)
+  // A socket from outside cannot pose as the desktop or the app (they own the voice and the notifications).
+  for (const claim of ['desktop', 'app']) {
+    const ws = await new Promise((done, fail) => {
+      const w = new WebSocket(`ws://127.0.0.1:${s.port}/api/events/ws?client=${claim}`, { headers: remote(session) })
+      w.on('message', (m) => String(m).includes('event: you') && done(w))
+      w.on('error', fail)
+    })
+    const health = await (await get('/api/health')).json()
+    assert.equal(health.windows.desktop, 0, `remote ${claim} is not a desktop`)
+    assert.equal(health.windows.app, 0, `remote ${claim} is not an app`)
+    assert.equal(health.windows.browser, 1)
+    ws.close()
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  // Nor tell this computer where Jarvis lives.
+  assert.equal((await post('/api/surface/keep', { keep: 'browser' }, remote(o))).status, 403)
+  // The top bar knows the door to the phone is open.
+  const st2 = await (await get('/api/status')).json()
+  assert.deepEqual([st2.remote.on, st2.remote.state, st2.remote.url], [true, 'running', 'https://fake-quick-words.trycloudflare.com'])
+  // The Settings page lists the device with its last login.
+  const view = await (await get('/api/remote/status')).json()
+  assert.equal(view.known.length, 1)
+  assert.equal(view.known[0].device, 'iPhone, Safari')
+  assert.ok(view.known[0].lastLogin)
 
   // Logout everywhere from this computer.
   const all = await (await post('/api/remote/logout-all', {})).json()
