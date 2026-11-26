@@ -2,6 +2,23 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.10.0 (2026-11-26)
+
+- **Jarvis v mobile.** Na želanie je Jarvis aj v telefóne: rozhovor, hlas, úlohy a schvaľovanie odkiaľkoľvek. Ide cez
+  šifrovaný tunel Cloudflare a pustí len toho, kto pozná váš e-mail a heslo. Na počítači heslo netreba. Zapína sa v
+  Nastaveniach, časť Mobil (QR kód pre mobil), Jarvis sa naň spýta sám po dokončení nastavenia.
+- **Stráže z jednej vety.** „Daj mi vedieť, keď zlacnie let…", „keď mi odpíše Peter", „keď pribudne byt…": Jarvis si
+  sám nájde, kde to overiť, kontroluje to na pozadí a ozve sa, len keď sa to naozaj stane. Všetky stráže sú v orbe Stráže.
+- **Jarvis vidí, na čo sa pozeráte.** „Čo to je?", „odpíš na toto", „vysvetli mi tento graf": pozrie sa na okno pred
+  vami, bez kopírovania.
+- **Záznam.** „Počúvaj ma" alebo čip Záznam nahráva mikrofón aj obrazovku, priebežne ukladá a prepisuje, takže sa nič
+  nestratí ani pri páde. Jarvis sa s vami medzitým normálne rozpráva. Po skončení zapíše poznámku, úlohy, pripomienky a
+  termíny a pripraví správy, ktoré pošle až po vašom áno.
+- **Jedna appka Jarvis na Macu.** Na ploche aj vo vlastnom okne je to tá istá appka Jarvis, okno už nespúšťa druhý
+  Chrome (ten predtým kradol bežné otváranie Chromu a ukazoval ho neprihlásený). Bez Chromu ide okno v natívnej appke,
+  inak v prehliadači, ktorý máte.
+- V Nastaveniach je dole, kto Jarvisa vytvoril.
+
 ## 1.9.7 (2026-11-23)
 
 - **Rozhovor a výsledky úloh už nezmiznú.** Po načítaní okna znova (aj po reštarte Jarvisa) ostane celý rozhovor
