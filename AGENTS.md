@@ -183,6 +183,7 @@ Až keď je celé nastavenie uzavreté, raz a jednou vetou: či chce Jarvisa aj 
 | „počúvaj ma", „nahrávaj", „zapni záznam", „stačí" | Záznam mikrofónu aj obrazovky, Jarvis medzitým odpovedá ďalej. Na ploche hlasom alebo čipom Záznam, odtiaľto `node scripts/record.mjs start ["názov"]`, `stop`, `status`, `list`, `finish <id>`. Po konci beží spracovanie na pozadí: poznámka v `memory/zaznamy/`, úlohy, pripomienky, termíny a návrhy správ (tie až po jeho „áno"). Podrobnosti `docs/ZAZNAM.md`. |
 | „aktualizuj sa" | Sekcia „Aktualizácie". |
 | „čo o mne vieš?", „zabudni, že…" | Zhrň `memory/ja.md`. Pri zabúdaní nájdi riadok, ukáž ho a po potvrdení zmaž. |
+| „vypni štatistiky", „čo o mne posielaš?" | Nastavenia → Asistent → Anonymné štatistiky, alebo nástroj `settings` s `{ "telemetry": false }`. Čo presne ide von: `curl -s http://127.0.0.1:<port>/api/telemetry` a `docs/TELEMETRIA.md`. |
 | „zapni / vypni Jarvisa na ploche" | `node scripts/hud.mjs`, `--stop`, `node scripts/autostart.mjs install` alebo `remove`. |
 | „chcem ťa v mobile", „vypni mobil" | Krok mobil v Krokoch nastavenia. `node scripts/tunnel.mjs status`, `start`, `stop` (zavrie tunel a odhlási všetky zariadenia), `restart`, `show` (QR kód na ploche). E-mail a heslo len v Nastaveniach, časť Mobil (`docs/MOBIL.md`). |
 
@@ -270,7 +271,7 @@ Pamäť v `memory/`, `config/jarvis.json`, `.env` a `data/` sa pri aktualizácii
 - `.env`, `data/brain/`, tokeny, adresa iCal a prihlásenie ku Garminu sú tajné. Neukazuj ich, neposielaj ich nikam, nedávaj ich do pamäte.
 - Jarvis volá len na číslo používateľa z `.env`.
 - Záznam aktivity (`data/activity/`), záznamy (`data/recordings/`), snímky obrazovky (`data/screen/`) a naimportované rozhovory sú rovnako súkromné ako pamäť.
-- Na rovinu o súkromí: pamäť a všetky súbory ostávajú na tomto počítači. To, s čím práve pracuješ, ide na spracovanie do AI, na ktorej Jarvis beží (Claude, ChatGPT alebo Gemini), tak ako pri každom rozhovore s ňou. Hlas číta služba Microsoft Edge, počasie Open-Meteo.
+- Na rovinu o súkromí: pamäť a všetky súbory ostávajú na tomto počítači. To, s čím práve pracuješ, ide na spracovanie do AI, na ktorej Jarvis beží (Claude, ChatGPT alebo Gemini), tak ako pri každom rozhovore s ňou. Hlas číta služba Microsoft Edge, počasie Open-Meteo. Raz denne idú autorovi anonymné štatistiky, len čísla (`docs/TELEMETRIA.md`), vypnúť ich vie v Nastaveniach, časť Asistent.
 
 ## Mapa priečinka
 

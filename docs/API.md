@@ -294,3 +294,9 @@ For development on a machine that runs its own Jarvis: `JARVIS_SCHEDULE_DRY=1` k
 SSE udalosti navyše: `orbs` (nová sada orbov), `setup` (zmena stavu nastavenia), `settings`, `video`, `world` s `flare` (orb sa rozžiari) alebo `panel: "settings"`.
 
 Hlasový mozog má k tomu nástroje `hud_orb`, `setup_note`, `settings`, `video_*`, `set_alarm_sound` (server `jarvis-hud`), `media` a `volume` (server `computer`), `activity_today`, `activity_set`, `garmin_sync` (server `memory`).
+
+### Anonymné štatistiky
+
+| Method and path | What it does |
+|---|---|
+| `GET /api/telemetry` | `{ on, reason, lastSent, endpoint, preview }`: whether statistics are on (`reason`: `settings`, `env`, `do-not-track`, `test` when off) and exactly the next ping. `POST /api/settings { telemetry: false }` turns them off. |

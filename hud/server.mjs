@@ -53,7 +53,9 @@ import { changeOrbs, getOrbs } from './server/orbs.mjs'
 import { getSetup, noteSetup, setupContextNote } from './server/setup.mjs'
 import { addSuggestion, dismissSuggestion, suggestContextNote, suggestions } from './server/suggest.mjs'
 import { FIRST_RUN_TEXT, addressOf } from './server/persona.mjs'
-import { attachEventsSocket, deny, initMobile, isPhone, openPath, routeMobile, sessionFor, stopMobile, tunnelHosts } from './server/mobile.mjs'
+import { startTelemetry, telemetryInfo } from './server/telemetry.mjs'
+import { getOrbState } from './server/orbs.mjs'
+import { attachEventsSocket, auth as remoteAuth, deny, initMobile, isPhone, openPath, routeMobile, sessionFor, stopMobile, tunnelHosts } from './server/mobile.mjs'
 import { kickWatches } from './server/watches.mjs'
 import { brainRecord, initRecordings, noteTalk, routeRecordGet, routeRecordPost } from './server/record.mjs'
 
@@ -229,7 +231,7 @@ function allowRead(req, url) {
   if (isLocal(req)) return true
   return remoteTokenOk(req, url) || hasSession(req)
 }
-const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|settings|orbs|inner|setup|attachment|import|update|video|hands|record)|tts\/)/
+const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|settings|orbs|inner|setup|attachment|import|update|video|hands|record|telemetry)|tts\/)/
 
 async function serveFile(req, res, file, { cache, immutable = false }) {
   let info
@@ -307,6 +309,27 @@ setOnRolesChange(() => {
 initSettings({ statusChanged, primary: PRIMARY })
 // Jarvis on the phone: login and the Cloudflare tunnel (docs/MOBIL.md). Opens the tunnel again when it was on.
 initMobile({ port: PORT, primary: PRIMARY })
+// Anonymous statistics, once a day: counts and choices only (server/telemetry.mjs, docs/TELEMETRIA.md).
+startTelemetry({
+  primary: PRIMARY,
+  context: async () => {
+    const s = settingsBody()
+    const setup = await getSetup()
+    return {
+      ai: s.brain?.id,
+      surface: s.surface,
+      lang: s.language,
+      stt: s.stt?.engine,
+      tts: s.voice?.provider,
+      setup: setup.done ? 'done' : (setup.next ?? 'none'),
+      notes: stats(await getIndex()).notes,
+      orbs: getOrbState().custom.length,
+      mobile: remoteAuth.enabled(),
+      wake: s.wake?.on === true,
+      calls: s.call?.ready === true,
+    }
+  },
+})
 
 /** The agent Jarvis runs on: Claude Code, Codex or Antigravity (server/provider.mjs). */
 const AI = aiProvider()
@@ -853,6 +876,7 @@ async function route(req, res) {
   if (path === '/api/apps') return sendJson(res, 200, getApps())
   if (path === '/api/suggest') return sendJson(res, 200, { ok: true, items: suggestions() })
   if (path === '/api/settings') return sendJson(res, 200, settingsBody())
+  if (path === '/api/telemetry') return sendJson(res, 200, { ok: true, ...(await telemetryInfo()) })
   if (path === '/api/orbs') return sendJson(res, 200, { ok: true, ...getOrbs() })
   // An image a finished job named in its result, shown in the middle of the desktop. Only those exact files.
   const jobImg = /^\/api\/jobs\/(j\d+)\/file\/(\d{1,2})$/.exec(path)

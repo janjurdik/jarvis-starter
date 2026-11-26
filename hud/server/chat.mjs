@@ -15,6 +15,7 @@ import { state } from './state.mjs'
 import { HIDDEN_TOOLS, NODES, toolMeta } from './tools-meta.mjs'
 import { SentenceSplitter, speechQueue, warmTts } from './tts.mjs'
 import { BRAIN_DIR, IS_MAC, clean, errMsg, log, slug } from './util.mjs'
+import { countTurn } from './telemetry.mjs'
 
 let brain = null
 let getSnapshot = () => ({})
@@ -368,6 +369,8 @@ export function sendChat({ text, via = 'text', mock = false, silent = false, sce
   const turn = makeTurn({ text: message, via: via === 'voice' ? 'voice' : 'text', silent, mock: useMock, scenario, attachments: files })
   // A hidden turn is Jarvis speaking up on his own (the first greeting): the nudge that started it is not shown or kept.
   turn.hidden = hidden === true
+  // Anonymous statistics count turns, never their text (telemetry.mjs).
+  if (!turn.hidden && !useMock) countTurn(turn.via)
   current = turn
   if (!turn.hidden) send('chat', { turn: turn.id, phase: 'user', text: message, via: turn.via, ...(files.length ? { attachments: pubAttachments(files) } : {}) })
   if (!turn.hidden) {

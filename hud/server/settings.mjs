@@ -154,6 +154,8 @@ export function settingsBody() {
     // JARVIS_LANG in .env wins over the setting.
     languageLocked: LANG_FROM_ENV,
     configured: cfg.configured,
+    // Anonymous statistics (telemetry.mjs): on unless turned off here, in .env or by DO_NOT_TRACK.
+    telemetry: { on: cfg.telemetry !== false && !['0', 'false'].includes(String(process.env.JARVIS_TELEMETRY ?? '')) && !['1', 'true'].includes(String(process.env.DO_NOT_TRACK ?? '')), locked: ['0', 'false'].includes(String(process.env.JARVIS_TELEMETRY ?? '')) || ['1', 'true'].includes(String(process.env.DO_NOT_TRACK ?? '')) },
   }
 }
 
@@ -193,7 +195,7 @@ const inRange = (value, unit, min, max) => {
  */
 export function validateSettings(body, voices) {
   if (!isObj(body)) throw bad('telo musí byť JSON objekt')
-  onlyKeys(body, ['assistant', 'voice', 'user', 'quiet', 'stt', 'wake', 'language', 'routing', 'surface'], 'Nastavenia')
+  onlyKeys(body, ['assistant', 'voice', 'user', 'quiet', 'stt', 'wake', 'language', 'routing', 'surface', 'telemetry'], 'Nastavenia')
   const patch = {}
 
   if (body.assistant !== undefined) {
@@ -263,6 +265,10 @@ export function validateSettings(body, voices) {
   if (body.routing !== undefined) {
     if (!MODES.includes(body.routing)) throw bad('routing: auto, heavy alebo light')
     patch.routing = body.routing
+  }
+  if (body.telemetry !== undefined) {
+    if (typeof body.telemetry !== 'boolean') throw bad('telemetry: true alebo false')
+    patch.telemetry = body.telemetry
   }
   if (body.surface !== undefined) {
     const surface = normalizeSurface(body.surface)
@@ -358,6 +364,10 @@ function mergeInto(raw, patch, cfg) {
   if ('language' in patch) raw.language = patch.language
   if ('routing' in patch) raw.routing = patch.routing
   if ('surface' in patch) raw.surface = patch.surface
+  if ('telemetry' in patch) {
+    if (patch.telemetry) delete raw.telemetry
+    else raw.telemetry = false
+  }
   return JSON.stringify(raw) !== before
 }
 

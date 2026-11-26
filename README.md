@@ -105,11 +105,12 @@ Na úpravy, pri ktorých chceš vidieť každý krok, otvor tento priečinok v C
 
 ## Súkromie a bezpečnosť
 
-- Pamäť, nastavenia, záznam rozhovorov a záznam aktivity sú súbory v tvojom počítači. Do gitu sa neukladajú a Jarvis nemá žiadny vlastný server.
+- Pamäť, nastavenia, záznam rozhovorov a záznam aktivity sú súbory v tvojom počítači. Do gitu sa neukladajú a nikam sa neposielajú.
 - To, s čím Jarvis práve pracuje (tvoja správa, kus pamäte, obsah súboru), ide na spracovanie do AI, na ktorej beží, cez tvoje predplatné. Rovnako ako keď jej píšeš sám.
 - Von idú ešte: text viet na syntézu hlasu (Microsoft Edge), dopyt na počasie pre tvoje mesto (Open-Meteo), kontrola novej verzie (GitHub) a pri videu stiahnutie zo stránky, ktorú si mu poslal. Rozpoznávanie reči beží v tvojom počítači.
-- Jarvis počúva len na tvojom počítači. Z iného zariadenia ani z cudzej webovej stránky sa k nemu nedá dostať.
-- Jarvis smie v počítači všetko, čo ty. Preto ho nikdy neotváraj do internetu a ber ho ako asistenta, ktorému dôveruješ.
+- Anonymné štatistiky: raz denne len čísla (verzia, systém, koľkokrát sa čo použilo), nikdy texty, mená, súbory ani pamäť. Vypneš ich v Nastaveniach, časť Asistent (presne čo ide von: [docs/TELEMETRIA.md](docs/TELEMETRIA.md)).
+- Jarvis počúva len na tvojom počítači. Z iného zariadenia sa k nemu dostaneš len cez vstavaný Mobil (šifrovaný tunel a tvoj e-mail a heslo), keď si ho sám zapneš.
+- Jarvis smie v počítači všetko, čo ty. Preto ho nikdy neotváraj do internetu inak než cez Mobil a ber ho ako asistenta, ktorému dôveruješ.
 - Aktualizácie sú podpísané autorom. Nepodpísanú alebo pozmenenú verziu Jarvis nenainštaluje.
 
 Našiel si bezpečnostnú chybu? Napíš ju prosím súkromne cez GitHub (Security → Report a vulnerability), nie do verejného issue.

@@ -299,7 +299,9 @@ export function createSettings({ onToast = () => {} } = {}) {
       asistent: `<h3>Asistent</h3><p class="st-lead">Kto s vami hovorí. To isté stačí povedať: „volaj sa Friday", „hovor ženským hlasom".</p>
         ${row('Kto to je', seg('gender', [['male', 'Muž'], ['female', 'Žena']], female ? 'female' : 'male'), female ? 'Komorníčka. Hovorí o sebe v ženskom rode.' : 'Komorník. Hovorí o sebe v mužskom rode.')}
         ${row('Meno', input('data-text="assistant.name"', d.assistant.name, 'Jarvis', { max: 24 }))}
-        ${row('Jazyk', seg('language', [['sk', 'Slovenčina'], ['cs', 'Čeština']], lang, { disabled: d.languageLocked }), d.languageLocked ? 'Jazyk drží súbor .env (JARVIS_LANG).' : 'Ktorým hovorím a ktorému rozumiem.')}`,
+        ${row('Jazyk', seg('language', [['sk', 'Slovenčina'], ['cs', 'Čeština']], lang, { disabled: d.languageLocked }), d.languageLocked ? 'Jazyk drží súbor .env (JARVIS_LANG).' : 'Ktorým hovorím a ktorému rozumiem.')}
+        ${row('Anonymné štatistiky', toggle('data-toggle="telemetry"', d.telemetry?.on !== false, { disabled: d.telemetry?.locked }), d.telemetry?.locked ? 'Vypnuté v súbore .env.' : 'Raz denne pošlem autorovi len čísla: verziu, systém a koľkokrát sa čo použilo. Nikdy texty, mená, súbory ani pamäť. <button type="button" class="st-link" data-telemetry-show>Čo presne posielam</button>')}
+        <pre class="st-pre" data-telemetry-pre hidden></pre>`,
 
       vy: `<h3>Vy</h3><p class="st-lead">Ako vás volám a čo o vás potrebujem vedieť.</p>
         ${row('Meno', input('data-text="user.name"', d.user.name, 'Ako sa voláte'))}
@@ -437,6 +439,7 @@ export function createSettings({ onToast = () => {} } = {}) {
     const t = e.target
     if (t.dataset.date === 'user.birthday') return save({ user: { birthday: t.value || null } })
     if (t.dataset.toggle === 'wake') return save({ wake: t.checked })
+    if (t.dataset.toggle === 'telemetry') return save({ telemetry: t.checked })
     if (t.hasAttribute('data-mob-on')) return mobilePost('/api/remote/settings', { enabled: t.checked }, 'login')
     // The two switches of the menu bar icon: the desktop app flips them and reports back.
     if (t.dataset.desk) return desk()?.setPref?.(t.dataset.desk, t.checked)
@@ -446,6 +449,21 @@ export function createSettings({ onToast = () => {} } = {}) {
       const to = body.querySelector('[data-time="to"]').value || '07:00'
       return save({ quiet: on ? `${from}-${to}` : '' })
     }
+  })
+  // Anonymous statistics: the exact next ping, as the server would send it.
+  body.addEventListener('click', async (e) => {
+    if (!e.target.closest('[data-telemetry-show]')) return
+    const pre = body.querySelector('[data-telemetry-pre]')
+    if (!pre) return
+    if (!pre.hidden) return (pre.hidden = true)
+    try {
+      const d = await (await fetch('/api/telemetry')).json()
+      const { id, ...rest } = d.preview ?? {}
+      pre.textContent = `${d.on ? 'Ďalší ping' : 'Vypnuté, neposiela sa nič. Takto by vyzeral'} (${d.endpoint}):\n${JSON.stringify({ id, ...rest }, null, 2)}`
+    } catch {
+      pre.textContent = 'Nepodarilo sa načítať.'
+    }
+    pre.hidden = false
   })
   // Phone calls: the four values are sent once and never come back to the page.
   body.addEventListener('click', async (e) => {
