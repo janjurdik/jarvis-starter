@@ -61,6 +61,7 @@ export function allowedTools() {
     'mcp__jarvis-hud__agent_reply',
     'mcp__jarvis-hud__agent_stop',
     'mcp__jarvis-hud__set_alarm',
+    'mcp__jarvis-hud__watch',
     'mcp__jarvis-hud__hud_orb',
     'mcp__jarvis-hud__suggest',
     'mcp__jarvis-hud__setup_note',

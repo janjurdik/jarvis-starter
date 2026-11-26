@@ -35,7 +35,7 @@ With `HUD_HOST=0.0.0.0` other machines need the token from `data/brain/token` (h
 | `GET /api/inner/:node/:id` | Detail of one item. |
 | `GET /api/weather?place=` | Weather (Open-Meteo). |
 | `POST /api/say` | `{ text }` speaks a sentence without Claude. |
-| `POST /api/announce` | `{ title, text, say?, silent? }` from routines: card + LOG line + voice. Loopback only. |
+| `POST /api/announce` | `{ title, text, say?, silent?, log?, icon?, node? }` from routines and stráže: card + LOG line (`log` replaces „pripravené") + voice. Loopback only. |
 | `POST /api/event` | `{ type, text, icon?, node? }` adds a LOG line. Loopback only. |
 | `GET /api/jobs`, `POST /api/jobs` | Background jobs (full Claude Code runs, full access). `GET /api/jobs/:id` → one job with its assignment and feed `[{ t, kind: task\|reply\|step\|say\|state, text }]`. `POST /api/jobs/:id/stop` ends it with everything it started, `POST /api/jobs/:id/reply` `{ text }` continues an ended job in the same session. |
 | `POST /api/mode` | `{ film }` filming mode: names of people and private titles are hidden. |
@@ -228,6 +228,8 @@ plus the built-in `WebSearch` and `WebFetch`, and `Read` limited to `memory/pril
   computer's speakers (`hud/server/speak.mjs`).
 - `scripts/pulse.mjs` and `scripts/routine.mjs` post `/api/announce` with `silent: true` when no window is connected and
   speak through the speakers instead. `scripts/alarm.mjs ring` always speaks through the speakers and only shows the card.
+- `scripts/watch.mjs` (stráže, docs/STRAZE.md) posts `/api/announce` when a watch comes true and `POST /api/orbs { action: "reload" }`
+  after every change, so the orb Stráže redraws. The voice tool `watch` runs the same script with `--json`.
 
 - `scripts/media.mjs video <url>` → `POST /api/video` when the server runs (the theater opens), otherwise it analyses the
   video into `data/video` on its own. `prepare`, `info`, `audio` and `transcript` need no server. `--progress` prints one

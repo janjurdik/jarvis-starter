@@ -53,6 +53,7 @@ import { changeOrbs, getOrbs } from './server/orbs.mjs'
 import { getSetup, noteSetup, setupContextNote } from './server/setup.mjs'
 import { addSuggestion, dismissSuggestion, suggestContextNote, suggestions } from './server/suggest.mjs'
 import { FIRST_RUN_TEXT, addressOf } from './server/persona.mjs'
+import { kickWatches } from './server/watches.mjs'
 
 const ROOT = import.meta.dirname
 const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
@@ -469,7 +470,7 @@ async function postEvent(req, res) {
 
 /**
  * A routine reaches out: a card in the chat, a LOG line and (unless silent) Jarvis says it aloud.
- * Body: { title, text, say?, node?, icon?, silent? }. Loopback only.
+ * Body: { title, text, say?, node?, icon?, silent?, log? }. Loopback only.
  */
 let announceSeq = 0
 async function postAnnounce(req, res) {
@@ -482,7 +483,8 @@ async function postAnnounce(req, res) {
   if (card.ok) {
     standaloneCard(`routine-${announceSeq}-${Date.now().toString(36)}`, card.card)
   }
-  sendHud({ type: 'done', text: `${title} · pripravené`, icon: 'routine', say: null, heard: null, node: 'rutiny', source: 'jarvis' })
+  // `log`: the LOG line of the announcement, when „pripravené" does not fit (a watch that came true says so).
+  sendHud({ type: 'done', text: clean(body.log, 140) || `${title} · pripravené`, icon: 'routine', say: null, heard: null, node: 'rutiny', source: 'jarvis' })
   const spoken = clean(body.say, 900) || clean(text, 900)
   if (body.silent !== true && spoken && clientCount() > 0) {
     announceQueue.push({ say: spoken })
@@ -1013,6 +1015,8 @@ initJobs({
   },
 })
 if (PRIMARY) loadJobs().catch(() => {})
+// Stráže (docs/STRAZE.md): while the HUD runs, a due watch is checked within a minute; the pulse covers the time without it.
+if (PRIMARY) setInterval(() => kickWatches(), 60_000).unref()
 
 initImports({
   standaloneCard,

@@ -5,7 +5,7 @@ Chatbot čaká, kým sa niečo opýtaš. Agent pracuje aj vtedy, keď pri počí
 0. **Budík:** ráno ťa zobudí a povie ti, ako si spal, čo ťa dnes čaká a čo spravil, kým si spal.
 1. **Pulz:** každých päť minút malý program bez AI skontroluje pripomienky, kalendár a termíny. Keď niečo nastáva, Jarvis to povie.
 2. **Rutiny:** v daný čas sa spustí sám a spraví zadanú prácu (ranný brief, večerné zhrnutie).
-3. **Stráže:** rutiny, ktoré bežia každú hodinu a ozvú sa len vtedy, keď je čo povedať (stráž pošty).
+3. **Stráže:** veci, ktoré Jarvis sám kontroluje a ozve sa, len keď je čo povedať. Buď jedna veta („daj mi vedieť, keď zlacnie let pod 80 €", `docs/STRAZE.md`), alebo strážna rutina (stráž pošty).
 4. **Úlohy na pozadí:** v HUD mu povieš „zisti mi…" alebo „priprav…" a on na tom pracuje, kým ty robíš niečo iné.
 5. **Pamäť:** všetko, čo zistí a spraví, si zapíše, takže na druhý deň nadviaže.
 
@@ -104,6 +104,9 @@ Stráž je rutina s `every` (minúty) namiesto času:
 V zadaní má napísané, kedy sa má ozvať. Keď nie je čo povedať, odpovie jediným slovom `NIČ` a nič sa neukáže.
 Vlastnú stráž si vypýtaš vetou: „každé dve hodiny pozri, či nepribudlo niečo v školskom systéme, a ozvi sa len keď áno".
 
+Jedna podmienka nepotrebuje rutinu ani zápis do `config/jarvis.json`: „daj mi vedieť, keď mi odpíše Peter" je stráž
+v `data/watches.json`, ktorú kontroluje pulz a otvorený Jarvis, bez novej registrácie v systéme. Ako funguje, je v `docs/STRAZE.md`.
+
 ## Ako funguje rutina
 
 ```
@@ -144,6 +147,7 @@ node scripts/schedule.mjs install
 | `node scripts/routine.mjs ranny-brief` | spustí rutinu hneď |
 | `node scripts/routine.mjs ranny-brief --mock` | skúška doručenia bez Claude |
 | `node scripts/pulse.mjs --dry-run` | čo by pulz teraz ohlásil |
+| `node scripts/watch.mjs list` | stráže („daj mi vedieť, keď…") a ich stav |
 | `node scripts/alarm.mjs test --quick` | skúška budíka hneď |
 | `node scripts/job.mjs "…"` | úloha na pozadí (aj na noc) |
 | `node scripts/schedule.mjs install` | zaregistruje rutiny, stráže, budík a pulz v systéme a overí, že ich systém naozaj spúšťa |

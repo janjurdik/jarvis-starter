@@ -129,7 +129,7 @@ Povedz na rovinu, čo budík potrebuje: počítač zapnutý (MacBook otvorený a
 
 Rozdiel medzi chatbotom a asistentom: Jarvis sa ozýva sám.
 `node scripts/schedule.mjs install`, potom `node scripts/schedule.mjs status` (pri každom riadku „v systéme"). Install na konci raz spustí pulz a napíše „Overené". Keď napíše ✗, systém Jarvisa nepúšťa (na Macu takmer vždy priečinok v Stiahnutých, na Ploche alebo v Dokumentoch).
-Vysvetli tri veci jednou vetou každú: **pulz** (každých pár minút, bez AI: pripomienky, kalendár, termíny), **rutiny** (ranný brief, večerný denník, týždenný prehľad; zadania v `routines/`, časy v `config/jarvis.json`) a **stráže** (rutina každú hodinu či dve, ktorá sa ozve, len keď je čo povedať).
+Vysvetli tri veci jednou vetou každú: **pulz** (každých pár minút, bez AI: pripomienky, kalendár, termíny), **rutiny** (ranný brief, večerný denník, týždenný prehľad; zadania v `routines/`, časy v `config/jarvis.json`) a **stráže** (stačí jedna veta „daj mi vedieť, keď…": Jarvis to sám kontroluje na pozadí a ozve sa, len keď to naozaj nastane, napríklad cena letu, odpoveď od človeka alebo nový inzerát).
 Povedz mu aj o **zázname aktivity**: raz za minútu si Jarvis zapíše, ktorá appka je v popredí, a večer z toho píše denník a vie odpovedať na „čo som dnes robil". Nezapisuje obsah okien, čo píše, stránky ani snímky obrazovky, správcov hesiel vôbec, a všetko ostáva v `data/activity/`. Spýtaj sa, či to tak chce. Keď nie: `node scripts/activity.mjs off`.
 Čo smie Jarvis sám: všetko, čo on na svojom počítači. Jediné, čo vždy čaká na jeho „áno", je to, čo ide von k iným ľuďom (mail, správa, objednávka).
 
@@ -153,6 +153,7 @@ Podľa odpovede z kroku ciel postav prvú vec, ktorá je len jeho, a ukáž mu j
 | „zobuď ma o…", „zruš budík" | `node scripts/alarm.mjs set 06:30 [--days weekdays] [--rano témy] [--call]`, `off`, `on`, `test`. Bez parametrov stav. |
 | „toto chcem ako budík", pošle skladbu alebo odkaz | `node scripts/alarm.mjs sound <súbor alebo adresa>`. Pôvodná skladba: `sound default`. |
 | „pripomeň mi…" | Riadok `- [ ] RRRR-MM-DD HH:MM text` do `memory/pripomienky.md`. Výkričník pred textom znamená, že Jarvis aj zavolá. |
+| „daj mi vedieť, keď…", „sleduj mi…", „upozorni ma, keď…" | Stráž: najprv zisti, kde sa to dá overiť (stránka, konektor), potom `node scripts/watch.mjs add "<jeho veta>" --check "<odkiaľ, čo čítať, kedy je splnené>" --every <min> [--until 2026-12-31] [--repeat] [--call]`. `list`, `pause`, `resume`, `remove`, `edit`, `run <id>` (kontrola hneď). Potvrď jednou vetou, čo strážiš a ako často (`docs/STRAZE.md`). |
 | „cez noc mi priprav…", dlhšia práca | `node scripts/job.mjs "<úplné zadanie>" --title "<2 až 5 slov>"`. Ráno to ohlási budík. Model sa vyberie podľa náročnosti úlohy (`docs/MODELY.md`). |
 | pošle odkaz na video, „pozri si to", „sprav prepis" | Na ploche to otvorí Jarvis sám (kino s prepisom). Z príkazového riadku: `node scripts/media.mjs info <adresa>`, `transcript <adresa>`, `audio <adresa>`, `video <adresa>` (`docs/VIDEO.md`). |
 | „chcem sledovať…", „pridaj mi tam…", „toto nepotrebujem" | Orby: `node scripts/orb.mjs add <id> --label "…"`, `set <id> --file …`, `hide <id>`, `show <id>` (`docs/ORBY.md`). |
@@ -165,7 +166,7 @@ Podľa odpovede z kroku ciel postav prvú vec, ktorá je len jeho, a ukáž mu j
 | dá ti súbor alebo kópiu dát z nejakej appky | Sekcia „Import dát". |
 | „čo sme si písali s…", „kedy som…" | `node scripts/import.mjs search "<čo>" --person "<Meno>" --json`, potom `thread`. Odpovedz z toho, čo si naozaj prečítal. |
 | „zavolaj mi", „nastav hovory" | `node scripts/call.mjs --status`, nastavenie podľa `docs/HOVORY.md`. Ponúkni, nenúť. |
-| „pridaj rutinu…", „stráž mi…" | Zadanie do `routines/<id>.md` (vzor sú existujúce), záznam do `routines` v `config/jarvis.json` (stráž má `every` v minútach), skúška `node scripts/routine.mjs <id>`, potom `node scripts/schedule.mjs install`. |
+| „pridaj rutinu…", „každú hodinu mi prejdi…" | Zadanie do `routines/<id>.md` (vzor sú existujúce), záznam do `routines` v `config/jarvis.json` (strážna rutina má `every` v minútach), skúška `node scripts/routine.mjs <id>`, potom `node scripts/schedule.mjs install`. Jedna podmienka jednou vetou („keď…") je stráž cez `watch.mjs`, nie rutina. |
 | „otvor…", „klikni…", „vyplň…", „pusti hudbu" | Sekcia „Ovládanie počítača". |
 | „aktualizuj sa" | Sekcia „Aktualizácie". |
 | „čo o mne vieš?", „zabudni, že…" | Zhrň `memory/ja.md`. Pri zabúdaní nájdi riadok, ukáž ho a po potvrdení zmaž. |
@@ -272,6 +273,7 @@ Pamäť v `memory/`, `config/jarvis.json`, `.env` a `data/` sa pri aktualizácii
 | `scripts/suggest.mjs` | Odporúčania, čo pridať: zoznam, nové, hotové. |
 | `scripts/alarm.mjs` | Budík a jeho zvuk. |
 | `scripts/routine.mjs`, `schedule.mjs`, `pulse.mjs` | Rutiny, ich registrácia v systéme a pulz. |
+| `scripts/watch.mjs` | Stráže („daj mi vedieť, keď…"): pridať, zoznam, pozastaviť, zrušiť, skontrolovať hneď. Dáta v `data/watches.json`. |
 | `scripts/job.mjs`, `say.mjs`, `call.mjs` | Úloha na pozadí, veta nahlas, hovor na mobil. |
 | `scripts/scan.mjs` | Prehľadanie počítača (len číta). |
 | `scripts/import.mjs` | Import dát z aplikácií, ľudia z rozhovorov, hľadanie v správach. |
@@ -281,7 +283,7 @@ Pamäť v `memory/`, `config/jarvis.json`, `.env` a `data/` sa pri aktualizácii
 | `scripts/garmin.mjs` | Hodinky Garmin naživo. |
 | `scripts/update.mjs` | Aktualizácie. |
 | `hud/` | Server a obrazovka. `hud/server/provider.mjs`: na akej AI Jarvis beží. `hud/desktop/`: appka na plochu pre macOS. |
-| `docs/` | Podrobnosti: orby, hlas, video, aktivita, Garmin, ovládanie, modely, hovory, autonómia, aktualizácie, Windows, API. |
+| `docs/` | Podrobnosti: orby, hlas, video, aktivita, Garmin, ovládanie, modely, hovory, autonómia, stráže, aktualizácie, Windows, API. |
 
 ## Keď niečo nejde
 

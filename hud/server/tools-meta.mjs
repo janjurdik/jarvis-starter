@@ -25,6 +25,7 @@ const META = {
   call_user: { label: 'Volám na mobil', icon: 'alarm', node: null },
   remind: { label: 'Nastavujem pripomienku', icon: 'alarm', node: 'kalendar' },
   set_alarm: { label: 'Nastavujem budík', icon: 'alarm', node: 'rutiny' },
+  watch: { label: 'Nastavujem stráž', icon: 'eye', node: 'rutiny' },
   settings: { label: 'Mením nastavenia', icon: 'volume', node: null },
   set_alarm_sound: { label: 'Mením zvuk budíka', icon: 'music', node: 'rutiny' },
   video_open: { label: 'Otváram video', icon: 'eye', node: null },

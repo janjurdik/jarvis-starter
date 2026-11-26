@@ -246,9 +246,9 @@ export async function spawnAgent({ prompt, contextFile = null, model = jobModel(
 }
 
 /** A whole run as one promise: resolves with the final text, rejects with a short reason. */
-export async function runAgent({ prompt, contextFile = null, model = jobModel(), cwd = REPO, timeoutMs = 20 * 60_000 }) {
+export async function runAgent({ prompt, contextFile = null, model = jobModel(), effort = null, cwd = REPO, timeoutMs = 20 * 60_000 }) {
   const { createInterface } = await import('node:readline')
-  const { proc, provider } = await spawnAgent({ prompt, contextFile, model, cwd })
+  const { proc, provider } = await spawnAgent({ prompt, contextFile, model, effort, cwd })
   return new Promise((resolve, reject) => {
     let last = ''
     let err = ''

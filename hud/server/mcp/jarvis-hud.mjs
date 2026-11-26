@@ -9,10 +9,11 @@
  *   weather(place?, days?)      weather (Open-Meteo through the HUD server)
  *   agent_task / agent_jobs / agent_reply / agent_stop   background jobs (full Claude Code)
  *   set_alarm(time?, days?, call?, off?)   the alarm clock (scripts/alarm.mjs)
+ *   watch(action, …)            stráže, „daj mi vedieť, keď…" (scripts/watch.mjs, docs/STRAZE.md)
  *   settings(set?)              voice, assistant's name and gender, how the user is addressed (server/settings.mjs)
  *   video_open / video_seek / video_transcript / video_info / video_control / video_close, set_alarm_sound   (video-tools.mjs)
  */
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,6 +36,22 @@ function alarmScript(args) {
 }
 
 const HUD = (process.env.HUD_URL || 'http://127.0.0.1:4545').replace(/\/$/, '')
+/** The port of this HUD, so scripts/watch.mjs reports to the same instance. */
+const HUD_PORT = (/:(\d+)$/.exec(HUD) ?? [])[1] ?? null
+const hudEnv = () => ({ ...process.env, ...(HUD_PORT ? { PORT: HUD_PORT } : {}) })
+
+/** Runs scripts/watch.mjs with --json against this HUD and returns its answer. */
+function watchScript(args) {
+  return new Promise((resolve) => {
+    execFile(process.execPath, [join(REPO, 'scripts', 'watch.mjs'), ...args, '--json'], { cwd: REPO, timeout: 60_000, windowsHide: true, env: hudEnv() }, (err, stdout) => {
+      try {
+        resolve(JSON.parse(stdout.slice(stdout.indexOf('{'), stdout.lastIndexOf('}') + 1)))
+      } catch {
+        resolve({ ok: false, error: String(err?.message ?? stdout).slice(0, 200) })
+      }
+    })
+  })
+}
 // The token comes in the environment (Claude) or in a file only this user can read (Codex: its MCP settings are process arguments).
 function brainToken() {
   if (process.env.HUD_BRAIN_TOKEN) return process.env.HUD_BRAIN_TOKEN
@@ -252,6 +269,57 @@ serveMcp({
       handler: async (orb) => {
         const r = await hud('orb', { orb })
         return r.isError ? r : `${r.summary} Povedz to jednou vetou.`
+      },
+    },
+    {
+      name: 'watch',
+      description:
+        'Stráže: „daj mi vedieť, keď…", „sleduj mi…", „upozorni ma, keď…". Stráž sama kontroluje na pozadí a ozve sa len vtedy, keď podmienka naozaj nastane (karta, hlas, oznámenie, pri call aj telefonát). action add: najprv sám zisti, kde sa to dá overiť (konkrétna stránka s adresou, konektor ako Gmail, vyhľadávanie), a do check napíš presný plán: odkiaľ, čo tam nájsť a kedy je podmienka splnená (napríklad „Otvor https://www.kiwi.com/sk/…, lety Viedeň Londýn na najbližších 30 dní, najnižšia cena v €; splnené, keď je pod 80 €"). what je jeho veta. every v minútach podľa povahy veci (odpoveď na správu 15, kurz 30, cena alebo inzeráty 60, zásielka 120, zmena stránky 180). until, keď to má koniec (2026-12-31 alebo +7d). once false pri „vždy, keď…". call true, keď chce aj zavolať. urgent true, len keď to má strážiť aj v noci. list: zoznam s id a stavom. pause, resume, remove a run (kontrola hneď) potrebujú id. edit: id a len to, čo sa mení.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['add', 'list', 'pause', 'resume', 'remove', 'edit', 'run'] },
+          id: { type: 'string', description: 'Id stráže zo zoznamu, napríklad "s3".' },
+          what: { type: 'string', description: 'Čo stráži, jeho vetou: „keď zlacnie let Viedeň Londýn pod 80 €".' },
+          check: { type: 'string', description: 'Konkrétny plán kontroly: zdroj (adresa, konektor, hľadanie), čo tam čítať a kedy je splnené.' },
+          every: { type: 'integer', minimum: 5, description: 'Ako často kontrolovať, v minútach.' },
+          until: { type: 'string', description: 'Dokedy stráži: 2026-12-31, "2026-12-31 18:00" alebo +7d, +12h. Prázdne = bez konca.' },
+          between: { type: 'string', description: 'Len v tomto okne, napríklad "08:00-22:00". Prázdne = celý deň.' },
+          once: { type: 'boolean', description: 'true = ozve sa raz a skončí (predvolené), false = pri každej novej zhode.' },
+          call: { type: 'boolean', description: 'true = pri zhode aj zavolá na mobil (keď sú hovory nastavené).' },
+          quiet: { type: 'boolean', description: 'true = len karta a oznámenie, bez hlasu.' },
+          urgent: { type: 'boolean', description: 'true = kontroluje a ozve sa aj v tichých hodinách.' },
+        },
+        required: ['action'],
+      },
+      handler: async ({ action, id, what, check, every, until, between, once, call, quiet, urgent }) => {
+        if (action === 'list') {
+          const r = await watchScript(['list'])
+          if (!r.ok) return { text: r.error ?? 'Stráže sa nepodarilo načítať.', isError: true }
+          return r.watches.length
+            ? r.watches.map((w) => `${w.id} „${w.what}" ${w.status}, každých ${w.every} min${w.state?.lastHit ? `, zhoda: ${w.state.lastHit}` : w.state?.observation ? `, naposledy: ${w.state.observation}` : ''}${w.state?.lastError ? `, chyba: ${w.state.lastError}` : ''}`).join('\n')
+            : 'Žiadne stráže.'
+        }
+        if (action === 'run') {
+          if (!id) return { text: 'run potrebuje id stráže.', isError: true }
+          // A check takes a while: it runs on its own and a hit is announced like any other.
+          spawn(process.execPath, [join(REPO, 'scripts', 'watch.mjs'), 'run', String(id)], { cwd: REPO, detached: true, stdio: 'ignore', windowsHide: true, env: hudEnv() }).on('error', () => {}).unref()
+          return 'Kontrola beží. Povedz jednu vetu: keď to nastalo, ohlási sa to samo, inak je výsledok v orbe Stráže.'
+        }
+        const opt = [
+          ...(what !== undefined && action === 'edit' ? ['--what', String(what)] : []),
+          ...(check !== undefined ? ['--check', String(check)] : []),
+          ...(every !== undefined ? ['--every', String(every)] : []),
+          ...(until !== undefined ? ['--until', String(until) || 'nie'] : []),
+          ...(between !== undefined ? ['--between', String(between) || 'nie'] : []),
+          ...(once === true ? ['--once'] : once === false ? ['--repeat'] : []),
+          ...(call === true ? ['--call'] : quiet === true ? ['--quiet'] : call === false || quiet === false ? ['--voice'] : []),
+          ...(urgent === true ? ['--urgent'] : urgent === false && action === 'edit' ? ['--not-urgent'] : []),
+        ]
+        const args = action === 'add' ? ['add', String(what ?? ''), ...opt] : action === 'edit' ? ['edit', String(id ?? ''), ...opt] : [String(action), String(id ?? '')]
+        const r = await watchScript(args)
+        if (!r.ok) return { text: r.error ?? 'Stráž sa nepodarilo zmeniť.', isError: true }
+        return action === 'add' ? `${r.summary} Potvrď jednou vetou, čo strážiš a ako často. Plán kontroly ani model nahlas nečítaj.` : `${r.summary} Povedz to jednou vetou.`
       },
     },
     {
