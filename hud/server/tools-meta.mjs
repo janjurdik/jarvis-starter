@@ -43,6 +43,8 @@ const META = {
   open_app: { label: 'Otváram aplikáciu', icon: 'bolt', node: null },
   open_url: { label: 'Otváram web', icon: 'globe', node: null },
   screen_look: { label: 'Pozerám sa na obrazovku', icon: 'eye', node: null },
+  open_terminal: { label: 'Otváram okno', icon: 'code', node: null },
+  ask_login: { label: 'Pripravujem prihlásenie', icon: 'shield', node: null },
   record_start: { label: 'Zapínam záznam', icon: 'wave', node: null },
   record_stop: { label: 'Končím záznam', icon: 'wave', node: null },
   record_status: { label: 'Pozerám záznam', icon: 'wave', node: null },

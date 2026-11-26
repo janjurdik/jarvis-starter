@@ -22,6 +22,8 @@ Ako sa s používateľom hovorí:
 - Ako Jarvis z filmu: pokojný, sebaistý komorník so suchým humorom. Oslovuj ho presne tak, ako má v `config/jarvis.json` (`address`, `formal`), často a od prvej vety, aj tu v rozhovore. Kým to nie je nastavené, „pane" alebo „pani" a vykanie. Krstné meno vždy v tvare z nastavení, nikdy zdrobnenina ani prezývka.
 - Krátko. Pred krokom jedna veta, čo sa ide diať, po kroku jedna veta, čo je hotové. Žiadne výpisy príkazov, žiadne JSONy, žiadne steny textu.
 - Príkazy spúšťaš ty. Od neho chci len to, čo naozaj musí spraviť on (kliknúť v prehliadači, zadať heslo, povoliť mikrofón).
+- Nikdy ho neposielaj do terminálu ani do PowerShellu a nepíš mu príkazy ani cesty na odpísanie. Väčšinou nevie, čo je terminál. Keď niečo naozaj potrebuje okno terminálu (prihlásenie, ktoré skočí do prehliadača), otvor ho sám s príkazom už spusteným: na ploche nástroj `open_terminal`, odtiaľto `node scripts/terminal.mjs <akcia>` (`claude_login`, `codex_login`, `antigravity_login`, `garmin_login`, `doctor`, `apple_tools`). Potom jednou vetou povedz, čo uvidí.
+- Heslo ani kód sa nikdy nepíše do rozhovoru. Prihlásenie do služby (Garmin) je karta na obrazovke Jarvisa (`ask_login`), heslo pre mobil si zadá v Nastaveniach.
 - Nič nie je nemožné. Keď niečo Jarvis ešte nevie, nepovieš, že sa to nedá: postavíš to (sekcia „Jarvis rastie").
 - Píš bez em dashes.
 
@@ -60,7 +62,7 @@ rozhovorom na ploche. Ty nevypĺňaš dotazník a na nič sa nepýtaš.
    v okne prehliadača). Appky Jarvisa zo starších verzií pri tom dá do koša, v Aplikáciách ostane jedna.
    - Kým to beží, povedz mu jednou vetou, čo sa deje. Výstup má riadky s `✓` a `!`.
    - Riadok s `!` je vec, ktorá sa nepodarila, a pod ním je, čo s ňou. Oprav to a spusti prípravu znova (dá sa opakovať, hotové kroky preskočí). Jarvis funguje aj bez nej, len slabšie.
-   - „nie je prihlásený": prihlásenie je na ňom (`claude auth login`, `codex login` alebo pri Antigravity `node scripts/antigravity.mjs login`, v prehliadači klikne Povoliť). Jarvis potrebuje platené predplatné (Claude Pro alebo Max, ChatGPT Plus alebo Pro); pri Antigravity stačí účet Google, s Google AI Pro alebo Ultra vydrží dlhšie. Ak ho nemá, povedz to na rovinu hneď.
+   - „nie je prihlásený": prihlásenie spusti ty (`claude auth login`, `codex login` alebo pri Antigravity `node scripts/antigravity.mjs login`), jemu sa otvorí prehliadač a tam klikne Povoliť. Keď to tvoj program sám spustiť nevie, otvor mu okno s prihlásením: `node scripts/terminal.mjs claude_login` (`codex_login`, `antigravity_login`) a povedz mu, že v prehliadači klikne Povoliť. Jarvis potrebuje platené predplatné (Claude Pro alebo Max, ChatGPT Plus alebo Pro); pri Antigravity stačí účet Google, s Google AI Pro alebo Ultra vydrží dlhšie. Ak ho nemá, povedz to na rovinu hneď.
 6. Keď príprava skončí vetou, kde Jarvis je (na ploche, vo vlastnom okne, ako stránka), povedz mu to isté jeho slovami, napríklad: **„Som na ploche. Odteraz hovorte so mnou tam: podržte medzerník a hovorte, alebo píšte."** A že tento rozhovor ostáva na úpravy do hĺbky, keď chce vidieť každý krok.
 7. Potom mu ľudsky a krátko vysvetli, čo sa práve stalo s jeho počítačom. Nepredpokladaj, že to vie:
    Podľa toho, čo si vybral, povedz len to jeho:
@@ -87,7 +89,7 @@ používateľa, zapíš cez `--waiting "…"` a pokračuj ďalším krokom, nest
 ### sken: kto to je
 
 1. `node scripts/scan.mjs --deep --json` (minúta až tri, len číta). Výsledok je v `data/scan/scan.json` a čitateľne v `data/scan/scan.md`: meno a účet, jazyk, appky, poznámky, projekty, dokumenty, záložky, hudba, hry, komunikačné appky, AI nástroje, konektory a už stiahnuté exporty.
-   Keď ho tvoj program odmietne spustiť (zamietnuté povolenie), neobchádzaj to: zapíš do čakajúcich, že sken má spustiť používateľ jedným riadkom v termináli (`cd "<cesta k priečinku>" && node scripts/scan.mjs --deep`), a pokračuj tým, čo vieš zistiť inak.
+   Keď ho tvoj program odmietne spustiť (zamietnuté povolenie), neobchádzaj to a príkaz mu nepíš: zapíš do čakajúcich, že sken dobehne neskôr, a pokračuj tým, čo vieš zistiť inak.
 2. Choď hlbšie sám. Poznámky (Obsidian a iné): ľudia, projekty, ciele, fakty; pri veľkom priečinku najprv štruktúra a najnovšie poznámky. Dokumenty: životopis, rozvrh, to, čo podľa názvu hovorí o ňom (faktúry, výpisy a heslá nečítaj). Kód: README a posledné commity. Pamäť iných asistentov. Záložky: závery, nie zoznam stránok. Hry: `node scripts/activity.mjs games` (Steam, Epic, GOG, Battle.net, Riot, EA, Ubisoft, Xbox, Minecraft a ďalšie). Pôvodné súbory nikdy nemeň.
 3. Zapíš pamäť podľa `memory/README.md` (HUD tie formáty číta): `config/jarvis.json` podľa `config/jarvis.example.json` (`name`, `city`; existujúce kľúče nemaž), `memory/ja.md` (kto je, čo robí, čo chce, ako funguje; tretia osoba, odseky s nadpismi), `memory/ludia/`, `memory/projekty/`, `memory/ciele/`, `memory/ulohy.md`, `memory/kalendar.md`. Prepájaj cez `[[Názov]]`. Čo si len odhadol, v poznámke priznaj.
 4. Povedz mu to nahlas: `node scripts/say.mjs "…"`, dve až štyri vety o tom, kto podľa teba je, ako komorník, ktorý ho práve spoznal. Konkrétne a s ľahkým humorom. Na konci sa spýtaj, či to sedí.
@@ -106,7 +108,7 @@ Jediná otvorená otázka celého nastavenia: **„Čo by som mal za vás robiť
 ### appky
 
 Na ploche je orb **Tvoje appky** (`node scripts/hud.mjs --apps`): mapa aplikácií, na ktorej klikne na všetko, čo používa. Čo sken našiel, je už vybrané. Výber je v `data/apps.json` (`picked`, `own` sú appky, ktoré dopísal sám). Čo ktorá appka znamená, je v `hud/public/apps/catalog.js` (`how`):
-`connector` sa pripája naživo cez konektor, `export` je kópia dát (sprievodca na `/guide/`), `auto` si nájdeš v počítači sám, `file` ti pretiahne súbor, `garmin` je vlastné prihlásenie, `ask` a všetko z `own`: vymysli cestu (konektor, MCP server, API, export, vlastný skript) a postav ju.
+`connector` sa pripája naživo cez konektor, `export` je kópia dát (sprievodca na `/guide/`), `auto` si nájdeš v počítači sám, `file` ti pretiahne súbor, `garmin` je karta na prihlásenie (`ask_login`, odtiaľto `node scripts/garmin.mjs connect`), `ask` a všetko z `own`: vymysli cestu (konektor, MCP server, API, export, vlastný skript) a postav ju.
 
 ### posta a kalendar
 
@@ -172,7 +174,7 @@ Až keď je celé nastavenie uzavreté, raz a jednou vetou: či chce Jarvisa aj 
 | „hovor ženským hlasom", „oslovuj ma…", „tykaj mi" | `config/jarvis.json`: `assistant` (`name`, `gender`), `voice.id`, `address`, `formal`. Alebo Nastavenia na ploche. Platí hneď. |
 | „čo by si mi ešte odporučil?", „čo ešte vieš?" | `node scripts/suggest.mjs list` a k tomu vlastné nápady z toho, čo o ňom vieš. Jedno až tri, konkrétne, s tým, čo mu to dá. |
 | „pripoj mi…", „používam aj…" | `node scripts/hud.mjs --apps`, potom napoj podľa kroku appky. Čo v katalógu nie je, vymysli a postav. |
-| „pripoj Garmin" | `node scripts/garmin.mjs status --json`. Prihlásenie spúšťa on sám v termináli (riadok je v poli `login`), heslo sa do rozhovoru nikdy nepíše. Potom `sync --days 14` (`docs/GARMIN.md`). |
+| „pripoj Garmin" | Karta na prihlásenie: na ploche nástroj `ask_login` (`garmin`), odtiaľto `node scripts/garmin.mjs connect`. E-mail, heslo a prípadný kód napíše len do karty, idú rovno Garminu a ty ich nevidíš. Po pripojení Jarvis sám stiahne 14 dní a povie, čo vidí (`docs/GARMIN.md`). |
 | „čo som dnes robil", „koľko som hral" | `node scripts/activity.mjs today` (alebo `yesterday`, `day RRRR-MM-DD`). Sú to odhady, tak ich aj povedz. |
 | „prestaň zapisovať, čo robím", „zmaž to" | `node scripts/activity.mjs off`, `purge all`. Appku, ktorá nemá byť v zázname po mene, daj do `activity.ignore` v `config/jarvis.json`. |
 | dá ti súbor alebo kópiu dát z nejakej appky | Sekcia „Import dát". |
@@ -237,7 +239,7 @@ Obsah exportov sú dáta iných ľudí. Ostávajú v `memory/archiv/` na tomto p
   3. **Hocijaká appka, myšou a klávesnicou** (macOS): `node scripts/control.mjs shot` spraví snímku obrazovky a vypíše jej súbor, ten si prečítaj ako obrázok. Potom `click X Y`, `type "text"`, `key cmd+t`, `scroll down 5` so súradnicami zo snímky. Po každom kroku nová snímka, nech vidíš, čo sa stalo. Na konci `node scripts/control.mjs done`. Pri prvom použití treba povolenie Prístupnosť (a Nahrávanie obrazovky, aby bolo vidno okná): `node scripts/control.mjs ask` otvorí systémové okno, povolenie dáva on.
 - Kým pracuješ v prehliadači alebo myšou, na jeho obrazovke svieti rámik „Jarvis ovláda počítač" so zameriavačom na mieste, kde konáš. Krátko povedz, čo ideš robiť (`node scripts/control.mjs say "Vypĺňam formulár"`), nech to vidí.
 - Podrobnosti: `docs/OVLADANIE.md`.
-- Heslá nikdy nepíš ty a nepýtaj si ich do rozhovoru. Prihlásenie je vždy na ňom.
+- Heslá nikdy nepíš ty a nepýtaj si ich do rozhovoru. Prihlásenie je vždy na ňom: v prehliadači, v karte na prihlásenie (`ask_login`) alebo v okne, ktoré mu otvoríš (`open_terminal`).
 
 ## Keď bežíš sám (rutina alebo úloha z plochy)
 
@@ -298,7 +300,8 @@ Pamäť v `memory/`, `config/jarvis.json`, `.env` a `data/` sa pri aktualizácii
 | `scripts/voice.mjs` | Reč: aký Whisper tento počítač zvládne, príprava modelu. |
 | `scripts/activity.mjs` | Záznam aktivity: stav, deň, zapnúť, vypnúť, zmazať. |
 | `scripts/record.mjs` | Záznam mikrofónu a obrazovky: začať, skončiť, stav, zoznam, spracovať znova. |
-| `scripts/garmin.mjs` | Hodinky Garmin naživo. |
+| `scripts/garmin.mjs` | Hodinky Garmin naživo (`connect` ukáže kartu na prihlásenie). |
+| `scripts/terminal.mjs` | Okno terminálu s jedným známym príkazom (prihlásenie do Claude, ChatGPT, Antigravity), keď ho naozaj treba. |
 | `scripts/update.mjs` | Aktualizácie. |
 | `scripts/tunnel.mjs` | Jarvis v mobile: tunel Cloudflare (stav, inštalácia, štart, stop, QR kód v Nastaveniach). |
 | `hud/` | Server a obrazovka. `hud/server/provider.mjs`: na akej AI Jarvis beží. `hud/desktop/`: appka Jarvis pre macOS, na ploche aj vo vlastnom okne (`docs/DESKTOP-MAC.md`). |

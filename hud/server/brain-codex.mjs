@@ -167,7 +167,7 @@ export class CodexBrain {
         } else if (m.type === 'turn.failed' || m.type === 'error') {
           const text = m.error?.message ?? m.message ?? 'Codex skončil chybou'
           this.lastError = text
-          end(() => sink.error(/login|auth|401/i.test(text) ? 'Codex nie je prihlásený. V termináli spusti codex login.' : text))
+          end(() => (/login|auth|401/i.test(text) ? sink.error('ChatGPT nie je prihlásený.', { fix: 'codex_login' }) : sink.error(text)))
         }
       })
       child.stderr.on('data', (d) => (err = `${err}${d}`.slice(-600)))

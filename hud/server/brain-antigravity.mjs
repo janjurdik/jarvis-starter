@@ -140,7 +140,7 @@ export class AntigravityBrain {
     this.lastError = errMsg(err)
     log('brain', `Antigravity skončil: ${this.lastError}`)
     const job = this.job
-    if (job && !job.done) job.end(() => job.sink.error(err?.auth ? NOT_LOGGED_IN : 'Mozog skončil, pri ďalšej správe ho spustím znova.'))
+    if (job && !job.done) job.end(() => (err?.auth ? job.sink.error('Antigravity nie je prihlásený.', { fix: 'antigravity_login' }) : job.sink.error('Mozog skončil, pri ďalšej správe ho spustím znova.')))
     // Not signed in is something only the user can fix: it stays on screen. Anything else starts again with the next message.
     this.setState(err?.auth ? 'error' : 'off')
   }
@@ -192,7 +192,8 @@ export class AntigravityBrain {
       }
     }
     if (!this.proc || !this.session) {
-      sink.error(this.lastError ?? 'Mozog nebeží.')
+      if (this.lastError === NOT_LOGGED_IN) sink.error('Antigravity nie je prihlásený.', { fix: 'antigravity_login' })
+      else sink.error(this.lastError ?? 'Mozog nebeží.')
       return
     }
     const client = this.client
@@ -230,7 +231,7 @@ export class AntigravityBrain {
       }
     } catch (err) {
       this.lastError = err?.auth ? NOT_LOGGED_IN : errMsg(err)
-      job.end(() => sink.error(this.lastError))
+      job.end(() => (err?.auth ? sink.error('Antigravity nie je prihlásený.', { fix: 'antigravity_login' }) : sink.error(this.lastError)))
     }
     return job.settled
   }

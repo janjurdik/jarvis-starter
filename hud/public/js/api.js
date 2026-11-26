@@ -49,6 +49,10 @@ export function createApi({ token = null } = {}) {
     jobStop: (id) => post(`/api/jobs/${encodeURIComponent(id)}/stop`),
     jobReply: (id, text) => post(`/api/jobs/${encodeURIComponent(id)}/reply`, { text }),
     scene: (id) => get(`/api/scene/${encodeURIComponent(id)}`),
+    /** The login card (server/login.mjs): only this computer is let in, the values are sent once and not kept. */
+    login: (body) => post('/api/login', body),
+    /** A button under "not signed in": Jarvis opens the login window himself (server/terminal.mjs). */
+    openTerminal: (action) => post('/api/terminal', { action }),
 
     // ── files, imports and the people review (drop.js, people.js) ──
     /** URL of a private file (attachment, photo from an export) usable in <img>: adds the token when there is one. */

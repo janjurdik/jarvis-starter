@@ -16,13 +16,15 @@ through `uv run`, so nothing is installed into the user's Python.
 
   login              interactive, in a real terminal only: asks for the e-mail and the password
                      (hidden input), answers a two-factor code prompt and saves the session tokens
+  login --stdin      the same without a terminal, for the login card in the HUD (see "stdin login")
   status [--check]   is there a saved session (with --check it is verified against Garmin)
   sync --days N      one JSON document on stdout with the last N days (see below)
   logout             deletes the saved session tokens
 
 Security rules of this file:
   - the password exists only in memory of this process during `login`. It is never read from the
-    arguments or the environment, never written to disk, never printed and never logged,
+    arguments or the environment (other processes can read those), never written to disk, never
+    printed and never logged,
   - only the session tokens are stored, in <tokens dir>/garmin_tokens.json (file 0600, folder 0700),
   - stdout of `sync` and `status` is JSON without any secret, diagnostics go to stderr.
 
@@ -41,13 +43,25 @@ Output of `sync` (missing metrics are null, older watches simply do not have the
                                   "avgHr": 148, "calories": 520 } ] } ] }
 On failure: { "ok": false, "error": "not_connected" | "needs_login" | "rate_limited" | "network"
               | "failed", "message": "…" } and a non-zero exit code (3, 4, 5, 6, 7 in that order).
+
+stdin login (`login --stdin`), one JSON object per line in both directions:
+  in   {"email": "…", "password": "…"}          the first line, within CREDS_WAIT_S
+  out  {"event": "needs_code"}                   Garmin sent a one-time code, the process waits for it
+  in   {"code": "123456"}                        within CODE_WAIT_S, a wrong code may be sent again
+  out  {"event": "connected", "name": "…"}       tokens saved, exit 0
+  out  {"event": "error", "error": "wrong_credentials" | "wrong_code" | "rate_limited" | "network"
+        | "timeout" | "failed" | "usage", "message": "…"}
+       after "wrong_code" (with "retry": true) the process waits for another code, after any other
+       error it exits. Output never carries the e-mail, the password, the code or a token.
 """
 import argparse
 import contextlib
 import getpass
 import json
 import os
+import queue
 import sys
+import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -56,7 +70,11 @@ TOKEN_NAME = "garmin_tokens.json"
 EXIT = {"ok": 0, "usage": 2, "not_connected": 3, "needs_login": 4, "rate_limited": 5, "network": 6, "failed": 7}
 # Waits after a "too many requests" answer before the same call is tried again.
 BACKOFF_S = (4.0, 12.0, 30.0)
-NEEDS_LOGIN = "Prihlásenie do Garminu vypršalo alebo ho Garmin zrušil. Treba sa prihlásiť znova: node scripts/garmin.mjs login"
+# stdin login: how long the worker waits for the credentials and for a one-time code, and how many codes it tries.
+CREDS_WAIT_S = 60.0
+CODE_WAIT_S = 600.0
+CODE_TRIES = 3
+NEEDS_LOGIN = "Prihlásenie do Garminu vypršalo alebo ho Garmin zrušil. Treba sa prihlásiť znova."
 
 # The library also accepts tokens from this variable: the worker only ever uses its own folder.
 os.environ.pop("GARMINTOKENS", None)
@@ -319,7 +337,7 @@ def connect(folder: Path):
     import garminconnect as gc
 
     if not has_tokens(folder):
-        raise Stop("not_connected", "Garmin nie je pripojený. Pripojenie: node scripts/garmin.mjs login")
+        raise Stop("not_connected", "Garmin nie je pripojený.")
     api = gc.Garmin()
     try:
         api.login(str(folder))
@@ -495,9 +513,8 @@ def cmd_login(args) -> None:
     """Interactive login. Human text goes to the terminal, nothing here is machine output."""
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         sys.stderr.write(
-            "Prihlásenie do Garminu sa dá spustiť len v termináli, lebo sa pri ňom zadáva heslo.\n"
-            "Otvor Terminál (macOS) alebo PowerShell (Windows) v priečinku Jarvisa a napíš:\n"
-            "  node scripts/garmin.mjs login\n"
+            "Interaktívne prihlásenie do Garminu potrebuje terminál. Bez neho ide prihlásenie cez kartu\n"
+            "na obrazovke Jarvisa (login --stdin).\n"
         )
         sys.exit(EXIT["usage"])
     import garminconnect as gc
@@ -571,6 +588,161 @@ def cmd_login(args) -> None:
     print(f"Hotovo. Garmin je pripojený{f' ({name})' if name else ''}.")
 
 
+# ── stdin login (the login card in the HUD) ─────────────────────────────
+
+
+class StdinLines:
+    """
+    Lines from stdin with a timeout. A thread reads, because select() does not work on pipes on
+    Windows. The lines are handed over once and never kept anywhere else.
+    """
+
+    def __init__(self, stream) -> None:
+        self.q: queue.Queue = queue.Queue()
+        threading.Thread(target=self._read, args=(stream,), daemon=True).start()
+
+    def _read(self, stream) -> None:
+        try:
+            for line in stream:
+                self.q.put(line)
+        except (OSError, ValueError):
+            pass
+        self.q.put(None)
+
+    def get(self, timeout: float):
+        """The next line as a dict, None when stdin closed, "timeout" when nothing came in time."""
+        try:
+            line = self.q.get(timeout=timeout)
+        except queue.Empty:
+            return "timeout"
+        if line is None:
+            return None
+        try:
+            data = json.loads(line)
+        except ValueError:
+            return {}
+        finally:
+            line = None
+        return data if isinstance(data, dict) else {}
+
+
+def login_event(event: str, **fields) -> None:
+    emit({"event": event, **fields})
+
+
+def login_error(code: str, message: str, retry: bool = False) -> None:
+    login_event("error", error=code, message=message, **({"retry": True} if retry else {}))
+
+
+LOGIN_MESSAGES = {
+    "wrong_credentials": "Garmin e-mail alebo heslo neprijal.",
+    "wrong_code": "Kód nesedí alebo už vypršal.",
+    "rate_limited": "Garmin teraz prihlásenia odmieta, priveľa pokusov. Skúste to o hodinu.",
+    "network": "Garmin sa nepodarilo zastihnúť. Skúste to o chvíľu.",
+    "timeout": "Na kód som čakal pridlho. Prihláste sa znova, Garmin pošle nový.",
+    "failed": "Prihlásenie do Garminu zlyhalo.",
+    "usage": "Chýba e-mail alebo heslo.",
+}
+
+
+def classify_login_error(e: BaseException, step: str) -> str:
+    """Maps an exception of the library to one of the stdin login error codes."""
+    import garminconnect as gc
+
+    if isinstance(e, gc.GarminConnectTooManyRequestsError):
+        return "rate_limited"
+    if isinstance(e, gc.GarminConnectAuthenticationError):
+        return "wrong_code" if step == "code" else "wrong_credentials"
+    if isinstance(e, gc.GarminConnectConnectionError):
+        return "network"
+    return "failed"
+
+
+def cmd_login_stdin(args, stream=None) -> int:
+    """
+    Login without a terminal: the credentials and the one-time code come on stdin as JSON lines
+    from the HUD server, the answers go to stdout as JSON lines. Returns the exit code.
+    """
+    lines = StdinLines(stream or sys.stdin)
+    first_line = lines.get(CREDS_WAIT_S)
+    if first_line == "timeout" or first_line is None:
+        login_error("timeout" if first_line == "timeout" else "usage", LOGIN_MESSAGES["usage"])
+        return EXIT["usage"]
+    email = str(first_line.get("email") or "").strip()
+    password = str(first_line.get("password") or "")
+    first_line = None
+    if not email or not password or len(email) > 320 or len(password) > 1024:
+        login_error("usage", LOGIN_MESSAGES["usage"])
+        return EXIT["usage"]
+
+    try:
+        import garminconnect as gc
+    except ImportError as e:
+        login_error("failed", f"Chýba knižnica garminconnect: {type(e).__name__}")
+        return EXIT["failed"]
+
+    folder = token_dir(args.tokens)
+    secure_dir(folder)
+    api = gc.Garmin(email=email, password=password, return_on_mfa=True)
+    step = "credentials"
+    try:
+        # No token store on purpose: the old session stays untouched until the new login succeeds.
+        status, state = api.login()
+        password = None
+        api.password = None
+        if status == "needs_mfa":
+            step = "code"
+            login_event("needs_code")
+            tries = 0
+            while True:
+                msg = lines.get(CODE_WAIT_S)
+                if msg is None:
+                    login_error("failed", "Prihlásenie sa prerušilo.")
+                    return EXIT["usage"]
+                if msg == "timeout":
+                    login_error("timeout", LOGIN_MESSAGES["timeout"])
+                    return EXIT["usage"]
+                code = "".join(ch for ch in str(msg.get("code") or "") if ch.isalnum())[:12]
+                msg = None
+                if not code:
+                    login_error("wrong_code", LOGIN_MESSAGES["wrong_code"], retry=True)
+                    continue
+                tries += 1
+                try:
+                    api.resume_login(state, code)
+                    break
+                except gc.GarminConnectAuthenticationError:
+                    if tries >= CODE_TRIES:
+                        login_error("wrong_code", "Kód nesedí ani na tretí pokus. Prihláste sa znova, Garmin pošle nový.")
+                        return EXIT["needs_login"]
+                    login_error("wrong_code", LOGIN_MESSAGES["wrong_code"], retry=True)
+                finally:
+                    code = None
+            state = None
+        api.client.dump(str(folder))
+    except Exception as e:  # noqa: BLE001  every failure becomes one clean line, never a traceback with secrets
+        kind = classify_login_error(e, step)
+        note(f"login {step}: {kind} ({type(e).__name__})")
+        login_error(kind, LOGIN_MESSAGES[kind])
+        return EXIT["needs_login"] if kind in ("wrong_credentials", "wrong_code") else EXIT.get(kind, EXIT["failed"])
+    finally:
+        password = None
+        api.password = None
+    if not has_tokens(folder):
+        login_error("failed", "Prihlásenie prešlo, ale nepodarilo sa ho uložiť do priečinka s dátami Jarvisa.")
+        return EXIT["failed"]
+    with contextlib.suppress(OSError):
+        (folder / TOKEN_NAME).chmod(0o600)
+    name = None
+    with contextlib.suppress(Exception):
+        # In the return_on_mfa mode a login without a code does not load the profile by itself.
+        if not api.get_full_name():
+            api._load_profile_and_settings()
+        name = api.get_full_name() or None
+    login_event("connected", name=name)
+    return EXIT["ok"]
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="garmin_worker.py", description="Garmin Connect worker for Jarvis (login, status, sync, logout).")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -579,7 +751,8 @@ def main() -> None:
         sp.add_argument("--tokens", help="folder with the session tokens (default <data>/garmin)")
         return sp
 
-    common(sub.add_parser("login", help="interactive login in a terminal (password is typed here, never stored)"))
+    lg = common(sub.add_parser("login", help="interactive login in a terminal (password is typed here, never stored)"))
+    lg.add_argument("--stdin", action="store_true", help="no terminal: credentials and the code come as JSON lines on stdin (the HUD login card)")
     st = common(sub.add_parser("status", help="is there a saved session"))
     st.add_argument("--check", action="store_true", help="verify the session against Garmin")
     sy = common(sub.add_parser("sync", help="print the last N days as JSON"))
@@ -588,6 +761,8 @@ def main() -> None:
     sy.add_argument("--fixture", help="answer from a JSON file instead of Garmin (tests)")
     common(sub.add_parser("logout", help="delete the saved session tokens"))
     args = p.parse_args()
+    if args.cmd == "login" and args.stdin:
+        sys.exit(cmd_login_stdin(args))
     {"login": cmd_login, "status": cmd_status, "sync": cmd_sync, "logout": cmd_logout}[args.cmd](args)
 
 
