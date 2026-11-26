@@ -16,6 +16,7 @@
 import { createCore } from './core.js'
 import { createDossier } from './dossier.js'
 import { initControl } from './control.js'
+import { initRecord } from './record.js'
 import { createHands } from './hands.js'
 import { initLinks } from './links.js'
 import { createUI } from './ui.js'
@@ -253,6 +254,8 @@ const canvas = document.getElementById('gl')
 const now = () => performance.now() / 1000
 const T0 = now()
 const api = createApi({ token: params.get('token') })
+/** Record mode: the chip, the indicator and the microphone chunks (record.js). */
+let record = null
 
 let snapshot
 let scene = null
@@ -678,6 +681,7 @@ function connectEvents() {
     onVoice(v)
   })
   initControl({ on })
+  record = initRecord({ on, toast: (text, o) => ui.toast(text, o), ownsAudio, token: params.get('token'), desktop: DESKTOP })
   // Results of jobs as notifications of the system: the desktop app shows them, a click opens the job.
   on('notify', (n) => {
     if (DESKTOP && typeof desk()?.post === 'function') desk().post({ type: 'notify', title: n?.title ?? 'Jarvis', body: n?.body ?? '', job: n?.job ?? null, quiet: n?.quiet === true })
@@ -722,7 +726,7 @@ function connectEvents() {
     reloading = true
     const started = now()
     const go = () => {
-      const busy = Boolean(ptt) || speech?.speaking() || speech?.recording
+      const busy = Boolean(ptt) || speech?.speaking() || speech?.recording || record?.pending()
       if (busy && now() - started < 30) return void setTimeout(go, 700)
       location.reload()
     }

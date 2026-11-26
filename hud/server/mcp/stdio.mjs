@@ -19,6 +19,8 @@ export function serveMcp({ name, version = '1.0.0', instructions, tools }) {
     if (!tool) return fail(id, -32602, `neznámy nástroj ${params?.name}`)
     try {
       const out = await tool.handler(params?.arguments ?? {})
+      // Ready-made MCP content (text and images, e.g. a picture of the screen): passed on as it is.
+      if (out && typeof out === 'object' && Array.isArray(out.content)) return reply(id, { content: out.content, ...(out.isError ? { isError: true } : {}) })
       if (out && typeof out === 'object' && 'text' in out && Object.keys(out).every((k) => k === 'text' || k === 'isError')) {
         return reply(id, { content: [{ type: 'text', text: String(out.text) }], isError: Boolean(out.isError) })
       }

@@ -182,7 +182,7 @@ function touch() {
 }
 
 /** One request to the worker: the file is transcribed, the answer comes back by id. */
-async function ask(file) {
+async function ask(file, prompt = STT_PROMPT) {
   await start()
   touch()
   const id = `s${++seq}`
@@ -195,13 +195,16 @@ async function ask(file) {
       resolve: (v) => (clearTimeout(timer), resolveJob(v)),
       reject: (e) => (clearTimeout(timer), reject(e)),
     })
-    proc.stdin.write(JSON.stringify({ id, path: file, prompt: STT_PROMPT }) + '\n')
+    proc.stdin.write(JSON.stringify({ id, path: file, prompt }) + '\n')
   })
   return { text: res.text ?? '', ms: res.ms }
 }
 
-/** Prepis hotového súboru (wake stream). Súbor maže volajúci. */
-export const transcribeFile = (file) => ask(file)
+/**
+ * Prepis hotového súboru (wake stream, záznam). Súbor maže volajúci. `prompt` nahradí nápovedu
+ * s povelmi (záznam dáva koniec doterajšieho prepisu, prázdny reťazec = bez nápovedy).
+ */
+export const transcribeFile = (file, prompt) => ask(file, prompt ?? STT_PROMPT)
 
 /** Zvuk (Buffer) → text. Súbor žije len počas prepisu. */
 export async function transcribeAudio(buffer, contentType = 'audio/webm') {

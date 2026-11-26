@@ -11,12 +11,13 @@
  *   set_alarm(time?, days?, call?, off?)   the alarm clock (scripts/alarm.mjs)
  *   settings(set?)              voice, assistant's name and gender, how the user is addressed (server/settings.mjs)
  *   video_open / video_seek / video_transcript / video_info / video_control / video_close, set_alarm_sound   (video-tools.mjs)
+ *   record_start(title?) / record_stop / record_status   record mode (server/record.mjs)
  */
 import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { serveMcp } from './stdio.mjs'
+import { READ_ONLY, serveMcp } from './stdio.mjs'
 import { videoTools } from './video-tools.mjs'
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
@@ -343,5 +344,38 @@ serveMcp({
       },
     },
     ...videoTools({ hudUrl: HUD, repo: REPO }),
+    // Record mode (server/record.mjs, docs/ZAZNAM.md): the microphone and the screen, saved as they come.
+    {
+      name: 'record_start',
+      description:
+        'Zapne záznam: nahráva mikrofón aj obrazovku a priebežne všetko ukladá, ty medzitým normálne odpovedáš. Na „počúvaj ma", „nahrávaj", „zapni záznam", „nahraj tento hovor". title je krátky názov, keď ho povedal (napr. „Porada s Petrom"), inak ho vynechaj.',
+      inputSchema: { type: 'object', properties: { title: { type: 'string' } } },
+      handler: async ({ title } = {}) => {
+        const r = await hud('record', { op: 'start', title })
+        return r.isError ? r : r.summary
+      },
+    },
+    {
+      name: 'record_stop',
+      description:
+        'Ukončí záznam. Prepis sa dokončí a na pozadí z neho vznikne poznámka, úlohy, pripomienky, termíny a návrhy správ (tie čakajú na jeho áno). Na „stačí", „ukonči záznam", „koniec nahrávania".',
+      inputSchema: { type: 'object', properties: {} },
+      handler: async () => {
+        const r = await hud('record', { op: 'stop' })
+        return r.isError ? r : r.summary
+      },
+    },
+    {
+      name: 'record_status',
+      description: 'Či beží záznam, odkedy a koľko je nahrané, plus posledné záznamy a ich stav.',
+      inputSchema: { type: 'object', properties: {} },
+      annotations: READ_ONLY,
+      handler: async () => {
+        const r = await hud('record', { op: 'status' })
+        if (r.isError) return r
+        const recent = (r.recent ?? []).slice(0, 5).map((x) => `${x.id} ${x.title} (${x.status}${x.job ? `, úloha ${x.job}` : ''})`)
+        return [r.summary, recent.length ? `Posledné: ${recent.join('; ')}` : ''].filter(Boolean).join('\n')
+      },
+    },
   ],
 })

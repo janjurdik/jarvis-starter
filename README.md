@@ -59,6 +59,8 @@ s tvojimi úpravami. Nič nesťahuješ znova a o pamäť ani nastavenia nepríde
 
 - **Hlas.** Podržíš medzerník a hovoríš, odpovedá nahlas. Reč rozpoznáva Whisper priamo v tvojom počítači (vyberie sa podľa jeho výkonu). Hlas, meno aj to, či je to on alebo ona, si nastavíš jednou vetou.
 - **Ruky.** Zapneš kameru a ovládaš ho rukami: kurzor ide za dlaňou, štipnutím klikneš. Obraz neopúšťa počítač ([docs/RUKY.md](docs/RUKY.md)).
+- **Vidí, na čo sa pozeráš.** „Čo to je", „odpíš na toto", „prelož mi to": pozrie sa na okno pred tebou, nič nekopíruješ ([docs/ZAZNAM.md](docs/ZAZNAM.md)).
+- **Záznam.** „Počúvaj ma" a nahráva mikrofón aj obrazovku, medzitým s tebou hovorí ďalej. Po konci z toho spraví poznámku, úlohy, termíny a návrhy správ. Všetko ostáva v tvojom počítači ([docs/ZAZNAM.md](docs/ZAZNAM.md)).
 - **Je živý.** Ozve sa sám na Nový rok, Vianoce a tvoje narodeniny, dá vedieť, keď dochádza batéria, a keď treba, zavolá ti na mobil.
 - **Budík.** „Zobuď ma o pol siedmej." Ráno zazvoní skladbou (môžeš mu dať vlastnú) a povie ti, ako si spal, aké je počasie, čo ťa čaká a čo spravil, kým si spal.
 - **Pamäť.** Obyčajné textové súbory v priečinku `memory/`: kto si, tvoji ľudia, projekty, ciele, denník. Zapisuje si sám, ty ich vieš kedykoľvek otvoriť.
@@ -98,7 +100,7 @@ Na úpravy, pri ktorých chceš vidieť každý krok, otvor tento priečinok v C
 | `hud/` | Obrazovka, server a appka na plochu pre macOS. |
 | `routines/` | Zadania rutín: budík, ranný brief, večerný denník, stráž pošty. |
 | `scripts/` | Príkazy: štart, orby, odporúčania, budík, video, import dát, aktualizácie. |
-| `docs/` | [Orby](docs/ORBY.md), [hlas](docs/HLAS.md), [video](docs/VIDEO.md), [aktivita](docs/AKTIVITA.md), [Garmin](docs/GARMIN.md), [ovládanie počítača](docs/OVLADANIE.md), [iné modely](docs/MODELY.md), [samostatnosť](docs/AUTONOMIA.md), [hovory](docs/HOVORY.md), [aktualizácie](docs/AKTUALIZACIE.md), [Windows](docs/WINDOWS.md), [plocha Macu](docs/DESKTOP-MAC.md), [API](docs/API.md). |
+| `docs/` | [Orby](docs/ORBY.md), [hlas](docs/HLAS.md), [video](docs/VIDEO.md), [záznam](docs/ZAZNAM.md), [aktivita](docs/AKTIVITA.md), [Garmin](docs/GARMIN.md), [ovládanie počítača](docs/OVLADANIE.md), [iné modely](docs/MODELY.md), [samostatnosť](docs/AUTONOMIA.md), [hovory](docs/HOVORY.md), [aktualizácie](docs/AKTUALIZACIE.md), [Windows](docs/WINDOWS.md), [plocha Macu](docs/DESKTOP-MAC.md), [API](docs/API.md). |
 
 ## Súkromie a bezpečnosť
 

@@ -346,6 +346,13 @@ export const currentTurnId = () => (current?.active ? current.id : null)
 /** Bežiaci turn pre úlohy na pozadí (zdedia silent a mock). */
 export const currentTurnInfo = () => (current?.active ? { id: current.id, silent: current.silent, mock: current.mock } : null)
 
+const userTurnListeners = new Set()
+/** Called with (text, via) for every message the user sends (the recording marks where he talked to Jarvis). */
+export function onUserTurn(fn) {
+  userTurnListeners.add(fn)
+  return () => userTurnListeners.delete(fn)
+}
+
 /**
  * Spustí turn. Bežiaci turn sa preruší (nová veta má prednosť). Vráti id turnu.
  * `attachments` are files already stored in memory/prilohy ([{ rel, name, type, path }], checked by
@@ -363,6 +370,15 @@ export function sendChat({ text, via = 'text', mock = false, silent = false, sce
   turn.hidden = hidden === true
   current = turn
   if (!turn.hidden) send('chat', { turn: turn.id, phase: 'user', text: message, via: turn.via, ...(files.length ? { attachments: pubAttachments(files) } : {}) })
+  if (!turn.hidden) {
+    for (const fn of userTurnListeners) {
+      try {
+        fn(message, turn.via)
+      } catch (err) {
+        log('chat', errMsg(err))
+      }
+    }
+  }
   send('chat', { turn: turn.id, phase: 'start' })
   setVoice('thinking', { turn: turn.id })
   if (!silent) warmTts()
