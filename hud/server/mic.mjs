@@ -5,9 +5,11 @@
  * of the sentence, the local Whisper worker transcribes it and the text goes to the chat.
  * Needs a local speech-to-text engine (JARVIS_STT=mlx or faster), see docs/HLAS.md.
  *
- * The model is openWakeWord's hey_jarvis. It also reacts to "Ahoj Jarvis", only with a lower
- * score, so the threshold is lower (0.25) and a weak detection counts only when the transcript
- * (with ~1.6 s from before the detection) really says Jarvis. "Hey Jarvis" keeps working.
+ * Two ways to hear the wake word: openWakeWord's hey_jarvis (instant, but trained on English
+ * "hey jarvis", Slovak "Ahoj Jarvis" scores low) and the probe: the worker cuts every spoken
+ * phrase with Silero VAD and sends its first ~3 s here, Whisper reads it and when it says
+ * "Ahoj Jarvis" (or starts with Jarvis), the rest of the sentence becomes the command.
+ * A weak hey_jarvis detection counts only when the transcript really says Jarvis.
  *
  * Only the latest client is active. While Jarvis speaks and 0.6 s after, the wake word is not
  * searched (echo from the speakers). A wake word interrupts a running answer.
@@ -39,6 +41,19 @@ export function stripWakeWord(text) {
 
 /** Whether a transcript contains the wake word at all. */
 export const hasWakeWord = (text) => new RegExp(WAKE_RE.source).test(plainText(String(text ?? '')))
+
+/**
+ * Whether a probe phrase is really calling Jarvis: a greeting right before "Jarvis" (Ahoj Jarvis,
+ * Hey Jarvis, Čau Jarvis), or "Jarvis" as the first word. Talking about Jarvis does not count.
+ */
+export function isWakeCall(text) {
+  const plain = plainText(String(text ?? '')).replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim()
+  const name = '(?:d?[zj]arv[iy]s\\w*|jervis\\w*|charvis\\w*|harvis\\w*|darvis\\w*)'
+  return new RegExp(`(?:^|\\s)(?:ahoj|ahoy|ahooj|hoj|hey|hej|hi|cau|cus|zdravim|dobry den) ${name}(?:\\s|$)`).test(plain) || new RegExp(`^${name}(?:\\s|$)`).test(plain)
+}
+
+/** Nápoveda pre Whisper pri probe: bez oslovenia, aby si ho Whisper nevymyslel v nejasnom zvuku. */
+const PROBE_PROMPT = 'Bežná slovenská reč, otázky a povely.'
 
 /** Wake score from which a detection counts without checking the transcript. */
 export const SURE_SCORE = 0.5
@@ -97,7 +112,7 @@ function startWorker() {
     log('mic', 'spúšťam wake worker (openWakeWord + Silero VAD)')
     const proc = spawnBin(UV, ['run', '--quiet', join(ROOT, 'server/wake/wake_worker.py')], {
       cwd: ROOT,
-      env: workerEnv({ PYTHONUNBUFFERED: '1', WAKE_REC_DIR: REC_DIR, WAKE_THRESHOLD: thresh }),
+      env: workerEnv({ PYTHONUNBUFFERED: '1', WAKE_REC_DIR: REC_DIR, WAKE_THRESHOLD: thresh, WAKE_PROBE: process.env.JARVIS_WAKE_PROBE === '0' ? '0' : '1' }),
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     worker = proc
@@ -165,12 +180,17 @@ function scheduleWorkerIdle() {
 // ── udalosti z workera ─────────────────────────────────────────────────
 
 function onWorkerEvent(msg) {
+  if (msg.event === 'probe') {
+    handleProbe(msg).catch((err) => log('mic', errMsg(err)))
+    return
+  }
   if (msg.event === 'wake') {
     stats.wakes++
     wakeAt = Date.now()
-    wakeScore = Number(msg.score) || 0
+    // Z probe je oslovenie už overené prepisom.
+    wakeScore = msg.via === 'probe' ? 1 : Number(msg.score) || 0
     busy = true
-    log('mic', `„Ahoj Jarvis“ (skóre ${msg.score})`)
+    log('mic', msg.via === 'probe' ? '„Ahoj Jarvis“ (z prepisu)' : `„Ahoj Jarvis“ (skóre ${msg.score})`)
     opts.onWakeWord()
     opts.setVoice('wake')
     setTimeout(() => busy && opts.setVoice('listening', { level: 0 }), 100)
@@ -196,6 +216,35 @@ export function cleanCommand(text) {
   let t = hit ? raw.slice(hit.index + hit[0].length) : raw
   if (!hit) t = t.replace(/^\s*(?:ahoj|hey|hej|ej)?[\s,]*(?:d?[zj]a)?(?:rvis|vis|wis|is)(?=[\s,.!?:]|$)[\s,.!?:]*/i, '')
   return t.replace(/^[\s,.!?:]+/, '').trim()
+}
+
+/** Začiatok frázy z workera: je v nej oslovenie? Odpoveď drop / take / listen ide späť workeru. */
+async function handleProbe(msg) {
+  const conn = client
+  const t0 = Date.now()
+  let answer = 'drop'
+  try {
+    const { text } = await transcribeFile(msg.path, PROBE_PROMPT)
+    if (!isWakeCall(text)) return
+    const command = cleanCommand(text)
+    stats.probeHits = (stats.probeHits ?? 0) + 1
+    if (msg.ended && command) {
+      // Celá veta už je v prepise („Ahoj Jarvis, pusti hudbu“): rovno do chatu.
+      stats.wakes++
+      stats.commands++
+      log('mic', `„Ahoj Jarvis“ z prepisu, príkaz ${command.length} znakov (${msg.audio_ms} ms zvuku, prepis ${Date.now() - t0} ms)`)
+      opts.onWakeWord()
+      opts.setVoice('wake')
+      opts.onCommand(command, { mock: conn?.mock === true, silent: conn?.silent === true })
+      return
+    }
+    answer = msg.ended ? 'listen' : 'take'
+  } catch (err) {
+    log('mic', `probe zlyhal: ${errMsg(err)}`)
+  } finally {
+    sendCtrl({ cmd: answer })
+    unlink(msg.path).catch(() => {})
+  }
 }
 
 async function handleEnd(msg) {

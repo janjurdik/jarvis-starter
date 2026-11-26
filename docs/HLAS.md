@@ -147,10 +147,16 @@ Keď beží lokálny Whisper, dá sa zapnúť aj počúvanie na slová „Ahoj J
 **Hlas** v hornej lište HUD. Prvé zapnutie stiahne malý model. Je to pokročilá, experimentálna funkcia.
 Medzerník funguje vždy.
 
-Funguje aj „Hey Jarvis“. Rozpoznávanie stojí na modeli `hey_jarvis` od openWakeWord, ktorý na
-„Ahoj Jarvis“ reaguje slabšie, preto má nižší prah (0,25). Slabé zachytenie Jarvis prijme, len keď
-prepis naozaj obsahuje „Jarvis“, inak ho potichu zahodí. Keď ťa nepočuje, skús prah znížiť
-(`JARVIS_WAKE_THRESHOLD=0.15` v `.env`), keď sa zapína sám, zvýš ho (`0.4`).
+Funguje aj „Hey Jarvis“ a „Čau Jarvis“. Počúva sa dvoma cestami naraz. Model `hey_jarvis` od
+openWakeWord zareaguje okamžite, ale je natrénovaný na anglické „hey“, takže slovenské „Ahoj“ často
+nechytí. Preto Jarvis každú vyslovenú vetu vystrihne (Silero VAD) a jej začiatok si prečíta lokálny
+Whisper: keď sa veta začína oslovením („Ahoj Jarvis…“, „Jarvis, …“), zvyšok vety je príkaz. Keď
+poviete len „Ahoj Jarvis“ a chvíľu počkáte, Jarvis počúva ďalšiu vetu. Reč *o* Jarvisovi
+(„včera som robil na Jarvisovi“) ho nezobudí. Všetko beží v počítači, zvuk sa nikam neposiela.
+
+Doladenie v `.env`: `JARVIS_WAKE_THRESHOLD` je prah rýchleho modelu (predvolené 0,25, slabé
+zachytenie sa ešte overí v prepise), `JARVIS_WAKE_PROBE=0` vypne cestu cez Whisper (menej práce pre
+grafiku, ale „Ahoj Jarvis“ potom chytí len zriedka).
 
 ## Keď hlas nejde
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { cleanCommand, hasWakeWord, stripWakeWord } from '../hud/server/mic.mjs'
+import { cleanCommand, hasWakeWord, isWakeCall, stripWakeWord } from '../hud/server/mic.mjs'
 
 test('Ahoj Jarvis sa z príkazu odstráni, aj s pre-rollom pred ním', () => {
   assert.equal(cleanCommand('Ahoj Jarvis, čo mám dnes v kalendári?'), 'čo mám dnes v kalendári?')
@@ -28,4 +28,9 @@ test('planý poplach: v prepise nie je Jarvis', () => {
 test('stripWakeWord nechá text pred aj za', () => {
   assert.equal(stripWakeWord('Ahoj Jarvis zapni svetlo'), 'zapni svetlo')
   assert.equal(stripWakeWord('bez mena'), 'bez mena')
+})
+
+test('probe: oslovenie áno, reč o Jarvisovi nie', () => {
+  for (const t of ['Ahoj Jarvis.', 'Ahoj, Džarvis, pusti mi hudbu.', 'Jarvis, koľko je hodín?', 'Hej Jarvis', 'Čau Jarvis!', 'no a potom ahoj Jarvis čo mám dnes']) assert.equal(isWakeCall(t), true, t)
+  for (const t of ['Včera som robil na Jarvisovi.', 'Ahoj Jaro, ako sa máš?', 'Pozeral som Iron Mana, Jarvis je tam super', '']) assert.equal(isWakeCall(t), false, t)
 })

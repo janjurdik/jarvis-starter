@@ -2,6 +2,12 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.10.3 (2026-11-26)
+
+- **„Ahoj Jarvis“ naozaj počuje.** Slovenské oslovenie si Jarvis overí lokálnym prepisom reči, takže ho chytí aj
+  vtedy, keď ho anglický model na „Hey Jarvis“ prepočuje. Stačí „Ahoj Jarvis, pusti hudbu“ jednou vetou, alebo
+  „Ahoj Jarvis“, pauza a potom príkaz. Rozprávanie o Jarvisovi ho nezobudí.
+
 ## 1.10.2 (2026-11-26)
 
 - **„Ahoj Jarvis“ namiesto „Hey Jarvis“.** Jarvisa oslovíte po slovensky, „Hey Jarvis“ funguje ďalej. Keď si Jarvis
