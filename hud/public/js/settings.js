@@ -182,6 +182,8 @@ export function createSettings({ onToast = () => {} } = {}) {
             ? `Model si vyberám sám a potichu. Ľahké veci (pozrieť poštu, kalendár) robím na ${esc(r.light ?? 'rýchlom modeli')}, ${r.normal ? `bežné na ${esc(r.normal)} ` : ''}a tvorbu či dlhú prácu na ${esc(r.heavy ?? 'najsilnejšom modeli')}. Ktorý práve beží, vidno malým písmom pri úlohe.`
             : 'Pri ľahkých veciach premýšľam krátko, pri náročných dôkladne. Vyberám si sám a potichu.'
     const native = desk()?.native && desk().version >= 2
+    // A window of the browser instead of the Mac app (a Mac without the developer tools to build it).
+    const browserWindow = !native && new URLSearchParams(location.search).get('surface') === 'app'
     const prefs = desk()?.prefs ?? {}
     const mac = d.platform === 'darwin'
     const surface = ['desktop', 'app', 'browser'].includes(d.surface) ? d.surface : mac ? 'desktop' : 'app'
@@ -190,10 +192,12 @@ export function createSettings({ onToast = () => {} } = {}) {
     const surfaceSeg = seg('surface', (d.surfaces ?? (mac ? ['desktop', 'app', 'browser'] : ['app', 'browser'])).map((id) => [id, SURFACE[id]]), surface)
     const surfaceLead = {
       desktop: 'Žijem na vašej ploche namiesto tapety, pod oknami. Keď všetko zavriete, som tam.',
-      app: `Som samostatná appka vo vlastnom okne. Otvoríte ma ikonou Jarvis ako každý iný program${mac ? ', nájdete ju v Launchpade' : ', je na pracovnej ploche a v ponuke Štart'}.`,
+      app: mac
+        ? 'Som appka Jarvis vo vlastnom okne, ako každý iný program. Nájdete ma v Docku, v Launchpade a v priečinku Aplikácie.'
+        : 'Som samostatná appka vo vlastnom okne. Otvoríte ma ikonou Jarvis ako každý iný program, je na pracovnej ploche a v ponuke Štart.',
       browser: `Som stránka vo vašom prehliadači na adrese ${esc(location.host)}. Hovoriť, zvoniť a pripomínať nahlas viem, len keď ju máte otvorenú.`,
     }[surface]
-    const surfaceRow = row('Kde ma máte', surfaceSeg, 'Presťahujem sa hneď: nové miesto sa otvorí a toto sa samo zavrie.')
+    const surfaceRow = row('Kde ma máte', surfaceSeg, mac ? 'Presťahujem sa hneď. Na ploche aj v okne som tá istá appka Jarvis, len inak položená.' : 'Presťahujem sa hneď: nové miesto sa otvorí a toto sa samo zavrie.')
 
     return {
       asistent: `<h3>Asistent</h3><p class="st-lead">Kto s vami hovorí. To isté stačí povedať: „volaj sa Friday", „hovor ženským hlasom".</p>
@@ -248,9 +252,13 @@ export function createSettings({ onToast = () => {} } = {}) {
           onDesk
             ? native
               ? 'V lište úplne hore vpravo je môj krúžok. Cez neho ma vyvoláte, načítate znova alebo vypnete a vrátite si pôvodnú plochu.'
-              : 'Na plochu ma položí príkaz sh hud/desktop/build.sh --open v priečinku Jarvisa, alebo to povedzte AI, ktorá má ten priečinok otvorený.'
+              : 'Na plochu ma položí appka Jarvis, ktorú si Mac postaví sám. Potrebuje na to nástroje pre vývojárov od Apple (xcode-select --install), potom stačí node scripts/hud.mjs. Alebo to povedzte AI, ktorá má priečinok Jarvisa otvorený.'
             : surface === 'app'
-              ? `Okno je na celú obrazovku, ${mac ? '⌃⌘F' : 'F11'} ho prepne na bežné okno a späť. Po prihlásení do počítača sa otvorím sám.`
+              ? mac
+                ? !browserWindow
+                  ? 'Zelené tlačidlo okna alebo ⌃⌘F ma dá na celú obrazovku. Keď okno zavriete, bežím ďalej, hovorím aj zvoním, a ikona v Docku ma vráti. Po prihlásení do počítača sa otvorím sám.'
+                  : 'Teraz bežím v okne prehliadača. Appku Jarvis si Mac postaví sám, keď bude mať nástroje pre vývojárov od Apple (xcode-select --install).'
+                : 'Okno je na celú obrazovku, F11 ho prepne na bežné okno a späť. Po prihlásení do počítača sa otvorím sám.'
               : 'Po prihlásení do počítača bežím potichu na pozadí a žiadne okno neotváram.'
         }</p>`,
     }
@@ -389,7 +397,7 @@ export function createSettings({ onToast = () => {} } = {}) {
     render()
     body.scrollTop = 0
   })
-  // The desktop app: its menu opens this sheet, and its two switches are mirrored here.
+  // The Mac app: its menu opens this sheet, and the two switches of the desktop are mirrored here.
   window.addEventListener('jarvis-desktop', (e) => {
     if (e.detail?.type === 'settings') openSheet('plocha')
     if (e.detail?.type === 'prefs' && open && tab === 'plocha') render()

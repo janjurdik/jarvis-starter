@@ -135,9 +135,9 @@ V nastaveniach HUD: automaticky, v prehliadači, alebo lokálny Whisper (`"stt"`
 
 Po zmene v `.env` spusti `node scripts/hud.mjs --restart`.
 
-### Appka na ploche Macu
+### Appka Jarvis na Macu
 
-Appka „Jarvis HUD" beží na jadre Safari, kde rozpoznávanie reči z prehliadača nemusí fungovať. S lokálnym
+Appka Jarvis (na ploche aj vo vlastnom okne) beží na jadre Safari, kde rozpoznávanie reči z prehliadača nemusí fungovať. S lokálnym
 Whisperom (predvolené) to nevadí. Keď medzerník ohlási, že okno nevie rozpoznávať reč, pozri
 `node scripts/voice.mjs plan`: povie, prečo sa Whisper nepripravil.
 
@@ -151,7 +151,7 @@ Medzerník funguje vždy.
 
 - **Jarvis mlčí:** klikni raz do okna HUD. Prehliadač nepustí zvuk, kým na stránku neklikneš.
 - **Medzerník nič nerobí:** klikni najprv mimo textového riadku. Skontroluj povolenie mikrofónu pre `localhost` (ikona zámku v paneli s adresou).
-- **„Toto okno nevie rozpoznávať reč":** okno nie je Chrome ani Edge a lokálny Whisper nie je pripravený. Spusti `node scripts/voice.mjs prepare`, alebo otvor HUD cez `node scripts/hud.mjs --browser`.
+- **„Toto okno nevie rozpoznávať reč":** okno nie je Chrome ani Edge a lokálny Whisper nie je pripravený. Spusti `node scripts/voice.mjs prepare`, alebo otvor Jarvisa raz v okne Chromu či Edge: `node scripts/hud.mjs --browser`.
 - **Jarvis zle rozumie:** `node scripts/voice.mjs plan` ukáže, čím počúva. Model `small` robí viac chýb než `large-v3-turbo`. Na Macu s Apple Silicon alebo s kartou NVIDIA skús `JARVIS_WHISPER_MODEL=large-v3-turbo` a `node scripts/voice.mjs prepare --force`. Na počítači bez grafiky býva presnejšie rozpoznávanie v prehliadači (`JARVIS_STT=browser`).
 - **Prepis trvá dlho:** skús menší model (`JARVIS_WHISPER_MODEL=small`) alebo `JARVIS_STT=browser`.
 - **Príprava zlyhala:** dôvod je v `node scripts/voice.mjs plan` a v `data/logs/voice-prepare.log`. Pri výpadku internetu to Jarvis po pár hodinách skúsi znova sám, hneď to spravíš cez `node scripts/voice.mjs prepare`.

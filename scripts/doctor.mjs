@@ -14,6 +14,7 @@ import { DATA_DIR, IS_MAC, IS_WIN, LABEL, PORT, REPO, TASK_FOLDER, findBin, has,
 import { INSTALL_HINT, antigravityStatus } from '../hud/server/antigravity.mjs'
 import { aiProvider, cleanEnv } from '../hud/server/provider.mjs'
 import { prepareNeeded, prepareRunning, sttSummary } from '../hud/server/stt-plan.mjs'
+import { OLD_MAC_IDS, macAppPath, macAppState, parsePlistStrings, resolveSurface } from '../hud/server/surface.mjs'
 
 const { flags } = parseArgs()
 const checks = []
@@ -131,6 +132,24 @@ if (IS_MAC) {
 // ── running pieces ──
 const alive = await hudAlive()
 add('hud', alive, 'HUD server beží', alive ? `http://localhost:${PORT}` : 'nebeží', 'npm run hud')
+
+// ── where Jarvis lives: on a Mac the desktop and the own window are one app, ~/Applications/Jarvis.app ──
+const { surface } = resolveSurface({ configFile, dataDir: DATA_DIR })
+if (IS_MAC && surface !== 'browser') {
+  const app = macAppPath()
+  const state = macAppState({ app, repo: REPO, port: PORT })
+  let oldApp = false
+  try {
+    oldApp = parsePlistStrings(readFileSync(join(app, '..', 'Jarvis HUD.app', 'Contents', 'Info.plist'), 'utf8'))?.CFBundleIdentifier === OLD_MAC_IDS.desktop
+  } catch {
+    oldApp = false
+  }
+  const where = surface === 'desktop' ? 'na ploche' : 'vo vlastnom okne'
+  const detail =
+    state.state === 'ready' ? `${app}, ${where}` : state.state === 'stale' ? `pri štarte sa postaví znova (${state.why})` : state.state === 'foreign' ? `v ${app} je iná appka (${state.id ?? 'neznáma'})` : 'ešte nie je postavená, Jarvis beží v okne prehliadača'
+  const fix = state.state === 'foreign' && state.id !== OLD_MAC_IDS.launcher ? 'Premenuj alebo presuň tú appku, potom: node scripts/hud.mjs' : findBin('swiftc') ? 'node scripts/hud.mjs (postaví ju a staré appky Jarvisa dá do koša)' : 'xcode-select --install, potom: node scripts/hud.mjs'
+  add('app', state.state === 'ready' && !oldApp, 'Appka Jarvis', oldApp ? `${detail}; stará appka Jarvis HUD ešte ostala` : detail, fix)
+}
 
 let scheduled = []
 if (IS_MAC) {

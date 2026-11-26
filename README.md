@@ -45,7 +45,8 @@ Záleží na tom, čo si vyberieš:
   `Esc` ho vráti späť. V lište hore pribudne malý krúžok, menu Jarvisa: ukázať ho, Nastavenia, skryť alebo zobraziť
   ikony na ploche, spúšťať po zapnutí počítača, vypnúť Jarvisa a vrátiť pôvodnú plochu.
 - **Appka (Mac aj Windows).** Jarvis je samostatné okno ako každý iný program. Otvoríš ho ikonou Jarvis: na Macu
-  v Launchpade, na Windows na pracovnej ploche a v ponuke Štart.
+  v Docku, v Launchpade a v priečinku Aplikácie, na Windows na pracovnej ploche a v ponuke Štart. Na Macu je to
+  tá istá appka Jarvis ako na ploche, len vo vlastnom okne, takže v Aplikáciách je vždy jedna.
 - **Stránka v prehliadači.** Jarvis je karta na adrese `http://localhost:4545`. Hovoriť a zvoniť vie, len keď ju máš otvorenú.
 - **Nič sa nemaže.** Skryté ikony ostávajú v priečinku Plocha a tou istou voľbou sa vrátia. Jarvisa vypneš jedným klikom.
 

@@ -3,7 +3,7 @@
  * Pomenované udalosti (event: chat|tts|voice|world|hud|snapshot|status|mode), `hud` má históriu ako v1.
  */
 const clients = new Set()
-// res → 'desktop' (appka Jarvis HUD.app na ploche) | 'app' (the app window) | 'browser' (a plain tab)
+// res → 'desktop' (appka Jarvis na ploche Macu) | 'app' (the app window) | 'browser' (a plain tab)
 const roles = new Map()
 // res → { id, at }: who connected when. One window owns the voice: the desktop before the app window
 // before a browser tab, and among equals the one that has been there longest. Any other window open
@@ -61,6 +61,13 @@ export const clientCount = () => clients.size
 
 /** Počet pripojených appiek na ploche. Kým je aspoň jedna, hlas hrá len ona (karty v Chrome mlčia). */
 export const desktopCount = () => [...roles.values()].filter((r) => r === 'desktop').length
+
+/** Open windows by their place: { desktop, app, browser } (scripts/hud.mjs waits for the new one when Jarvis moves). */
+export function roleCounts() {
+  const out = { desktop: 0, app: 0, browser: 0 }
+  for (const r of roles.values()) out[r] = (out[r] ?? 0) + 1
+  return out
+}
 
 export function openStream(req, res, { role = 'browser' } = {}) {
   res.writeHead(200, {

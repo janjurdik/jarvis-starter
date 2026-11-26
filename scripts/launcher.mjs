@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 /**
- * The Jarvis icon: opens Jarvis in his own window like any other program (`surface: app`).
+ * The Jarvis icon for an app window that runs in a browser.
  *
  *   node scripts/launcher.mjs install   create or refresh the icon
  *   node scripts/launcher.mjs remove    move it away (nothing else changes)
  *   node scripts/launcher.mjs status
  *
- * macOS: ~/Applications/Jarvis.app, a tiny bundle whose program is a shell script (no compiler needed).
  * Windows: a "Jarvis" shortcut on the desktop and in the Start menu, started without a console window.
+ * macOS: the icon is the Jarvis app itself (hud/desktop, ~/Applications/Jarvis.app), which lives on
+ * the desktop or in its own window. Only a Mac that cannot build it (no developer tools) gets this
+ * stand-in under the same name: a tiny bundle whose program is a shell script. The build of the real
+ * app replaces it (hud/desktop/install.sh), and the stand-in never replaces the real app.
  * Both run `node scripts/hud.mjs --front`: start the server when it is not running, open the window,
  * or bring the open one forward. The paths of Node and of this folder are written into the icon, so
  * run `install` again after moving the folder (scripts/hud.mjs does it on every start).
@@ -19,15 +22,16 @@ import { homedir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DATA_DIR, IS_MAC, IS_WIN, LOG_DIR, PORT, REPO, WIN_POWERSHELL, has, parseArgs, sh, winSys } from './lib.mjs'
+import { MAC_APP_ID, OLD_MAC_IDS, macAppPath, parsePlistStrings } from '../hud/server/surface.mjs'
 
 const NODE = process.execPath
 const SCRIPT = join(REPO, 'scripts', 'hud.mjs')
 const OVERRIDE = process.env.JARVIS_LAUNCHER_DIR || null
-const MAC_APP = join(OVERRIDE ?? join(homedir(), 'Applications'), 'Jarvis.app')
+const MAC_APP = OVERRIDE ? join(OVERRIDE, 'Jarvis.app') : macAppPath()
 const WIN_VBS = join(DATA_DIR, 'jarvis-launcher.vbs')
 const WIN_ICON = join(REPO, 'hud', 'desktop', 'jarvis.ico')
 /** What makes this installation different from the default one has to travel with the icon. */
-const ENV_KEYS = ['PORT', 'HUD_PORT', 'JARVIS_DATA_DIR', 'JARVIS_MEMORY_DIR', 'JARVIS_CONFIG', 'JARVIS_BROWSER', 'JARVIS_NO_AUTOSTART', 'JARVIS_LAUNCHER_DIR', 'JARVIS_NO_MOVE']
+const ENV_KEYS = ['PORT', 'HUD_PORT', 'JARVIS_DATA_DIR', 'JARVIS_MEMORY_DIR', 'JARVIS_CONFIG', 'JARVIS_BROWSER', 'JARVIS_NO_AUTOSTART', 'JARVIS_LAUNCHER_DIR', 'JARVIS_APP_DIR', 'JARVIS_NO_MOVE']
 
 const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
@@ -40,7 +44,7 @@ const macPlist = () => `<?xml version="1.0" encoding="UTF-8"?>
 <dict>
   <key>CFBundleName</key><string>Jarvis</string>
   <key>CFBundleDisplayName</key><string>Jarvis</string>
-  <key>CFBundleIdentifier</key><string>com.jarvis-starter.window</string>
+  <key>CFBundleIdentifier</key><string>${OLD_MAC_IDS.launcher}</string>
   <key>CFBundleExecutable</key><string>Jarvis</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
@@ -103,6 +107,15 @@ const same = (file, text) => {
 /** Where the icon is, for messages. */
 export const launcherPlace = () => (IS_MAC ? MAC_APP : IS_WIN ? (OVERRIDE ?? 'pracovná plocha a ponuka Štart') : null)
 
+/** The bundle id of whatever is at the place of the icon on a Mac (null: nothing there or no plist). */
+function macOccupant() {
+  try {
+    return parsePlistStrings(readFileSync(join(MAC_APP, 'Contents', 'Info.plist'), 'utf8'))?.CFBundleIdentifier ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Is the icon there and does it point at this folder? */
 export function launcherReady() {
   if (IS_MAC) return same(join(MAC_APP, 'Contents', 'MacOS', 'Jarvis'), macScript()) && same(join(MAC_APP, 'Contents', 'Info.plist'), macPlist())
@@ -116,6 +129,9 @@ export async function ensureLauncher() {
     if (!IS_MAC && !IS_WIN) return { ok: false, created: false, place: null, error: 'Ikona je pripravená pre macOS a Windows.' }
     if (launcherReady()) return { ok: true, created: false, place: launcherPlace() }
     if (IS_MAC) {
+      // The real Jarvis app, or any other app of that name, is never written over.
+      const occupant = has(MAC_APP) ? macOccupant() : null
+      if (has(MAC_APP) && occupant !== OLD_MAC_IDS.launcher) return { ok: occupant === MAC_APP_ID, created: false, place: MAC_APP, error: occupant === MAC_APP_ID ? null : `V ${MAC_APP} je iná appka (${occupant ?? 'neznáma'}).` }
       const bin = join(MAC_APP, 'Contents', 'MacOS')
       const res = join(MAC_APP, 'Contents', 'Resources')
       mkdirSync(bin, { recursive: true })
@@ -140,11 +156,11 @@ export async function ensureLauncher() {
   }
 }
 
-/** Takes the icon away. On a Mac the app is moved to the Trash folder of the user, never deleted. */
+/** Takes the icon away. On a Mac the stand-in is moved to the Trash folder of the user, never deleted (the real app stays). */
 export async function removeLauncher() {
   try {
     if (IS_MAC) {
-      if (!has(MAC_APP)) return { ok: true, removed: false }
+      if (!has(MAC_APP) || macOccupant() !== OLD_MAC_IDS.launcher) return { ok: true, removed: false }
       const trash = join(homedir(), '.Trash', `Jarvis ${Date.now()}.app`)
       renameSync(MAC_APP, trash)
       return { ok: true, removed: true, place: trash }
@@ -172,6 +188,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     console.log(r.ok ? (r.removed ? 'Ikona Jarvis je preč. Jarvis sám beží ďalej.' : 'Ikona Jarvis tu nebola.') : `Ikonu sa nepodarilo odstrániť. ${r.error ?? ''}`.trim())
     process.exit(r.ok ? 0 : 1)
   } else {
-    console.log(launcherReady() ? `Ikona Jarvis je pripravená: ${launcherPlace()}` : 'Ikona Jarvis nie je vytvorená. Vytvorí ju: node scripts/launcher.mjs install')
+    if (IS_MAC && has(MAC_APP) && macOccupant() === MAC_APP_ID) console.log(`Jarvis je appka ${MAC_APP}, inú ikonu netreba.`)
+    else console.log(launcherReady() ? `Ikona Jarvis je pripravená: ${launcherPlace()}` : 'Ikona Jarvis nie je vytvorená. Vytvorí ju: node scripts/launcher.mjs install')
   }
 }

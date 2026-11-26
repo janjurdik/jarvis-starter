@@ -21,7 +21,7 @@ import { acquireNativeMic, createGain, nativeMicAvailable } from './native-mic.j
 
 const levelOf = (rms) => Math.min(1, Math.sqrt(rms / 0.12))
 
-// desktop: true v appke Jarvis HUD.app na ploche. Okno plochy je často zakryté inými oknami
+// desktop: true v appke Jarvis na Macu. Plocha je často zakrytá inými oknami a okno appky býva zavreté
 // (document.hidden), „Hey Jarvis" má však počúvať stále, preto sa tam stream pri skrytí nepozastaví.
 export function createWake({ onLevel, onState, onError, query = null, desktop = false } = {}) {
   let started = false

@@ -41,7 +41,7 @@ Potrebuje dve povolenia, ktoré dávaš raz ty, v Nastaveniach systému → Súk
 - **Prístupnosť**: aby smel hýbať myšou a písať. Bez neho sa nestane nič.
 - **Nahrávanie obrazovky a zvuku**: aby na snímke videl okná aplikácií, nie len plochu.
 
-Povoľ ich programu, v ktorom Jarvis beží (v zozname je ako node, Terminál alebo Jarvis HUD). `node scripts/control.mjs ask`
+Povoľ ich programu, v ktorom Jarvis beží (v zozname je ako node, Terminál alebo Jarvis). `node scripts/control.mjs ask`
 otvorí správne okno a `node scripts/control.mjs status` povie, čo ešte chýba.
 
 ## Vidíš, čo robí

@@ -8,8 +8,9 @@
 //   /?scene=03&at=13.4      začne od 13,4 s      &mute=1  bez zvuku (obraz ide podľa MP3)
 //   /?capture=1[&scene=03]  bez vlastných hodín, window.__hud.seek(t) vykreslí presne čas t
 //   &q=low                  menej častíc          &token=…  token pre HUD_HOST=0.0.0.0
-//   /?desktop=1             plocha Macu (Jarvis HUD.app, WKWebView): okraje lišty a Docku, skratka ⌃⌥J,
+//   /?desktop=1             plocha Macu (appka Jarvis, WKWebView): okraje lišty a Docku, skratka ⌃⌥J,
 //                           jediný prehrávač hlasu, úsporný pokojový režim
+//   /?surface=app           vlastné okno: appka Jarvis na Macu (tá istá, len v okne) alebo okno prehliadača
 //
 // Klávesy: Enter písať a poslať, podržaný medzerník hovoriť, Esc stop, N natáčanie, F celá obrazovka.
 
@@ -43,10 +44,12 @@ const SCENE_ID = params.get('scene')
 const MUTED = params.get('mute') === '1'
 const START_AT = Math.max(0, Number(params.get('at')) || 0)
 const MOCK = params.get('mock') === '1'
-/** Plocha Macu: natívna appka vloží window.__jarvisDesktop ešte pred načítaním stránky. */
-const DESKTOP = params.get('desktop') === '1' || Boolean(window.__jarvisDesktop?.native)
-// Which of the three places this window is: the desktop app, the app window (opened with ?surface=app) or a browser tab.
-const SURFACE = DESKTOP ? 'desktop' : params.get('surface') === 'app' ? 'app' : 'browser'
+/** The Jarvis app of the Mac (on the desktop or in its own window) puts window.__jarvisDesktop in before the page loads. */
+const NATIVE = Boolean(window.__jarvisDesktop?.native)
+/** Plocha Macu: the app as the desktop under the windows (in its own window it says mode 'app'). */
+const DESKTOP = params.get('desktop') === '1' || (NATIVE && window.__jarvisDesktop.mode !== 'app' && params.get('surface') !== 'app')
+// Which of the three places this window is: the desktop, the app window (the Mac app in its window, or a browser opened with ?surface=app) or a browser tab.
+const SURFACE = DESKTOP ? 'desktop' : NATIVE || params.get('surface') === 'app' ? 'app' : 'browser'
 const desk = () => window.__jarvisDesktop ?? null
 if (DESKTOP) document.documentElement.classList.add('jarvis-desktop')
 const DEMO = params.get('demo') === '1'
@@ -680,7 +683,7 @@ function connectEvents() {
   initControl({ on })
   // Results of jobs as notifications of the system: the desktop app shows them, a click opens the job.
   on('notify', (n) => {
-    if (DESKTOP && typeof desk()?.post === 'function') desk().post({ type: 'notify', title: n?.title ?? 'Jarvis', body: n?.body ?? '', job: n?.job ?? null, quiet: n?.quiet === true })
+    if (NATIVE && typeof desk()?.post === 'function') desk().post({ type: 'notify', title: n?.title ?? 'Jarvis', body: n?.body ?? '', job: n?.job ?? null, quiet: n?.quiet === true })
   })
   on('world', (w) => {
     wakeUp()
@@ -738,13 +741,20 @@ function connectEvents() {
   on('surface', (s) => {
     if (!s?.keep || s.keep === SURFACE) return
     const where = s.keep === 'desktop' ? 'na plochu' : s.keep === 'app' ? 'do vlastného okna' : 'do prehliadača'
-    if (SURFACE === 'desktop') {
+    // The Mac app moves by itself: to the desktop, into its window, or it ends for a browser page.
+    if (NATIVE) {
       const d = window.__jarvisDesktop
+      if (typeof d?.moved === 'function') return d.moved(s.keep)
       if (typeof d?.leave === 'function') return d.leave()
       return ui.toast(`Presťahoval som sa ${where}. Plochu vypnete cez krúžok v lište hore: Vypnúť Jarvisa a vrátiť pôvodnú plochu.`, { iconName: 'info', ms: 20_000 })
     }
-    // The app window is closed by the server, a browser tab can only be closed by its owner.
-    if (SURFACE === 'browser') ui.toast(`Presťahoval som sa ${where}. Túto kartu môžete zavrieť.`, { iconName: 'info', ms: 20_000 })
+    // A window of the browser without tabs closes itself (it is the only page in it). A tab is closed by its owner.
+    if (SURFACE === 'app') {
+      window.close()
+      setTimeout(() => ui.toast(`Presťahoval som sa ${where}. Toto okno môžete zavrieť.`, { iconName: 'info', ms: 20_000 }), 400)
+      return
+    }
+    ui.toast(`Presťahoval som sa ${where}. Túto kartu môžete zavrieť.`, { iconName: 'info', ms: 20_000 })
   })
   on('orbs', (o) => paint('orbs', () => applyOrbs(o)))
   on('settings', (st) => settings?.apply(st))
@@ -1047,11 +1057,13 @@ function stopScene() {
 // ── ovládanie ─────────────────────────────────────────────────────────────
 
 function toggleFullscreen() {
+  // The Mac app in its own window: the window itself goes full screen, like with ⌃⌘F.
+  if (NATIVE && !DESKTOP && typeof desk()?.fullscreen === 'function') return desk().fullscreen()
   if (document.fullscreenElement) document.exitFullscreen()
   else document.documentElement.requestFullscreen?.().catch(() => undefined)
 }
 
-/** Plocha Macu: okraje lišty a Docku, globálna skratka ⌃⌥J, vytiahnutie nad okná. */
+/** The Mac app: margins of the menu bar and the Dock, the global shortcut ⌃⌥J, coming above the windows (or the window forward). */
 function bindDesktop() {
   const input = ui.el.input
   let hotkeyAt = 0
@@ -1209,7 +1221,7 @@ function bindControls() {
   })
   handsChip.addEventListener('click', () => hands.toggle())
   // Links to the guide open inside Jarvis, other web links in the browser (links.js).
-  initLinks({ desktop: DESKTOP, toast: (text) => ui.toast(text, { iconName: 'web', ms: 2600 }) })
+  initLinks({ desktop: NATIVE, toast: (text) => ui.toast(text, { iconName: 'web', ms: 2600 }) })
   if (params.get('debug') === '1') window.__hands = hands
   document.getElementById('chip-jobs').addEventListener('click', () => jobs?.open())
   document.getElementById('chip-voice').addEventListener('click', toggleWake)
@@ -1360,7 +1372,7 @@ async function main() {
   await document.fonts.ready
 
   speech = createSpeech({
-    desktop: DESKTOP,
+    desktop: NATIVE,
     onBlocked: () => paint('blocked', () => ui.toast('Klikni kamkoľvek, aby Jarvis mohol hovoriť', { kind: 'warn', iconName: 'speaker', ms: 6000 })),
     onError: (err) => console.warn('hlas:', err?.message ?? err),
     onPlayed: (turn, seq) => {
@@ -1381,7 +1393,7 @@ async function main() {
   chat = createChat({ onSend: (text, via) => send(text, via), capture: CAPTURE, fileUrl: api.fileUrl })
   if (!CAPTURE && !SCENE_ID) {
     people = createPeople({ api, ui, isFilm: () => film, onApplied: () => drop?.load() })
-    drop = createDrop({ api, ui, desktop: DESKTOP, onSend: (text, via) => send(text, via), onReview: () => people.open() })
+    drop = createDrop({ api, ui, desktop: NATIVE, onSend: (text, via) => send(text, via), onReview: () => people.open() })
   }
   ui.setSnapshot(snapshot, nodes)
   if (!counted && !SCENE_ID)
@@ -1421,7 +1433,7 @@ async function main() {
   }
   layout()
   window.addEventListener('resize', layout)
-  if (DESKTOP && !CAPTURE) bindDesktop()
+  if (NATIVE && !CAPTURE) bindDesktop()
   // Dosky sa dotočia (prechod 1,4 s), potom presný layout jadra.
   setTimeout(layout, 1500)
   document.body.classList.remove('is-loading')
@@ -1486,7 +1498,7 @@ async function main() {
   else {
     // „Hey Jarvis" zo streamu prehliadača (wake.js). Server ho zapína cez POST /api/listen/wake.
     wake = createWake({
-      desktop: DESKTOP,
+      desktop: NATIVE,
       onLevel: (l) => (voice.wakeLevel = l),
       onState: (st) => {
         micState = st

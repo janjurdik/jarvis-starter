@@ -3,25 +3,28 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.jarvis-starter.hud</string>
+	<string>com.jarvis-starter.app</string>
 	<key>CFBundleName</key>
-	<string>Jarvis HUD</string>
+	<string>Jarvis</string>
 	<key>CFBundleDisplayName</key>
-	<string>Jarvis HUD</string>
+	<string>Jarvis</string>
 	<key>CFBundleExecutable</key>
-	<string>JarvisHUD</string>
+	<string>Jarvis</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.0</string>
+	<string>3.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>sk</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<!-- Starts without a Dock icon: on the desktop it has none. In its own window the app turns into a regular one. -->
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHighResolutionCapable</key>
@@ -38,6 +41,8 @@
 	<string>__JARVIS_NODE__</string>
 	<key>JarvisPort</key>
 	<string>__JARVIS_PORT__</string>
+	<key>JarvisSource</key>
+	<string>__JARVIS_SOURCE__</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

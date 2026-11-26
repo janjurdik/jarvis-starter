@@ -1,4 +1,4 @@
-// The microphone of the desktop app. In the app "Jarvis HUD" the microphone is opened by the app
+// The microphone of the Mac app. In the app "Jarvis" (on the desktop and in its own window) the microphone is opened by the app
 // itself (a plain system input), not by the web view: the web view's own capture restarts the audio
 // devices for every app on the computer, and a call running elsewhere (Discord) loses its microphone.
 // The app delivers 16 kHz mono Int16 in frames of 1280 samples (80 ms) with their loudness, which is

@@ -30,7 +30,7 @@
   --sans: 'Mona Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  /* Okraje plochy Macu (menu lišta, Dock): nastaví ich appka Jarvis HUD.app, v prehliadači 0. */
+  /* Okraje plochy Macu (menu lišta, Dock): nastaví ich appka Jarvis na ploche, v okne a v prehliadači 0. */
   --safe-top: 0px;
   --safe-right: 0px;
   --safe-bottom: 0px;
@@ -1010,7 +1010,7 @@ body.is-loading .pane-r { transform: rotateY(-32deg) translateX(3rem); }
 .top, .voice, #labels { transition: opacity 0.9s ease; }
 body.capture .top, body.capture .voice, body.capture #labels, body.capture .pane { transition: none; }
 
-/* Plocha Macu (Jarvis HUD.app): hodiny má macOS v lište hneď nad nami, kurzor sa neskrýva,
+/* Plocha Macu (appka Jarvis na ploche): hodiny má macOS v lište hneď nad nami, kurzor sa neskrýva,
    lišta HUD je nižšia, aby panely mali viac miesta medzi menu lištou a Dockom. */
 html.jarvis-desktop .clock { display: none; }
 html.jarvis-desktop { --top-h: 3.9rem; }

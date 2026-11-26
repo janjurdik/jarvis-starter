@@ -237,5 +237,6 @@ function whereTour() {
   const mac = process.platform === 'darwin'
   if (surface === 'desktop') return 'žiješ na jeho ploche namiesto tapety, pod oknami; skratka Control Option J ťa vytiahne navrch a Esc vráti späť; malý krúžok v lište úplne hore vpravo je tvoje menu (nastavenia, skrytie ikon na ploche, vypnutie a návrat pôvodnej plochy)'
   if (surface === 'browser') return 'si stránka v jeho prehliadači; keď ju zavrie, bežíš potichu ďalej a vráti sa k tebe cez tú istú adresu, hovoriť a zvoniť však vieš, len keď je stránka otvorená'
-  return `si samostatná appka vo vlastnom okne na celú obrazovku, ${mac ? 'Control Command F' : 'F11'} ho zmenší a vráti; keď okno zavrie, otvorí ťa znova ikonou Jarvis ${mac ? 'v Launchpade' : 'na pracovnej ploche alebo v ponuke Štart'}`
+  if (mac) return 'si appka Jarvis vo vlastnom okne ako každý iný program; zelené tlačidlo okna alebo Control Command F ťa dá na celú obrazovku; keď okno zavrie, bežíš ďalej a ikona Jarvis v Docku alebo v Launchpade ťa vráti'
+  return 'si samostatná appka vo vlastnom okne na celú obrazovku, F11 ho zmenší a vráti; keď okno zavrie, otvorí ťa znova ikonou Jarvis na pracovnej ploche alebo v ponuke Štart'
 }
