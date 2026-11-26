@@ -105,6 +105,8 @@ export function callOut(text, source) {
 
 /** A system notification (macOS notification centre, Windows toast). Never throws. */
 export async function notify(heading, text) {
+  // Tests and throwaway instances (JARVIS_NO_NOTIFY=1) must not pop notifications on the machine that runs them.
+  if (process.env.JARVIS_NO_NOTIFY === '1') return
   const env = { ...process.env, J_TITLE: String(heading).slice(0, 80), J_TEXT: String(text).replace(/\s+/g, ' ').slice(0, 220) }
   if (IS_MAC) {
     // Text goes in as arguments: `system attribute` reads the environment as MacRoman and breaks diacritics.

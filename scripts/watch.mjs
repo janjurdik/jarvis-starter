@@ -6,6 +6,8 @@
  *
  *   node scripts/watch.mjs add "<veta>" --check "<plán>" [--every 60] [--until 2026-12-31|+7d] [--between 08:00-22:00]
  *                              [--once|--repeat] [--call|--quiet] [--urgent] [--model haiku] [--no-check] [--json]
+ *                              [--from hud] [-- <veta>]   (--from hud: the user asked in the HUD; otherwise the
+ *                              new watch is announced with a card and a notification; after -- comes the sentence)
  *   node scripts/watch.mjs list [--all] [--json]
  *   node scripts/watch.mjs pause|resume|remove <id> [--json]
  *   node scripts/watch.mjs edit <id> [--what "…"] [--check "…"] [--every N] [--until …] [--between …] [--once|--repeat] [--call|--voice|--quiet] [--urgent|--not-urgent]
@@ -26,6 +28,7 @@ import {
   MAX_PARALLEL,
   MAX_PER_TICK,
   addWatch,
+  callText,
   checkDecision,
   describe,
   editWatch,
@@ -47,13 +50,18 @@ import {
 } from '../hud/server/watches.mjs'
 import { LOG_DIR, callOut, hudListeners, notify, postHud, quietNow } from './lib.mjs'
 
-const VALUE_FLAGS = new Set(['check', 'every', 'until', 'between', 'model', 'what'])
+const VALUE_FLAGS = new Set(['check', 'every', 'until', 'between', 'model', 'what', 'from'])
 const argv = process.argv.slice(2)
 const flags = new Set()
 const opts = {}
 const rest = []
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i]
+  // After `--` everything is the sentence, also words that start with --.
+  if (a === '--') {
+    rest.push(...argv.slice(i + 1))
+    break
+  }
   if (!a.startsWith('--')) {
     rest.push(a)
     continue
@@ -125,10 +133,19 @@ async function deliver(w, event, { reason = '' } = {}) {
     if (localVoiceOn()) await speakLocal(say)
   }
   if (event === 'hit' && w.notify === 'call' && !hush && callReady()) {
-    callOut(say, 'straz')
+    // The call says a fixed sentence with the user's own words; what the check found stays on the screen.
+    callOut(callText(w, cfg), 'straz')
     log(`${w.id} volám na mobil`)
   }
   log(`${w.id} ${event} ohlásené${hush ? ' (ticho)' : ''}`)
+}
+
+/** A card and a notification for a new watch that did not come from the user's own words in the HUD. */
+async function announceNew(w) {
+  const head = `Nová stráž: ${topic(w.what).slice(0, 40)}`
+  const text = `Pribudla stráž „${w.what}", kontrolujem ${everyText(w.every)}${w.notify === 'call' ? ' a pri zhode zavolám' : ''}. Nezadali ste ju v rozhovore so mnou, pridala ju úloha na pozadí alebo príkaz v počítači. Zrušíte ju v orbe Stráže alebo vetou „zruš stráž ${w.id}".`
+  if ((await hudListeners()) >= 0) await postHud('/api/announce', { title: head, text, node: 'rutiny', icon: 'eye', silent: true, log: 'Nová stráž · pridaná na pozadí' })
+  await notify(`Jarvis: ${head}`, text)
 }
 
 async function checkOne(id) {
@@ -193,9 +210,12 @@ const watchPatch = () => {
 try {
   if (cmd === 'add') {
     const what = args.join(' ').trim()
-    const w = addWatch({ ...watchPatch(), what })
-    log(`${w.id} nová stráž: ${w.what} (${everyText(w.every)})`)
+    const via = opts.from === 'hud' ? 'hud' : 'cli'
+    const w = addWatch({ ...watchPatch(), what, via })
+    log(`${w.id} nová stráž: ${w.what} (${everyText(w.every)}, ${via})`)
     await refreshOrb({ create: true })
+    // A watch the user did not ask for in the HUD (a background job, a script) appears where he sees it.
+    if (via !== 'hud') await announceNew(w)
     // The first check runs right away in the background: it proves the plan works and takes the baseline.
     const d = checkDecision(w)
     if (!flags.has('no-check')) kickWatches()

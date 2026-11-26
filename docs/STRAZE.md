@@ -6,7 +6,13 @@ pod 60 000". Jarvis si zistí, kde sa to dá overiť, nastaví stráž a potvrd�
 Odvtedy to kontroluje sám na pozadí a ozve sa, **len keď to naozaj nastane**.
 
 Keď nastane: karta na ploche, riadok v LOGu, Jarvis to povie nahlas (mimo tichých hodín), príde oznámenie systému,
-a keď si o to povedal a hovory sú nastavené (`docs/HOVORY.md`), aj zavolá.
+a keď si o to povedal a hovory sú nastavené (`docs/HOVORY.md`), aj zavolá. Telefonát povie len pevnú vetu s tvojimi
+vlastnými slovami („Pane, splnila sa stráž: keď zlacnie let pod 80 €. Podrobnosti máte na obrazovke."), čo kontrola
+našla, ostáva na karte na obrazovke.
+
+Čo kontrola videla minule, dostane ďalšia kontrola ako ohraničené údaje (najviac 400 znakov), nikdy ako pokyny: text
+zo stránky alebo z mailu tak nemôže stráž prepísať. Stráž, ktorú si nezadal sám v rozhovore s Jarvisom (pridala ju
+úloha na pozadí alebo príkaz `node scripts/watch.mjs add`), sa ohlási kartou a oznámením, aby si o nej vedel.
 
 ## Ako sa s nimi hovorí
 

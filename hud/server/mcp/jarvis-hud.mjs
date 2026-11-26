@@ -44,7 +44,8 @@ const hudEnv = () => ({ ...process.env, ...(HUD_PORT ? { PORT: HUD_PORT } : {}) 
 /** Runs scripts/watch.mjs with --json against this HUD and returns its answer. */
 function watchScript(args) {
   return new Promise((resolve) => {
-    execFile(process.execPath, [join(REPO, 'scripts', 'watch.mjs'), ...args, '--json'], { cwd: REPO, timeout: 60_000, windowsHide: true, env: hudEnv() }, (err, stdout) => {
+    // --json right after the command: everything after a `--` is the sentence.
+    execFile(process.execPath, [join(REPO, 'scripts', 'watch.mjs'), args[0], '--json', ...args.slice(1)], { cwd: REPO, timeout: 60_000, windowsHide: true, env: hudEnv() }, (err, stdout) => {
       try {
         resolve(JSON.parse(stdout.slice(stdout.indexOf('{'), stdout.lastIndexOf('}') + 1)))
       } catch {
@@ -317,7 +318,10 @@ serveMcp({
           ...(call === true ? ['--call'] : quiet === true ? ['--quiet'] : call === false || quiet === false ? ['--voice'] : []),
           ...(urgent === true ? ['--urgent'] : urgent === false && action === 'edit' ? ['--not-urgent'] : []),
         ]
-        const args = action === 'add' ? ['add', String(what ?? ''), ...opt] : action === 'edit' ? ['edit', String(id ?? ''), ...opt] : [String(action), String(id ?? '')]
+        // add: was it the user's own request in the HUD (then the brain confirms it aloud), or Jarvis on his own (then it is announced)?
+        const from = action === 'add' && (await hud('turn', {}).catch(() => null))?.user === true ? ['--from', 'hud'] : []
+        // The sentence goes after `--`: words starting with -- stay words, never flags.
+        const args = action === 'add' ? ['add', ...opt, ...from, '--', String(what ?? '')] : action === 'edit' ? ['edit', String(id ?? ''), ...opt] : [String(action), '--', String(id ?? '')]
         const r = await watchScript(args)
         if (!r.ok) return { text: r.error ?? 'Stráž sa nepodarilo zmeniť.', isError: true }
         return action === 'add' ? `${r.summary} Potvrď jednou vetou, čo strážiš a ako často. Plán kontroly ani model nahlas nečítaj.` : `${r.summary} Povedz to jednou vetou.`
@@ -382,6 +386,7 @@ serveMcp({
               language: { type: 'string', enum: ['sk', 'cs'] },
               stt: { type: 'string', enum: ['auto', 'browser', 'whisper'], description: 'Rozpoznávanie reči: auto, v prehliadači, alebo lokálny Whisper.' },
               wake: { type: 'boolean', description: 'Počúvanie na slová „Hey Jarvis". Ide len s lokálnym Whisperom.' },
+              telemetry: { type: 'boolean', description: 'false vypne anonymné štatistiky. Zapnúť ich vie len používateľ sám v Nastaveniach, časť Asistent.' },
             },
           },
         },
