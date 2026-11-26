@@ -46,17 +46,18 @@ rozhovorom na ploche. Ty nevypĺňaš dotazník a na nič sa nepýtaš.
    - Chýba: **macOS** `brew install node` (keď je Homebrew), inak ho popros o inštaláciu LTS z https://nodejs.org. **Windows** `winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements`.
    - Po inštalácii Node treba tento program zavrieť a otvoriť znova a napísať `štart`.
 3. Len macOS: keď je priečinok v Stiahnutých, na Ploche alebo v Dokumentoch, systém tam rutinám na pozadí a budíku často nedovolí čítať. Povedz mu, nech priečinok vo Finderi presunie do domovského priečinka (napríklad `~/Jarvis`), otvorí ho znova a napíše `štart`. Ak ho chce nechať, pokračuj.
-4. Jediná otázka pred prípravou: **kde ma chce mať.** Polož ju jednou správou a ku každej možnosti daj jednu vetu:
-   - **Na pracovnej ploche** (len macOS, odporúčaná): Jarvis je tam stále, pod oknami namiesto tapety, stačí zavrieť okná alebo stlačiť skratku. `--surface desktop`
-   - **Ako samostatná appka**: vlastné okno ako každý iný program, otvára sa ikonou Jarvis (Mac: Launchpad a priečinok Aplikácie, Windows: pracovná plocha a ponuka Štart). `--surface app`
+4. Jediná otázka pred prípravou: **kde ma chce mať.** Polož ju jednou správou, jednoducho, a ku každej možnosti daj jednu vetu:
+   - **Na pracovnej ploche** (len macOS): Jarvis je tam stále, pod oknami namiesto tapety, stačí zavrieť okná alebo stlačiť skratku. `--surface desktop`
+   - **Ako appka**: vlastné okno ako každý iný program, s ikonou Jarvis (Mac: v Docku, v Launchpade a v priečinku Aplikácie, Windows: na pracovnej ploche a v ponuke Štart). `--surface app`
    - **Ako stránka v prehliadači**: obyčajná karta v jeho prehliadači, ktorú si otvorí, keď chce. Povedz na rovinu, že hovoriť, zvoniť budíkom a pripomínať nahlas vie Jarvis, len keď je stránka otvorená. `--surface browser`
 
-   Na Macu odporuč plochu, na Windows appku (plocha tam nie je, neponúkaj ju). Keď nevie alebo je mu to jedno, ber odporúčanú. Zmeniť sa to dá kedykoľvek v Nastaveniach Jarvisa, časť Plocha: Jarvis sa presťahuje hneď, nové miesto sa otvorí a staré sa samo zavrie (plocha vráti ikony a skončí, okno appky sa zavrie, kartu v prehliadači si používateľ zavrie sám). Jarvis býva vždy len na jednom mieste.
+   Na Macu je plocha aj appka tá istá appka Jarvis, len inak položená, a obe sú dobrá voľba: nech vyberie, čo mu je bližšie. Keď nevie alebo je mu to jedno, ber plochu. Na Windows ber appku (plocha tam nie je, neponúkaj ju). Zmeniť sa to dá kedykoľvek v Nastaveniach Jarvisa, časť Plocha: Jarvis sa presťahuje hneď a býva vždy len na jednom mieste (na Macu sa appka sama presunie z plochy do okna alebo späť a pri stránke v prehliadači vráti plochu a zavrie sa, na Windows sa okno appky zavrie, kartu v prehliadači si používateľ zavrie sám).
 5. Spusti prípravu: `node scripts/setup.mjs --ai claude --surface desktop` (alebo `--ai codex`, `--ai antigravity`, podľa toho, kto si; `--surface` podľa odpovede). Trvá dve až pätnásť minút, podľa internetu:
    nainštaluje súčasti obrazovky, pomocníka `uv`, **lokálny Whisper** na rozpoznávanie reči (model vyberie podľa výkonu počítača
    a voľného miesta na disku; slabý alebo plný počítač ostane pri rozpoznávaní v prehliadači), **yt-dlp** a skladbu, ktorou
-   budík zvoní, a nakoniec položí Jarvisa na plochu a zapne mu štart po prihlásení. Pri ploche na Macu si postaví malú appku
-   (potrebuje nástroje pre vývojárov od Apple; keď chýbajú, príprava povie `xcode-select --install` a Jarvis zatiaľ beží v okne).
+   budík zvoní, a nakoniec položí Jarvisa na plochu a zapne mu štart po prihlásení. Na Macu si pri ploche aj pri appke postaví appku
+   Jarvis (potrebuje nástroje pre vývojárov od Apple; keď chýbajú, príprava povie `xcode-select --install` a Jarvis zatiaľ beží
+   v okne prehliadača). Appky Jarvisa zo starších verzií pri tom dá do koša, v Aplikáciách ostane jedna.
    - Kým to beží, povedz mu jednou vetou, čo sa deje. Výstup má riadky s `✓` a `!`.
    - Riadok s `!` je vec, ktorá sa nepodarila, a pod ním je, čo s ňou. Oprav to a spusti prípravu znova (dá sa opakovať, hotové kroky preskočí). Jarvis funguje aj bez nej, len slabšie.
    - „nie je prihlásený": prihlásenie je na ňom (`claude auth login`, `codex login` alebo pri Antigravity `node scripts/antigravity.mjs login`, v prehliadači klikne Povoliť). Jarvis potrebuje platené predplatné (Claude Pro alebo Max, ChatGPT Plus alebo Pro); pri Antigravity stačí účet Google, s Google AI Pro alebo Ultra vydrží dlhšie. Ak ho nemá, povedz to na rovinu hneď.
@@ -64,7 +65,8 @@ rozhovorom na ploche. Ty nevypĺňaš dotazník a na nič sa nepýtaš.
 7. Potom mu ľudsky a krátko vysvetli, čo sa práve stalo s jeho počítačom. Nepredpokladaj, že to vie:
    Podľa toho, čo si vybral, povedz len to jeho:
    - **Plocha (Mac).** Jarvis teraz žije na ploche namiesto tapety, pod všetkými oknami. Keď okná zavrie alebo schová, je tam. Skratka `Control + Option + J` ho vytiahne nad okná, `Esc` ho vráti späť. V lište úplne hore vpravo (pri hodinách) pribudol malý krúžok, to je menu Jarvisa: ukázať ho, Nastavenia, zobrazovať alebo skryť ikony na ploche, spúšťať po zapnutí počítača, vypnúť Jarvisa a vrátiť pôvodnú plochu. Keď mu na ploche zavadzajú súbory a priečinky, cez krúžok ich skryje: nič sa nemaže, ostávajú v priečinku Plocha a tou istou voľbou sa vrátia. Vypnutie: krúžok → „Vypnúť Jarvisa a vrátiť pôvodnú plochu".
-   - **Appka.** Jarvis je samostatné okno na celú obrazovku, `F11` (Mac: `Control + Command + F`) ho prepne na bežné okno a späť. Zavrie ho ako každé okno. Otvorí ho znova ikonou **Jarvis**: na Macu v Launchpade a v priečinku Aplikácie, na Windows na pracovnej ploche a v ponuke Štart. Po zapnutí počítača sa otvorí sám.
+   - **Appka (Mac).** Jarvis je appka **Jarvis** vo vlastnom okne ako každý iný program, s ikonou v Docku. Zelené tlačidlo okna alebo `Control + Command + F` ho dá na celú obrazovku. Keď okno zavrie, Jarvis beží ďalej (hovorí, zvoní, pripomína) a ikona Jarvis v Docku, v Launchpade alebo v priečinku Aplikácie ho vráti. Po zapnutí počítača sa otvorí sám.
+   - **Appka (Windows).** Jarvis je samostatné okno na celú obrazovku, `F11` ho prepne na bežné okno a späť. Zavrie ho ako každé okno. Otvorí ho znova ikonou **Jarvis** na pracovnej ploche a v ponuke Štart. Po zapnutí počítača sa otvorí sám.
    - **Stránka.** Jarvis je karta v jeho prehliadači na adrese `http://localhost:4545` (presný port je v `node scripts/hud.mjs --info`), nech si ju uloží medzi záložky. Na pozadí beží stále, aj po zapnutí počítača, ale okno sám neotvára. Hovoriť, zvoniť a pripomínať nahlas vie, len keď je stránka otvorená.
 
    A pri každej voľbe:
@@ -266,7 +268,7 @@ Pamäť v `memory/`, `config/jarvis.json`, `.env` a `data/` sa pri aktualizácii
 | `data/` | Stav a dočasné dáta: nastavenie, orby, appky, záznam aktivity, logy. Neukladá sa do gitu. |
 | `routines/` | Zadania rutín. |
 | `scripts/setup.mjs` | Príprava počítača a štart Jarvisa (`štart`), stav nastavenia (`status`, `note`). |
-| `scripts/hud.mjs` | Štart a stop obrazovky. `scripts/autostart.mjs`: štart po prihlásení. |
+| `scripts/hud.mjs` | Štart a stop obrazovky, otvorí Jarvisa tam, kde býva. `scripts/autostart.mjs`: štart po prihlásení. `scripts/launcher.mjs`: ikona Jarvis pre okno v prehliadači (Windows, Mac bez appky). |
 | `scripts/doctor.mjs` | Kontrola počítača. |
 | `scripts/orb.mjs` | Orby 3D sveta: pridať, naplniť, skryť. |
 | `scripts/suggest.mjs` | Odporúčania, čo pridať: zoznam, nové, hotové. |
@@ -280,7 +282,7 @@ Pamäť v `memory/`, `config/jarvis.json`, `.env` a `data/` sa pri aktualizácii
 | `scripts/activity.mjs` | Záznam aktivity: stav, deň, zapnúť, vypnúť, zmazať. |
 | `scripts/garmin.mjs` | Hodinky Garmin naživo. |
 | `scripts/update.mjs` | Aktualizácie. |
-| `hud/` | Server a obrazovka. `hud/server/provider.mjs`: na akej AI Jarvis beží. `hud/desktop/`: appka na plochu pre macOS. |
+| `hud/` | Server a obrazovka. `hud/server/provider.mjs`: na akej AI Jarvis beží. `hud/desktop/`: appka Jarvis pre macOS, na ploche aj vo vlastnom okne (`docs/DESKTOP-MAC.md`). |
 | `docs/` | Podrobnosti: orby, hlas, video, aktivita, Garmin, ovládanie, modely, hovory, autonómia, aktualizácie, Windows, API. |
 
 ## Keď niečo nejde
