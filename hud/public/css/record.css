@@ -1,0 +1,36 @@
+/* Record mode (js/record.js): the chip with a red dot and the time, and on a phone a small dot with the time above the command bar. */
+.chip-rec .ic-rec .rec-ring { fill: none; stroke: currentColor; stroke-width: 1.6; opacity: 0.55; }
+.chip-rec .ic-rec .rec-dot { fill: currentColor; }
+.chip-rec span { font-variant-numeric: tabular-nums; }
+.chip-rec.is-rec { background: rgba(255, 90, 78, 0.14); color: var(--white); }
+.chip-rec.is-rec .ic { color: var(--red); filter: drop-shadow(0 0 0.3em rgba(255, 90, 78, 0.8)); }
+.chip-rec.is-rec .rec-dot { animation: blink 1.4s steps(2, jump-none) infinite; }
+.chip-rec.is-rec:hover { background: rgba(255, 90, 78, 0.22); }
+.chip-rec.is-busy .ic { color: var(--amber); animation: breathe 1.6s ease-in-out infinite; }
+.chip-rec[disabled] { cursor: progress; }
+@media (max-width: 1080px) {
+  .chips .chip-rec.is-rec span { display: inline; }
+}
+.rec-live {
+  position: fixed;
+  /* above the command bar, where nothing else lives on a phone */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: none;
+  align-items: center;
+  gap: 0.45rem;
+  height: 1.75rem;
+  padding: 0 0.7rem 0 0.6rem;
+  border-radius: 0.875rem;
+  background: rgba(255, 90, 78, 0.16);
+  color: var(--white);
+  font: 500 0.8125rem/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.rec-live i { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--red); box-shadow: 0 0 0.5em rgba(255, 90, 78, 0.8); animation: blink 1.4s steps(2, jump-none) infinite; }
+@media (max-width: 560px) {
+  .rec-live:not([hidden]) { display: flex; }
+}

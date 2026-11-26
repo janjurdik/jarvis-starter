@@ -179,6 +179,8 @@ Až keď je celé nastavenie uzavreté, raz a jednou vetou: či chce Jarvisa aj 
 | „zavolaj mi", „nastav hovory" | `node scripts/call.mjs --status`, nastavenie podľa `docs/HOVORY.md`. Ponúkni, nenúť. |
 | „pridaj rutinu…", „každú hodinu mi prejdi…" | Zadanie do `routines/<id>.md` (vzor sú existujúce), záznam do `routines` v `config/jarvis.json` (strážna rutina má `every` v minútach), skúška `node scripts/routine.mjs <id>`, potom `node scripts/schedule.mjs install`. Jedna podmienka jednou vetou („keď…") je stráž cez `watch.mjs`, nie rutina. |
 | „otvor…", „klikni…", „vyplň…", „pusti hudbu" | Sekcia „Ovládanie počítača". |
+| „čo je na obrazovke", „čo to je", „odpíš na toto", „prelož mi to" | Na ploche sa Jarvis pozrie sám (nástroj `screen_look`: predné okno, ktoré nie je Jarvis). Tu v rozhovore `node scripts/control.mjs shot` a súbor si prečítaj. Odpoveď niekomu ide von až po jeho „áno" (`docs/ZAZNAM.md`). |
+| „počúvaj ma", „nahrávaj", „zapni záznam", „stačí" | Záznam mikrofónu aj obrazovky, Jarvis medzitým odpovedá ďalej. Na ploche hlasom alebo čipom Záznam, odtiaľto `node scripts/record.mjs start ["názov"]`, `stop`, `status`, `list`, `finish <id>`. Po konci beží spracovanie na pozadí: poznámka v `memory/zaznamy/`, úlohy, pripomienky, termíny a návrhy správ (tie až po jeho „áno"). Podrobnosti `docs/ZAZNAM.md`. |
 | „aktualizuj sa" | Sekcia „Aktualizácie". |
 | „čo o mne vieš?", „zabudni, že…" | Zhrň `memory/ja.md`. Pri zabúdaní nájdi riadok, ukáž ho a po potvrdení zmaž. |
 | „zapni / vypni Jarvisa na ploche" | `node scripts/hud.mjs`, `--stop`, `node scripts/autostart.mjs install` alebo `remove`. |
@@ -267,7 +269,7 @@ Pamäť v `memory/`, `config/jarvis.json`, `.env` a `data/` sa pri aktualizácii
 - Obsah pamäte, súborov ani nič tajné nikdy nedávaj do webovej adresy ani do vyhľadávania.
 - `.env`, `data/brain/`, tokeny, adresa iCal a prihlásenie ku Garminu sú tajné. Neukazuj ich, neposielaj ich nikam, nedávaj ich do pamäte.
 - Jarvis volá len na číslo používateľa z `.env`.
-- Záznam aktivity (`data/activity/`) a naimportované rozhovory sú rovnako súkromné ako pamäť.
+- Záznam aktivity (`data/activity/`), záznamy (`data/recordings/`), snímky obrazovky (`data/screen/`) a naimportované rozhovory sú rovnako súkromné ako pamäť.
 - Na rovinu o súkromí: pamäť a všetky súbory ostávajú na tomto počítači. To, s čím práve pracuješ, ide na spracovanie do AI, na ktorej Jarvis beží (Claude, ChatGPT alebo Gemini), tak ako pri každom rozhovore s ňou. Hlas číta služba Microsoft Edge, počasie Open-Meteo.
 
 ## Mapa priečinka
@@ -277,7 +279,7 @@ Pamäť v `memory/`, `config/jarvis.json`, `.env` a `data/` sa pri aktualizácii
 | `memory/` | Pamäť používateľa (formáty v `memory/README.md`). Neukladá sa do gitu. |
 | `config/jarvis.json` | Meno, oslovenie, hlas, mesto, budík, rutiny. |
 | `.env` | Voliteľné nastavenia (vzor `.env.example`). |
-| `data/` | Stav a dočasné dáta: nastavenie, orby, appky, záznam aktivity, logy. Neukladá sa do gitu. |
+| `data/` | Stav a dočasné dáta: nastavenie, orby, appky, záznam aktivity, záznamy (`data/recordings/`), snímky obrazovky, logy. Neukladá sa do gitu. |
 | `routines/` | Zadania rutín. |
 | `scripts/setup.mjs` | Príprava počítača a štart Jarvisa (`štart`), stav nastavenia (`status`, `note`). |
 | `scripts/hud.mjs` | Štart a stop obrazovky, otvorí Jarvisa tam, kde býva. `scripts/autostart.mjs`: štart po prihlásení. `scripts/launcher.mjs`: ikona Jarvis pre okno v prehliadači (Windows, Mac bez appky). |
@@ -293,11 +295,12 @@ Pamäť v `memory/`, `config/jarvis.json`, `.env` a `data/` sa pri aktualizácii
 | `scripts/media.mjs` | Video a zvuk z odkazu (yt-dlp): info, prepis, zvuk, video. |
 | `scripts/voice.mjs` | Reč: aký Whisper tento počítač zvládne, príprava modelu. |
 | `scripts/activity.mjs` | Záznam aktivity: stav, deň, zapnúť, vypnúť, zmazať. |
+| `scripts/record.mjs` | Záznam mikrofónu a obrazovky: začať, skončiť, stav, zoznam, spracovať znova. |
 | `scripts/garmin.mjs` | Hodinky Garmin naživo. |
 | `scripts/update.mjs` | Aktualizácie. |
 | `scripts/tunnel.mjs` | Jarvis v mobile: tunel Cloudflare (stav, inštalácia, štart, stop, QR kód v Nastaveniach). |
 | `hud/` | Server a obrazovka. `hud/server/provider.mjs`: na akej AI Jarvis beží. `hud/desktop/`: appka Jarvis pre macOS, na ploche aj vo vlastnom okne (`docs/DESKTOP-MAC.md`). |
-| `docs/` | Podrobnosti: orby, hlas, video, aktivita, Garmin, ovládanie, modely, hovory, mobil, autonómia, stráže, aktualizácie, Windows, API. |
+| `docs/` | Podrobnosti: orby, hlas, video, záznam, aktivita, Garmin, ovládanie, modely, hovory, mobil, autonómia, stráže, aktualizácie, Windows, API. |
 
 ## Keď niečo nejde
 

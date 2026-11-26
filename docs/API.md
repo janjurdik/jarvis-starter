@@ -184,9 +184,27 @@ one retry with the newest yt-dlp when the pinned one no longer understands a sit
 | `POST /api/remote/logout-all` | Loopback: every device logs out → `{ count }`. |
 | `WS /api/events/ws` | The SSE stream of `/api/events` over a WebSocket, one text message per write, same frames. Used by pages opened through the tunnel (a Cloudflare quick tunnel holds back SSE). `?client=phone` makes the window a phone: while it says it is alive (`{"alive":"<id>"}` or `POST /api/remote/alive`, every 20 s) it owns the voice. |
 
+### Record mode
+
+`docs/ZAZNAM.md` says what it does. Files: `data/recordings/<id>/` (`session.json`, `chunks.jsonl`, `audio/*.wav`,
+`zvuk.m4a`, `screen/video-<part>.webm`, `screen/shots/*.jpg`, `frames/*.jpg`, `transcript.md`). The id is the start:
+`2026-11-26-1432`. POST like every other POST (only this computer, or the token from the network), GET private like the
+conversation.
+
+| Method and path | What it does |
+|---|---|
+| `POST /api/record/start` | `{ title?, via? }` → `{ ok, session, already? }`. Starts a recording, or returns the running one (`already: true`). `507` with less than a gigabyte free. |
+| `POST /api/record/stop` | `{ id? }` → `{ ok, session }` with `status: "finishing"`. The open window sends its last chunk, the rest of the transcript is made, the sound is compressed, then a background job does the after-actions (`status: "processing"`, `job`). |
+| `POST /api/record/finish` | `{ id }` runs the after-actions again (an interrupted or failed recording). |
+| `POST /api/record/chunk?id=&kind=audio&seq=&at=&final=1` | Raw body: one WAV (PCM 16 bit, 16 kHz mono from the page) of about 5 s. `seq` is the chunk's place in time (80 ms frames from the start, so it never repeats across reloads), `at` the start in ms since the epoch. Written and fsynced before the answer; the same `seq` twice is taken once. `409` with `state` when the recording no longer runs. |
+| `POST /api/record/chunk?id=&kind=video&part=` | Raw body: a piece of the screen video (`MediaRecorder`, webm), appended to `screen/video-<part>.webm`. While pieces come, the server takes no pictures of its own. |
+| `POST /api/record/chunk?id=&kind=frame&at=` | Raw body: one JPEG taken from the screen video, for the after-actions. |
+| `GET /api/record` | `{ ok, active, recent, sttReady }`. A session: `{ id, title, status: recording\|finishing\|processing\|done\|failed, startedAt, endedAt, lastChunkAt, seconds, chunks, nextSeq, nextPart, bytes, screen: video\|shots, shots, transcribedSeconds, stt, interrupted, job, note, warn, dir }`. |
+| `GET /api/record/:id` | One session plus `transcript` (its last 6000 characters) and `transcriptFile`. |
+
 ## SSE `/api/events`
 
-Named events: `status`, `mode`, `voice`, `chat`, `tts`, `world`, `snapshot`, `job`, `job-feed` (`{ id, entry }`, one new line of a job's feed), `import`, `hud`, `history`, `settings`, `video`.
+Named events: `status`, `mode`, `voice`, `chat`, `tts`, `world`, `snapshot`, `job`, `job-feed` (`{ id, entry }`, one new line of a job's feed), `import`, `hud`, `history`, `settings`, `video`, `record` (a session as in `GET /api/record`, on every change of state and every few seconds while it records).
 
 One chat turn:
 
@@ -223,8 +241,8 @@ chat {turn:7, phase:"done", text:"<whole answer>", ms:5230, stopped:false}
 The voice brain is a warm `claude -p` process with three MCP servers from `hud/server/mcp/`:
 
 - `memory`: `calendar_list`, `view_todo`, `list_goals`, `upcoming_celebrations`, `get_health`, `memory_stats`, `search_notes`, `read_note`, `remember`, `add_todo`, `complete_todo`, `add_event`, `log_day`, `write_note`
-- `computer`: `open_app`, `open_url`
-- `jarvis-hud`: `hud_focus`, `hud_card`, `hud_log`, `weather`, `call_user`, `agent_task`, `agent_jobs`, `agent_reply`, `agent_stop`, `set_alarm` (runs `scripts/alarm.mjs`), `set_alarm_sound` (`{ sound }`: a file path, a link, `default` or `builtin`; runs `scripts/alarm.mjs sound`), `video_open` (`{ url }`), `video_seek` (`{ time, id? }`), `video_transcript` (`{ id?, from?, to?, query? }`), `video_info` (`{ id? }`), `video_control` (`{ action, rate?, id? }`), `video_close` (the video tools call `/api/video…`; text from a video is framed as data, never as instructions), `settings` (`{ set? }`: the same change as `POST /api/settings`, without `set` the current values and the voices)
+- `computer`: `open_app`, `open_url`, `media`, `volume`, `screen_look` (`{ selection?, whole? }`: a picture of the front window that is not Jarvis, or of the main screen; returns the picture itself and its path in `data/screen/`, plus the selected text with `selection`)
+- `jarvis-hud`: `hud_focus`, `hud_card`, `hud_log`, `weather`, `call_user`, `agent_task`, `agent_jobs`, `agent_reply`, `agent_stop`, `set_alarm` (runs `scripts/alarm.mjs`), `set_alarm_sound` (`{ sound }`: a file path, a link, `default` or `builtin`; runs `scripts/alarm.mjs sound`), `video_open` (`{ url }`), `video_seek` (`{ time, id? }`), `video_transcript` (`{ id?, from?, to?, query? }`), `video_info` (`{ id? }`), `video_control` (`{ action, rate?, id? }`), `video_close` (the video tools call `/api/video…`; text from a video is framed as data, never as instructions), `settings` (`{ set? }`: the same change as `POST /api/settings`, without `set` the current values and the voices), `record_start` (`{ title? }`), `record_stop`, `record_status` (record mode, `docs/ZAZNAM.md`)
 
 plus the built-in `WebSearch` and `WebFetch`, and `Read` limited to `memory/prilohy` (files dropped into the HUD;
 `data/brain` is denied explicitly).
@@ -245,6 +263,7 @@ plus the built-in `WebSearch` and `WebFetch`, and `Read` limited to `memory/pril
   `JARVIS_PREPARE_WAIT_S` seconds (default 900).
 
 - `scripts/job.mjs "<task>" --title "<title>"` → `POST /api/jobs` (starts the server when it is not running), `--list` → `GET /api/jobs`.
+- `scripts/record.mjs start ["<title>"] | stop | status | list | finish <id> [--json]` → `/api/record…` (record mode).
 - `scripts/say.mjs "<text>"` → `POST /api/say` when a HUD window is connected (`GET /api/health` → `clients`), otherwise the
   computer's speakers (`hud/server/speak.mjs`).
 - `scripts/pulse.mjs` and `scripts/routine.mjs` post `/api/announce` with `silent: true` when no window is connected and

@@ -25,7 +25,7 @@ import { Brain, EFFORT, MODEL } from './server/brain.mjs'
 import { AntigravityBrain } from './server/brain-antigravity.mjs'
 import { CodexBrain } from './server/brain-codex.mjs'
 import { aiProvider } from './server/provider.mjs'
-import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onVoiceChange, sayText, sendChat, setVoice, standaloneCard, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
+import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onUserTurn, onVoiceChange, sayText, sendChat, setVoice, standaloneCard, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
 import { CONFIG_FILE, getConfig } from './server/config.mjs'
 import { createJob, initJobs, jobDetail, jobFile, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob, waitNudge } from './server/jobs.mjs'
 import { normalizeCard } from './server/cards.mjs'
@@ -36,7 +36,7 @@ import { openStream, send, sendHud, setGreeting, clientCount, desktopCount, role
 import { saveState, setPersist, state } from './server/state.mjs'
 import { pruneTtsCache, stopTts, ttsFileExists, ttsInfo, warmCommonPhrases } from './server/tts.mjs'
 import { BRAIN_DIR, DATA_DIR, REPO, clean, errMsg, isLoopback, log, readJson, readRaw, sendJson, slug, winSys, writeFileAtomic } from './server/util.mjs'
-import { STT_ENGINE, sttLocal, sttState, stopStt, transcribeAudio, warmStt } from './server/stt.mjs'
+import { STT_ENGINE, sttLocal, sttState, stopStt, transcribeAudio, transcribeFile, warmStt } from './server/stt.mjs'
 import { getWeather } from './server/weather.mjs'
 import { routeHands } from './server/hands.mjs'
 import { routeInner } from './server/inner.mjs'
@@ -55,6 +55,7 @@ import { addSuggestion, dismissSuggestion, suggestContextNote, suggestions } fro
 import { FIRST_RUN_TEXT, addressOf } from './server/persona.mjs'
 import { attachEventsSocket, deny, initMobile, isPhone, openPath, routeMobile, sessionFor, stopMobile, tunnelHosts } from './server/mobile.mjs'
 import { kickWatches } from './server/watches.mjs'
+import { brainRecord, initRecordings, noteTalk, routeRecordGet, routeRecordPost } from './server/record.mjs'
 
 const ROOT = import.meta.dirname
 const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
@@ -228,7 +229,7 @@ function allowRead(req, url) {
   if (isLocal(req)) return true
   return remoteTokenOk(req, url) || hasSession(req)
 }
-const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|settings|orbs|inner|setup|attachment|import|update|video|hands)|tts\/)/
+const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|settings|orbs|inner|setup|attachment|import|update|video|hands|record)|tts\/)/
 
 async function serveFile(req, res, file, { cache, immutable = false }) {
   let info
@@ -627,6 +628,11 @@ async function routePost(req, res, path) {
         return sendJson(res, err.status ?? 500, { ok: false, error: err.message })
       }
     }
+    // Record mode by voice: record_start, record_stop, record_status (server/record.mjs).
+    if (body.action === 'record') {
+      const r = await brainRecord(body)
+      return sendJson(res, r.ok ? 200 : 400, r)
+    }
     // The brain's `settings` tool: the same change POST /api/settings makes (server/settings.mjs).
     if (body.action === 'settings') return sendJson(res, 200, await brainSettings(body))
     const result = String(body.action ?? '').startsWith('job_') ? await jobAction(body) : hudAction(body)
@@ -634,6 +640,8 @@ async function routePost(req, res, path) {
   }
   if (!allowPost(req)) return sendJson(res, 403, { ok: false, error: 'POST len z localhostu alebo s x-hud-token' })
   if (path === '/api/stt') return postStt(req, res)
+  // Record mode: start, stop and the chunks of sound and screen from the page (server/record.mjs).
+  if (await routeRecordPost(req, res, new URL(req.url ?? '/', 'http://hud.local'))) return
   // Uploads (streamed bodies), imports and the people review: server/imports.mjs.
   if (await routeImportPost(req, res, new URL(req.url ?? '/', 'http://hud.local'), { local: isLocal(req), film: state.film })) return
   // The video theater: open a link, seek, play and pause (server/video.mjs).
@@ -873,6 +881,8 @@ async function route(req, res) {
   if (await routeImportGet(req, res, url, { film: state.film })) return
   // Analysed videos: state, transcript and the file itself with range requests (server/video.mjs).
   if (await routeVideoGet(req, res, url)) return
+  // Record mode: the running recording and the latest ones (server/record.mjs).
+  if (await routeRecordGet(req, res, url)) return
   if (path === '/api/weather') {
     try {
       const days = Math.min(7, Math.max(1, Number(url.searchParams.get('days')) || 3))
@@ -1042,6 +1052,21 @@ initJobs({
 if (PRIMARY) loadJobs().catch(() => {})
 // Stráže (docs/STRAZE.md): while the HUD runs, a due watch is checked within a minute; the pulse covers the time without it.
 if (PRIMARY) setInterval(() => kickWatches(), 60_000).unref()
+
+// Record mode (docs/ZAZNAM.md). A secondary instance picks up recordings only in a data folder of its own.
+initRecordings({
+  send,
+  sendHud,
+  createJob,
+  listJobs,
+  clients: clientCount,
+  persist: PRIMARY || Boolean(process.env.JARVIS_DATA_DIR),
+  // Push-to-talk and the wake word go first, the recording's transcript waits for them.
+  busy: () => ['listening', 'transcribing'].includes(voiceState()),
+  sttReady: () => sttLocal(),
+  transcribe: (file, prompt) => transcribeFile(file, prompt),
+}).catch((err) => log('record', errMsg(err)))
+onUserTurn((text, via) => noteTalk(text, via))
 
 initImports({
   standaloneCard,
