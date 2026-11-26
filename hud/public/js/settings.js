@@ -9,6 +9,7 @@
 //   settings.open()   settings.close()   settings.apply(body)   settings.isOpen()
 
 import { icon } from './icons.js'
+import { qrSvg } from '../m/qr.js'
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
 const num = (v, unit) => Number(String(v ?? '0').replace(unit, '')) || 0
@@ -41,7 +42,61 @@ const TABS = [
   ['pokoj', 'spanok', 'Pokoj'],
   ['hovory', 'phone', 'Telefonáty'],
   ['plocha', 'app', 'Plocha'],
+  ['mobil', 'mobile', 'Mobil'],
 ]
+
+const when = (ms) => {
+  if (!ms) return ''
+  const d = new Date(ms)
+  const today = new Date().toDateString() === d.toDateString()
+  const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+  return today ? `dnes ${hm}` : `${d.getDate()}. ${d.getMonth() + 1}. ${hm}`
+}
+
+/**
+ * Mobil: Jarvis on the phone through a Cloudflare tunnel, behind an email and a password (docs/MOBIL.md).
+ * Its data comes from /api/remote/status, not from the settings body; only this computer can change it.
+ */
+function mobileSection(m, port) {
+  if (!m) return '<h3>Mobil</h3><p class="st-lead">Načítavam…</p>'
+  if (!m.local) return `<h3>Mobil</h3><p class="st-lead">Mobilný prístup sa nastavuje len priamo na počítači, kde bežím.${m.enabled ? ' Teraz je zapnutý, preto ma vidíte aj tu.' : ''}</p>`
+  const t = m.tunnel ?? { state: 'off' }
+  const ready = Boolean(m.email && m.hasPassword)
+  const named = m.mode === 'named'
+  const state = !ready
+    ? 'Najprv nižšie nastavte e-mail a heslo.'
+    : !m.enabled
+      ? 'Vypnutý. Som dostupný len z tohto počítača.'
+      : t.state === 'running'
+        ? 'Zapnutý. Tunel beží a mobil sa ku mne dostane.'
+        : t.state === 'error'
+          ? `<span class="is-warn">Tunel nejde: ${esc(t.error ?? 'neznáma chyba')}</span>`
+          : `<span class="is-busy">${t.installing ? 'Inštalujem cloudflared…' : 'Otváram tunel…'}</span>`
+  const qr = m.address
+    ? `<div class="st-mob"><div class="st-qr">${qrSvg(m.address, { label: 'QR kód adresy Jarvisa' })}</div><div class="st-mob-t"><b>Naskenujte ma mobilom</b><span class="st-url">${esc(m.address.replace(/^https:\/\//, '').replace(/\/$/, ''))}</span><em>Prihláste sa e-mailom a heslom a pridajte si ma na plochu: na iPhone v Safari Zdieľať a Pridať na plochu, na Androide v Chrome ponuka a Pridať na plochu.</em>${named ? '' : '<em>Táto adresa sa mení pri každom spustení tunela. Trvalú dá vlastný tunel Cloudflare.</em>'}<div class="st-acts is-flat"><button type="button" class="st-btn is-quiet" data-mob-copy="${esc(m.address)}">Kopírovať adresu</button></div></div></div>`
+    : ''
+  const devices = m.devices ?? []
+  const devList = devices.length ? devices.map((d) => `${esc(d.device)}${d.seen ? `, naposledy ${esc(when(d.seen))}` : ''}`).join('<br>') : 'Zatiaľ žiadne.'
+  return `<h3>Mobil</h3><p class="st-lead">Rozhovor, hlas a úlohy aj v mobile, odkiaľkoľvek. Mobil sa ku mne pripája cez šifrovaný tunel Cloudflare a pustí len toho, kto pozná váš e-mail a heslo. Tu na počítači heslo netreba.</p>
+    ${row('Mobilný prístup', toggle('data-mob-on', m.enabled, { disabled: !ready }), state, 'is-tall')}
+    ${qr}
+    ${row('E-mail', `<input class="st-in" type="email" data-mob="email" maxlength="200" value="${esc(m.email ?? '')}" placeholder="vas@email.sk" spellcheck="false" autocomplete="username">`)}
+    ${row('Heslo', `<input class="st-in" type="password" data-mob="password" maxlength="200" placeholder="${m.hasPassword ? 'nastavené, nové napíšte sem' : `aspoň ${m.passwordMin ?? 10} znakov`}" autocomplete="new-password">`)}
+    ${row('Heslo znova', `<input class="st-in" type="password" data-mob="password2" maxlength="200" placeholder="pre istotu ešte raz" autocomplete="new-password">`)}
+    <div class="st-acts"><button type="button" class="st-btn" data-mob-save>Uložiť prihlásenie</button><span class="st-call-msg" data-mob-msg="login" role="status"></span></div>
+    ${row('Tunel', seg('mobmode', [['quick', 'Rýchly'], ['named', 'Vlastný Cloudflare']], named ? 'named' : 'quick'), named ? 'Trvalá adresa na vašej doméne cez váš účet Cloudflare.' : 'Bez účtu a bez nastavovania. Adresa sa mení pri každom spustení.', 'is-tall')}
+    ${
+      named
+        ? `${row('Adresa', `<input class="st-in" type="text" data-mob="hostname" maxlength="200" value="${esc(m.hostname ?? '')}" placeholder="jarvis.vasa-domena.sk" spellcheck="false" autocomplete="off">`)}
+    ${row('Token tunela', `<input class="st-in" type="password" data-mob="token" placeholder="${m.hasToken ? 'uložený, nový vložte sem' : 'dlhý reťazec z Cloudflare'}" spellcheck="false" autocomplete="off">`, 'Cloudflare, Zero Trust, Networks, Tunnels, nový tunel typu Cloudflared. Token je reťazec za --token v príkaze na inštaláciu.', 'is-tall')}
+    <div class="st-acts"><button type="button" class="st-btn" data-mob-tunnel>Uložiť tunel</button><span class="st-call-msg" data-mob-msg="tunnel" role="status"></span></div>
+    <p class="st-note">V nastavení tunela pridajte Public hostname s vašou adresou a službou http://localhost:${esc(port)}.</p>`
+        : ''
+    }
+    ${row('Prihlásené zariadenia', `<span class="st-val">${devices.length}</span>`, devList, 'is-tall')}
+    <div class="st-acts"><button type="button" class="st-btn is-quiet" data-mob-logout ${devices.length ? '' : 'disabled'}>Odhlásiť všetky zariadenia</button><span class="st-call-msg" data-mob-msg="devices" role="status"></span></div>
+    <p class="st-note">Kto pozná tento e-mail a heslo, ovláda cez mňa tento počítač: číta vašu pamäť a spúšťa úlohy. Zvoľte silné heslo, ktoré nikde inde nepoužívate. Heslo píšte len sem, nikdy do rozhovoru so mnou.</p>`
+}
 
 export function createSettings({ onToast = () => {} } = {}) {
   injectCss()
@@ -61,6 +116,8 @@ export function createSettings({ onToast = () => {} } = {}) {
   const savedEl = root.querySelector('.st-saved')
 
   let data = null
+  let mobile = null
+  let mobileTimer = 0
   let open = false
   let tab = 'asistent'
   let audio = null
@@ -110,6 +167,45 @@ export function createSettings({ onToast = () => {} } = {}) {
         save(patch)
       }, ms),
     })
+  }
+
+  // ── Mobil: its own data, refreshed while the section is open (the tunnel gets its address after a few seconds) ──
+  const typing = () => open && body.contains(document.activeElement) && document.activeElement.matches('input')
+  async function loadMobile() {
+    try {
+      const res = await fetch('/api/remote/status', { cache: 'no-store' })
+      const json = await res.json()
+      if (!json?.ok || JSON.stringify(json) === JSON.stringify(mobile)) return
+      mobile = json
+    } catch {
+      return
+    }
+    if (open && tab === 'mobil' && !typing()) render()
+  }
+  function watchMobile() {
+    clearInterval(mobileTimer)
+    mobileTimer = 0
+    if (!open || tab !== 'mobil') return
+    loadMobile()
+    mobileTimer = setInterval(loadMobile, 2500)
+  }
+  async function mobilePost(path, payload, msgKey) {
+    const msg = body.querySelector(`[data-mob-msg="${msgKey}"]`)
+    if (msg) msg.textContent = 'Ukladám…'
+    try {
+      const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || json.ok === false) throw new Error(json.error || 'Nepodarilo sa.')
+      mobile = json
+      flashSaved()
+      render()
+      const after = body.querySelector(`[data-mob-msg="${msgKey}"]`)
+      if (after) after.textContent = 'Uložené.'
+    } catch (err) {
+      const now = body.querySelector(`[data-mob-msg="${msgKey}"]`)
+      if (now) now.textContent = err.message
+      else onToast(err.message)
+    }
   }
 
   // ── the voice sample ──
@@ -252,6 +348,8 @@ export function createSettings({ onToast = () => {} } = {}) {
               ? `Okno je na celú obrazovku, ${mac ? '⌃⌘F' : 'F11'} ho prepne na bežné okno a späť. Po prihlásení do počítača sa otvorím sám.`
               : 'Po prihlásení do počítača bežím potichu na pozadí a žiadne okno neotváram.'
         }</p>`,
+
+      mobil: mobileSection(mobile, location.port || '4545'),
     }
   }
 
@@ -259,7 +357,9 @@ export function createSettings({ onToast = () => {} } = {}) {
     if (!data) return
     const html = sections(data)
     nav.innerHTML = TABS.map(([id, ic, label]) => `<button type="button" role="tab" data-tab="${id}" aria-selected="${id === tab}">${icon(ic)}<span>${label}</span></button>`).join('')
-    body.innerHTML = `<section class="st-sec" data-sec="${tab}">${html[tab] ?? html.asistent}</section>`
+    // The same section drawn again (new values) stays put, only a newly opened one slides in.
+    const still = body.querySelector(`.st-sec[data-sec="${tab}"]`) !== null
+    body.innerHTML = `<section class="st-sec${still ? ' is-still' : ''}" data-sec="${tab}">${html[tab] ?? html.asistent}</section>`
   }
 
   /** New values from the server (after a save, or because Jarvis changed something himself). */
@@ -267,7 +367,7 @@ export function createSettings({ onToast = () => {} } = {}) {
     if (!next?.assistant) return
     // Do not redraw under the user's fingers: a field being typed in keeps its text.
     const active = document.activeElement
-    const typing = open && body.contains(active) && active.matches('input[type="text"], input[type="range"], input[type="time"], input[type="tel"], input[type="password"], input[type="date"]')
+    const typing = open && body.contains(active) && active.matches('input[type="text"], input[type="email"], input[type="range"], input[type="time"], input[type="tel"], input[type="password"], input[type="date"]')
     data = next
     if (!open) return
     if (!typing) return render()
@@ -306,6 +406,7 @@ export function createSettings({ onToast = () => {} } = {}) {
       if (name === 'formal') return save({ user: { formal: v === 'true' } })
       if (name === 'stt') return save({ stt: v })
       if (name === 'language') return save({ language: v })
+      if (name === 'mobmode') return mobilePost('/api/remote/settings', { mode: v }, 'tunnel')
     }
   })
   body.addEventListener('input', (e) => {
@@ -327,6 +428,7 @@ export function createSettings({ onToast = () => {} } = {}) {
     const t = e.target
     if (t.dataset.date === 'user.birthday') return save({ user: { birthday: t.value || null } })
     if (t.dataset.toggle === 'wake') return save({ wake: t.checked })
+    if (t.hasAttribute('data-mob-on')) return mobilePost('/api/remote/settings', { enabled: t.checked }, 'login')
     // The two switches of the menu bar icon: the desktop app flips them and reports back.
     if (t.dataset.desk) return desk()?.setPref?.(t.dataset.desk, t.checked)
     if (t.dataset.toggle === 'quiet' || t.dataset.time) {
@@ -366,6 +468,27 @@ export function createSettings({ onToast = () => {} } = {}) {
       msg.textContent = err.message
     }
   })
+  // Mobil: the password goes from these two fields straight to the server and is never shown again.
+  body.addEventListener('click', (e) => {
+    const field = (name) => body.querySelector(`[data-mob="${name}"]`)?.value ?? ''
+    if (e.target.closest('[data-mob-save]')) {
+      const payload = { email: field('email').trim() }
+      if (field('password')) Object.assign(payload, { password: field('password'), password2: field('password2') })
+      return mobilePost('/api/remote/settings', payload, 'login')
+    }
+    if (e.target.closest('[data-mob-tunnel]')) {
+      const payload = { mode: 'named', hostname: field('hostname').trim() }
+      if (field('token').trim()) payload.token = field('token').trim()
+      return mobilePost('/api/remote/settings', payload, 'tunnel')
+    }
+    if (e.target.closest('[data-mob-logout]')) return mobilePost('/api/remote/logout-all', {}, 'devices')
+    const copy = e.target.closest('[data-mob-copy]')
+    if (copy)
+      navigator.clipboard?.writeText(copy.dataset.mobCopy).then(
+        () => flashSaved('Skopírované'),
+        () => onToast(copy.dataset.mobCopy),
+      )
+  })
   // Typing in the sheet must not reach the HUD shortcuts (space is push-to-talk there).
   root.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -387,6 +510,7 @@ export function createSettings({ onToast = () => {} } = {}) {
     tab = b.dataset.tab
     render()
     body.scrollTop = 0
+    watchMobile()
   })
   // The desktop app: its menu opens this sheet, and its two switches are mirrored here.
   window.addEventListener('jarvis-desktop', (e) => {
@@ -396,12 +520,16 @@ export function createSettings({ onToast = () => {} } = {}) {
 
   function openSheet(section) {
     if (typeof section === 'string' && TABS.some(([id]) => id === section)) tab = section
-    if (open) return render()
+    if (open) {
+      render()
+      return watchMobile()
+    }
     open = true
     root.hidden = false
     requestAnimationFrame(() => root.classList.add('is-open'))
     if (data) render()
     load()
+    watchMobile()
     setTimeout(() => root.querySelector('.st-x').focus(), 60)
   }
 
@@ -409,6 +537,7 @@ export function createSettings({ onToast = () => {} } = {}) {
     if (!open) return
     open = false
     stopSample()
+    watchMobile()
     // Whatever was still waiting to be saved is saved now.
     for (const [key, t] of timers) {
       clearTimeout(t.timer)
