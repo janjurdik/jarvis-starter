@@ -8,6 +8,7 @@
 
 import { clamp } from './format.js'
 import { MIC_RATE, acquireNativeMic, nativeMicAvailable, wavBlob } from './native-mic.js'
+import { micAudio } from './mic-pick.js'
 
 const now = () => performance.now() / 1000
 const GAP = 0.06 // pauza medzi vetami, klipy už majú vlastné ticho na okrajoch
@@ -348,7 +349,7 @@ export function createSpeech({ onBlocked, onError, onPlayed, desktop = false } =
     if (!navigator.mediaDevices?.getUserMedia) return null
     micOpening = (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: MIC_AUDIO })
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: await micAudio(MIC_AUDIO) })
         ensure()
         if (ctx.state !== 'running') ctx.resume().catch(() => undefined)
         const source = ctx.createMediaStreamSource(stream)

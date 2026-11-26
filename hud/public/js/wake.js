@@ -18,6 +18,7 @@
 // onLevel(0..1): hlasitosť mikrofónu ~12x za sekundu, kým streamuje (na f.listen).
 
 import { acquireNativeMic, createGain, nativeMicAvailable } from './native-mic.js'
+import { micAudio } from './mic-pick.js'
 
 const levelOf = (rms) => Math.min(1, Math.sqrt(rms / 0.12))
 
@@ -168,7 +169,7 @@ export function createWake({ onLevel, onState, onError, query = null, desktop = 
       try {
         const media = await navigator.mediaDevices.getUserMedia({
           // Raw capture: the system's voice processing would take the microphone away from a call in another app (see speech.js).
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 },
+          audio: await micAudio({ echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }),
         })
         if (!wantMic) {
           for (const track of media.getTracks()) track.stop()

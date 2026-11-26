@@ -1182,9 +1182,21 @@ final class NativeMic: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     }
   }
 
+  /// The input to listen on. A Bluetooth headset's own microphone switches the headphones into their
+  /// call mode (HFP: mono, 16 kHz, Jarvis sounds canned) for as long as it is open. When the default
+  /// input is Bluetooth and the Mac has a built-in microphone, that one is used, so the headphones keep
+  /// their full sound. The page does the same in the browser (public/js/mic-pick.js).
+  nonisolated static func preferredDevice() -> AVCaptureDevice? {
+    guard let def = AVCaptureDevice.default(for: .audio) else { return nil }
+    func code(_ s: String) -> Int32 { Int32(bitPattern: s.utf8.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }) }
+    guard [code("blue"), code("blea")].contains(def.transportType) else { return def }
+    let mics = AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external], mediaType: .audio, position: .unspecified).devices
+    return mics.first { $0.transportType == code("bltn") } ?? def
+  }
+
   private func begin() {
     wanted = true
-    guard let device = AVCaptureDevice.default(for: .audio) else { return fail("no input device") }
+    guard let device = NativeMic.preferredDevice() else { return fail("no input device") }
     // Another default input since the last time (headphones plugged in): the session is built again.
     if session == nil || deviceID != device.uniqueID {
       session?.stopRunning()

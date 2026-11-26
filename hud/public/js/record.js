@@ -10,6 +10,7 @@
 
 import { MIC_RATE, acquireNativeMic, createGain, nativeMicAvailable } from './native-mic.js'
 import { esc } from './format.js'
+import { micAudio } from './mic-pick.js'
 
 /** About five seconds of sound per chunk: frames of 80 ms. */
 const FRAMES_PER_CHUNK = 63
@@ -197,7 +198,7 @@ export function initRecord({ on, toast = () => {}, ownsAudio = () => true, token
     }
     try {
       // Raw capture like the wake word: the system's voice processing would take the microphone from a call elsewhere.
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } })
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: await micAudio({ echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }) })
       if (mic !== m) return void stream.getTracks().forEach((t) => t.stop())
       const ctx = new AudioContext({ latencyHint: 'playback' })
       await ctx.audioWorklet.addModule(new URL('./mic-worklet.js', import.meta.url))
