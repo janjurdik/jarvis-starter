@@ -259,6 +259,11 @@ const ICONS = {
     s: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/>',
     l: '<rect x="10" y="17.4" width="4" height="1.4" rx=".7"/>',
   },
+  mobile: {
+    d: '<rect x="4.5" y="3" width="10" height="18" rx="2.5"/>',
+    s: '<rect x="4.5" y="3" width="10" height="18" rx="2.5"/><path d="M17.7 8.7a4.4 4.4 0 0 1 0 6.6M20.1 6.4a7.7 7.7 0 0 1 0 11.2"/>',
+    l: '<rect x="7.7" y="16.9" width="3.6" height="1.4" rx=".7"/>',
+  },
   route: {
     s: '<circle cx="5.4" cy="17.6" r="1.9"/><path d="M7.3 17.6H14a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6.6"/>',
     l: '<circle cx="18.8" cy="5.6" r="2.1"/>',

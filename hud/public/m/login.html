@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#04070a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Jarvis">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Jarvis</title>
+  <link rel="manifest" href="/m/manifest.json">
+  <link rel="icon" href="/m/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="/m/apple-touch-icon.png">
+  <link rel="stylesheet" href="/m/m.css">
+  <script type="module" src="/m/login.js"></script>
+</head>
+<body>
+  <main class="login">
+    <div class="login-in">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 40 40"><path class="r" d="M22.95 3.26A17 17 0 0 1 35.97 25.81M33.02 30.93A17 17 0 0 1 6.98 30.93M4.03 25.81A17 17 0 0 1 17.05 3.26"/><circle class="d" cx="20" cy="20" r="10.5"/><circle class="c" cx="20" cy="20" r="4.8"/></svg>
+      </span>
+      <h1>Jarvis</h1>
+      <p id="lead">Prihláste sa e-mailom a heslom, ktoré ste si nastavili v Jarvisovi na počítači.</p>
+      <form id="form" novalidate>
+        <label>E-mail<input type="email" name="email" id="email" autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" required></label>
+        <label>Heslo<input type="password" name="password" id="password" autocomplete="current-password" required></label>
+        <button type="submit" class="btn is-main" id="go">Prihlásiť sa</button>
+        <p class="err" id="err" role="alert"></p>
+      </form>
+      <small>Zabudli ste heslo? Nové si nastavíte na počítači v Nastaveniach Jarvisa, časť Mobil.</small>
+    </div>
+  </main>
+</body>
+</html>

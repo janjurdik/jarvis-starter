@@ -259,7 +259,8 @@ export function attachMic(server, o) {
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://hud.local')
     if (url.pathname !== '/api/mic') {
-      socket.destroy()
+      // The event stream for pages opened through the mobile tunnel has its own listener (server/mobile.mjs).
+      if (url.pathname !== '/api/events/ws') socket.destroy()
       return
     }
     if (!opts.allow(req, url)) {

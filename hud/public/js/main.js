@@ -37,6 +37,7 @@ import { DEMO_HISTORY } from './demo.js'
 import { toolIcon } from './icons.js'
 import { levelAt, loadAudio, play, syntheticLevel, syntheticWave, waveAt } from './audio.js'
 import { clamp, duration, easeOut, esc, nf, parseDay, plural, shortDate, wordTimes } from './format.js'
+import { openEvents } from './events.js'
 
 const params = new URLSearchParams(location.search)
 const CAPTURE = params.has('capture')
@@ -613,7 +614,7 @@ function onVoice(v) {
 
 function onWorld(w) {
   if (!w) return
-  if (w.panel === 'settings') return settings?.open()
+  if (w.panel === 'settings') return settings?.open(w.tab)
   // A flare without a camera move: an orb Jarvis just added or filled lights up.
   if (w.flare) (live.flareTimes[w.flare] ??= []).push(now())
   if (w.focus === 'appky') return focusNode('appky', w.app ?? null)
@@ -651,7 +652,7 @@ function renderStatusChips() {
 }
 
 function connectEvents() {
-  const source = new EventSource(`/api/events?client=${SURFACE}`)
+  const source = openEvents(`/api/events?client=${SURFACE}`)
   const on = (name, fn) =>
     source.addEventListener(name, (e) => {
       try {

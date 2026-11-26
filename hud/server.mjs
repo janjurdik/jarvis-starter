@@ -53,6 +53,7 @@ import { changeOrbs, getOrbs } from './server/orbs.mjs'
 import { getSetup, noteSetup, setupContextNote } from './server/setup.mjs'
 import { addSuggestion, dismissSuggestion, suggestContextNote, suggestions } from './server/suggest.mjs'
 import { FIRST_RUN_TEXT, addressOf } from './server/persona.mjs'
+import { attachEventsSocket, deny, initMobile, isPhone, openPath, routeMobile, sessionFor, stopMobile, tunnelHosts } from './server/mobile.mjs'
 
 const ROOT = import.meta.dirname
 const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
@@ -185,11 +186,15 @@ function isLocal(req) {
 }
 /** Names this server may be reached under from the network, when the user opened it on purpose (HUD_HOST=0.0.0.0): JARVIS_ALLOWED_HOSTS. */
 const remoteHosts = () => new Set(String(process.env.JARVIS_ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean))
-/** A Host header we do not know is refused outright: it is either a misconfigured tunnel or an attack. */
+/** A Host header we do not know is refused outright: it is either a misconfigured tunnel or an attack. The mobile tunnel's address counts while it runs. */
 function hostAllowed(req) {
   const h = hostName(req)
-  return LOCAL_HOSTS.has(h) || isIpHost(h) || remoteHosts().has(h)
+  return LOCAL_HOSTS.has(h) || isIpHost(h) || remoteHosts().has(h) || tunnelHosts().includes(h)
 }
+
+/** The phone's session (server/mobile.mjs) of a request from outside, looked up once per request in route(). */
+const sessions = new WeakMap()
+const hasSession = (req) => Boolean(sessions.get(req))
 
 /** The token is 192 random bits from the header, or ?token= where headers cannot be set (EventSource). */
 function remoteTokenOk(req, url = null) {
@@ -211,16 +216,16 @@ function originOk(req) {
   }
 }
 
-/** POST len z loopbacku (z vlastnej stránky), zo siete s x-hud-token. */
+/** POST len z loopbacku (z vlastnej stránky), zo siete s x-hud-token alebo s prihlásením z mobilu. */
 function allowPost(req) {
   if (isLocal(req)) return originOk(req)
-  return originOk(req) && remoteTokenOk(req)
+  return originOk(req) && (remoteTokenOk(req) || hasSession(req))
 }
 
-/** Osobné dáta (rozhovor, snapshot, hlas) zo siete len s tokenom v hlavičke alebo ?token= (EventSource). */
+/** Osobné dáta (rozhovor, snapshot, hlas) zo siete len s tokenom v hlavičke, ?token= (EventSource) alebo s prihlásením z mobilu. */
 function allowRead(req, url) {
   if (isLocal(req)) return true
-  return remoteTokenOk(req, url)
+  return remoteTokenOk(req, url) || hasSession(req)
 }
 const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|settings|orbs|inner|setup|attachment|import|update|video|hands)|tts\/)/
 
@@ -240,7 +245,8 @@ async function serveFile(req, res, file, { cache, immutable = false }) {
     // The page may load only what this server gives it and may not be framed by another site:
     // a second wall behind the escaping in the page (the brain behind this page controls a computer).
     ...(type.startsWith('text/html') ? { 'content-security-policy': CSP, 'referrer-policy': 'no-referrer', 'x-frame-options': 'SAMEORIGIN' } : {}),
-    'cache-control': immutable ? 'public, max-age=31536000, immutable' : cache ? 'public, max-age=86400' : 'no-cache',
+    // Through the tunnel nothing may stay in Cloudflare's cache, where it would be served without a login.
+    'cache-control': `${isLocal(req) ? 'public' : 'private'}, ${immutable ? 'max-age=31536000, immutable' : cache ? 'max-age=86400' : 'no-cache'}`.replace(/^public, no-cache$/, 'no-cache'),
     'accept-ranges': 'bytes',
     'last-modified': info.mtime.toUTCString(),
   }
@@ -297,6 +303,8 @@ setOnRolesChange(() => {
   life?.again()
 })
 initSettings({ statusChanged, primary: PRIMARY })
+// Jarvis on the phone: login and the Cloudflare tunnel (docs/MOBIL.md). Opens the tunnel again when it was on.
+initMobile({ port: PORT, primary: PRIMARY })
 
 /** The agent Jarvis runs on: Claude Code, Codex or Antigravity (server/provider.mjs). */
 const AI = aiProvider()
@@ -808,6 +816,17 @@ async function route(req, res) {
   const path = url.pathname
 
   if (!hostAllowed(req)) return sendJson(res, 421, { ok: false, error: 'neznáma adresa: Jarvis odpovedá len na localhost' })
+  // From outside (the phone through the tunnel) only with a login: everything else goes to the login page (server/mobile.mjs).
+  const local = isLocal(req)
+  const session = local ? null : sessionFor(req, res)
+  if (session) sessions.set(req, session)
+  if (!local && !session && !remoteTokenOk(req, url) && !openPath(req.method, path)) return deny(req, res, url)
+  if (path.startsWith('/api/remote/')) return routeMobile(req, res, path, { local, session, originOk: originOk(req) })
+  // A phone opening Jarvis lands on the light mobile page; ?hud=1 opens the whole HUD.
+  if (req.method === 'GET' && session && (path === '/' || path === '/index.html') && isPhone(req) && !url.searchParams.has('hud')) {
+    res.writeHead(302, { location: '/m/', 'cache-control': 'no-store' })
+    return res.end()
+  }
   if (req.method === 'POST') return routePost(req, res, path)
   if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { ok: false, error: 'len GET, HEAD a POST' })
   if (PRIVATE_GET.test(path) && !allowRead(req, url)) return sendJson(res, 403, { ok: false, error: 'zo siete len s tokenom (x-hud-token alebo ?token=)' })
@@ -869,6 +888,10 @@ async function route(req, res) {
   // keep and keepAt: the last move and when it was decided (server/surface.mjs).
   if (path === '/api/health') return sendJson(res, 200, { ok: true, port: PORT, clients: clientCount(), windows: roleCounts(), surface: surfaceOf(), primary: PRIMARY, ...(lastKeep ? { keep: lastKeep.keep, keepAt: lastKeep.at } : {}) })
 
+  // iOS asks for the home screen icon at the root.
+  if (path === '/apple-touch-icon.png' || path === '/apple-touch-icon-precomposed.png') {
+    if (await serveFile(req, res, join(PUBLIC_DIR, 'm', 'apple-touch-icon.png'), { cache: true })) return
+  }
   for (const mount of MOUNTS) {
     if (!path.startsWith(mount.prefix)) continue
     const rel = path.slice(mount.prefix.length) || 'index.html'
@@ -1036,7 +1059,7 @@ if (PRIMARY) loadImports().catch(() => {})
 import('./server/activity.mjs').then((m) => m.startActivity({ primary: PRIMARY })).catch((err) => log('activity', errMsg(err)))
 
 attachMic(server, {
-  allow: (req, url) => hostAllowed(req) && originOk(req) && (isLocal(req) || remoteTokenOk(req, url)),
+  allow: (req, url) => hostAllowed(req) && originOk(req) && (isLocal(req) || remoteTokenOk(req, url) || Boolean(sessionFor(req))),
   setVoice,
   voiceState,
   onCommand: (text, { mock, silent }) => {
@@ -1055,6 +1078,8 @@ attachMic(server, {
   fallback: async () => {},
 })
 onVoiceChange(onVoice)
+// The event stream over a WebSocket, for pages opened through the mobile tunnel (server/mobile.mjs).
+attachEventsSocket(server, { allow: (req, url) => hostAllowed(req) && originOk(req) && (isLocal(req) || remoteTokenOk(req, url) || Boolean(sessionFor(req))) })
 
 server.on('error', (err) => {
   console.error(err.code === 'EADDRINUSE' ? `✗ port ${PORT} je obsadený. Beží už HUD? Iný port: PORT=4546 npm start` : `✗ ${err.message}`)
@@ -1064,6 +1089,7 @@ server.on('error', (err) => {
 function shutdown(signal) {
   log('hud', `koniec (${signal})`)
   brain?.stop()
+  stopMobile()
   stopAllJobs()
   stopVideo()
   stopMic()
