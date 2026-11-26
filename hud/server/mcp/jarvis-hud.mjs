@@ -178,7 +178,7 @@ serveMcp({
       },
       handler: async ({ task, title, weight }) => {
         const r = await hud('job_task', { task, title, weight })
-        return r.isError ? r : `Úloha ${r.job.id} „${r.job.title}" ${r.job.status === 'queued' ? 'čaká vo fronte' : 'beží'}. Povedz jednu vetu, že si sa do toho pustil, a skonči. O náročnosti úlohy ani o modeli nehovor, používateľ ich vidí pri úlohe sám. Výsledok HUD ohlási sám.`
+        return r.isError ? r : `Úloha ${r.job.id} „${r.job.title}" ${r.job.status === 'queued' ? 'čaká vo fronte' : 'beží'}. Už si povedal, že na tom pracuješ: teraz nepíš NIČ, ani „Hotovo" (úloha ešte len beží), ani potvrdenie, ani zhrnutie, a skonči ťah. O náročnosti úlohy ani o modeli nehovor, používateľ ich vidí pri úlohe sám. Výsledok HUD ohlási sám.`
       },
     },
     {
@@ -188,7 +188,7 @@ serveMcp({
       inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
       handler: async ({ text }) => {
         const r = await hud('call', { text })
-        return r.isError ? r : 'Volám. Povedz jednu vetu a skonči.'
+        return r.isError ? r : 'Volám. Ak si to ešte nepovedal, jedna krátka veta, inak nič.'
       },
     },
     {
@@ -281,7 +281,7 @@ serveMcp({
       },
       handler: async (orb) => {
         const r = await hud('orb', { orb })
-        return r.isError ? r : `${r.summary} Povedz to jednou vetou.`
+        return r.isError ? r : `${r.summary} Povedz to jednou vetou, len ak si to ešte nepovedal; nič neopakuj.`
       },
     },
     {
@@ -335,7 +335,7 @@ serveMcp({
         const args = action === 'add' ? ['add', ...opt, ...from, '--', String(what ?? '')] : action === 'edit' ? ['edit', String(id ?? ''), ...opt] : [String(action), '--', String(id ?? '')]
         const r = await watchScript(args)
         if (!r.ok) return { text: r.error ?? 'Stráž sa nepodarilo zmeniť.', isError: true }
-        return action === 'add' ? `${r.summary} Potvrď jednou vetou, čo strážiš a ako často. Plán kontroly ani model nahlas nečítaj.` : `${r.summary} Povedz to jednou vetou.`
+        return action === 'add' ? `${r.summary} Potvrď jednou vetou, čo strážiš a ako často. Plán kontroly ani model nahlas nečítaj.` : `${r.summary} Povedz to jednou vetou, len ak si to ešte nepovedal; nič neopakuj.`
       },
     },
     {

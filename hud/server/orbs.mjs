@@ -273,6 +273,12 @@ function setContent(id, raw) {
       throw fail('Obsah orbu musí byť platný JSON.')
     }
   }
+  // What does not fit is refused with a reason instead of being cut on the screen: the brain then writes it again.
+  const len = (v) => String(typeof v === 'number' ? v : (v ?? '')).trim().length
+  if (value && typeof value === 'object') {
+    if (len(value.value) > 12) throw fail(`value je číslo na pohľad pri orbe, najviac 12 znakov (dostal som ${len(value.value)}). Daj tam len počet alebo krátke číslo, napríklad "10" alebo "4 h". Text patrí do sub (najviac 40 znakov), items alebo panel.`)
+    if (len(value.sub) > 40) throw fail(`sub je krátky popis pod číslom, najviac 40 znakov (dostal som ${len(value.sub)}). Dlhší text daj do panel (type text alebo list) alebo do items.`)
+  }
   const c = cleanContent(value)
   if (!c) throw fail('Obsah orbu musí byť objekt (value, sub, items, panel).')
   writeJsonFile(contentFile(id), { ...c, updatedAt: new Date().toISOString() })

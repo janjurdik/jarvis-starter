@@ -194,7 +194,7 @@ export function videoTools({ hudUrl, repo }) {
         if (value.startsWith('-')) return bad('Toto nie je súbor ani odkaz.')
         const r = await alarmSound(value)
         const text = r.summary ?? 'Zvuk budíka sa nepodarilo nastaviť.'
-        return r.ok === false ? bad(text) : `${text} Povedz to jednou vetou.${value ? ' Vyskúšať sa dá vetou „vyskúšaj budík".' : ''}`
+        return r.ok === false ? bad(text) : `${text} Povedz to jednou vetou, len ak si to ešte nepovedal.${value ? ' Vyskúšať sa dá vetou „vyskúšaj budík".' : ''}`
       },
     },
   ]
