@@ -1,4 +1,4 @@
-// AudioWorklet pre „Hey Jarvis": mikrofón → 16 kHz mono Int16, rámce po 1280 vzorkách (80 ms),
+// AudioWorklet pre „Ahoj Jarvis": mikrofón → 16 kHz mono Int16, rámce po 1280 vzorkách (80 ms),
 // presne to, čo čaká server na /api/mic (openWakeWord a Silero VAD). Prevzorkovanie: 2× Butterworth
 // low-pass pri 7 kHz (proti aliasingu) a lineárna interpolácia, pri 16 kHz vstupe len prevod.
 // Správa do hlavného vlákna: { pcm: ArrayBuffer (Int16 × 1280), rms: 0..1 }.

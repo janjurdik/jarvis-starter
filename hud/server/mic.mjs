@@ -1,9 +1,13 @@
 /**
- * "Hey Jarvis" from the browser microphone (optional). The page streams 16 kHz mono int16 PCM
+ * "Ahoj Jarvis" from the browser microphone (optional). The page streams 16 kHz mono int16 PCM
  * over the WebSocket /api/mic (frames of 1280 samples), a persistent Python worker
  * (openWakeWord + Silero VAD, started through uv) looks for the wake word and records the rest
  * of the sentence, the local Whisper worker transcribes it and the text goes to the chat.
  * Needs a local speech-to-text engine (JARVIS_STT=mlx or faster), see docs/HLAS.md.
+ *
+ * The model is openWakeWord's hey_jarvis. It also reacts to "Ahoj Jarvis", only with a lower
+ * score, so the threshold is lower (0.25) and a weak detection counts only when the transcript
+ * (with ~1.6 s from before the detection) really says Jarvis. "Hey Jarvis" keeps working.
  *
  * Only the latest client is active. While Jarvis speaks and 0.6 s after, the wake word is not
  * searched (echo from the speakers). A wake word interrupts a running answer.
@@ -20,15 +24,24 @@ const UV = findBin('uv', { override: process.env.UV_BIN })
 /** Wake word needs uv (Python worker) and a local Whisper to transcribe the command. */
 export const wakeAvailable = () => Boolean(UV) && sttLocal()
 
-/** Removes "Hey Jarvis" (and common mishearings) from a transcript. */
+const plainText = (text) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+/** "Jarvis" as Whisper writes it (Džarvis, Jarvisi, Jervis, Charvis…), optionally after ahoj/hey/čau. */
+const WAKE_RE = /\b(?:(?:ahoj|ahoy|ahooj|hoj|hey|hej|ej|hi|cau|cus)[\s,]+)?(?:d?[zj]arv[iy]s\w*|jervis\w*|charvis\w*|harvis\w*)\b[\s,.!?:]*/g
+
+/** Removes "Ahoj Jarvis" (and "Hey Jarvis", common mishearings) from a transcript. */
 export function stripWakeWord(text) {
-  const plain = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  const match = /\b(?:(?:hey|hej|ej|hi)[\s,]+)?(d?[zj]arv[iy]s\w*|jervis\w*|charvis\w*)\b[\s,.!?:]*/.exec(plain)
+  const match = new RegExp(WAKE_RE.source).exec(plainText(text))
   if (!match) return text.trim()
   const before = text.slice(0, match.index)
   const after = text.slice(match.index + match[0].length)
   return `${before} ${after}`.replace(/\s+/g, ' ').replace(/^[\s,.!?]+|[\s,]+$/g, '').trim()
 }
+
+/** Whether a transcript contains the wake word at all. */
+export const hasWakeWord = (text) => new RegExp(WAKE_RE.source).test(plainText(String(text ?? '')))
+
+/** Wake score from which a detection counts without checking the transcript. */
+export const SURE_SCORE = 0.5
 const REC_DIR = join(BRAIN_DIR, 'stt')
 const ECHO_TAIL_MS = 600
 const STREAM_LIVE_MS = 1500
@@ -55,6 +68,7 @@ let workerUp = false
 let workerIdleTimer = null
 let lastLevelAt = 0
 let wakeAt = 0
+let wakeScore = 1
 let busy = false
 const stats = { wakes: 0, commands: 0, last: null }
 
@@ -79,7 +93,7 @@ function startWorker() {
   if (!UV) return Promise.reject(new Error('uv sa nenašiel'))
   workerReady = (async () => {
     await mkdir(REC_DIR, { recursive: true, mode: 0o700 })
-    const thresh = /^[\d.]+$/.test(process.env.JARVIS_WAKE_THRESHOLD ?? '') ? process.env.JARVIS_WAKE_THRESHOLD : '0.5'
+    const thresh = /^[\d.]+$/.test(process.env.JARVIS_WAKE_THRESHOLD ?? '') ? process.env.JARVIS_WAKE_THRESHOLD : '0.25'
     log('mic', 'spúšťam wake worker (openWakeWord + Silero VAD)')
     const proc = spawnBin(UV, ['run', '--quiet', join(ROOT, 'server/wake/wake_worker.py')], {
       cwd: ROOT,
@@ -154,8 +168,9 @@ function onWorkerEvent(msg) {
   if (msg.event === 'wake') {
     stats.wakes++
     wakeAt = Date.now()
+    wakeScore = Number(msg.score) || 0
     busy = true
-    log('mic', `„Hey Jarvis" (skóre ${msg.score})`)
+    log('mic', `„Ahoj Jarvis“ (skóre ${msg.score})`)
     opts.onWakeWord()
     opts.setVoice('wake')
     setTimeout(() => busy && opts.setVoice('listening', { level: 0 }), 100)
@@ -171,10 +186,15 @@ function onWorkerEvent(msg) {
   if (msg.event === 'end') handleEnd(msg).catch((err) => log('mic', errMsg(err)))
 }
 
-/** Text po wake slove: bez „Hey Jarvis" a bez chvosta „…vis" z pre-rollu. */
+/**
+ * Text po wake slove. Nahrávka začína ~1,6 s pred detekciou, preto sa berie len to, čo je za
+ * prvým „Jarvis“ (ďalšie už patria do príkazu); bez neho (silná detekcia) celý prepis bez chvosta „…vis“ z pre-rollu.
+ */
 export function cleanCommand(text) {
-  let t = stripWakeWord(String(text ?? ''))
-  t = t.replace(/^\s*(?:hey|hej|ej)?[\s,]*(?:d?[zj]a)?(?:rvis|vis|wis|is)(?=[\s,.!?:]|$)[\s,.!?:]*/i, '')
+  const raw = String(text ?? '')
+  const hit = new RegExp(WAKE_RE.source).exec(plainText(raw))
+  let t = hit ? raw.slice(hit.index + hit[0].length) : raw
+  if (!hit) t = t.replace(/^\s*(?:ahoj|hey|hej|ej)?[\s,]*(?:d?[zj]a)?(?:rvis|vis|wis|is)(?=[\s,.!?:]|$)[\s,.!?:]*/i, '')
   return t.replace(/^[\s,.!?:]+/, '').trim()
 }
 
@@ -193,6 +213,13 @@ async function handleEnd(msg) {
   opts.setVoice('transcribing')
   try {
     const { text, ms } = await transcribeFile(msg.path)
+    if (wakeScore < SURE_SCORE && !hasWakeWord(text)) {
+      // Slabá detekcia a v prepise žiadny Jarvis: planý poplach, potichu späť.
+      busy = false
+      log('mic', `slabý wake (skóre ${wakeScore}) bez „Jarvis“ v prepise, ignorujem`)
+      opts.setVoice('idle')
+      return
+    }
     const command = cleanCommand(text)
     stats.last = { wakeToEndMs: tEnd - wakeAt, sttMs: ms, endToChatMs: Date.now() - tEnd, audioMs: msg.audio_ms, reason: msg.reason, chars: command.length }
     log('mic', `príkaz: ${msg.audio_ms} ms zvuku (${msg.reason}), prepis ${ms} ms, koniec vety → chat ${Date.now() - tEnd} ms, ${command ? `${command.length} znakov` : 'prázdny'}`)
@@ -316,7 +343,7 @@ function onConnection(ws, url) {
   ws.on('error', () => {})
 }
 
-/** Zapne alebo vypne „Hey Jarvis" cez prehliadač. */
+/** Zapne alebo vypne „Ahoj Jarvis“ cez prehliadač. */
 export function setMicWake(on) {
   wakeOn = Boolean(on) && wakeAvailable()
   toClient(client, { type: 'wake', on: wakeOn })

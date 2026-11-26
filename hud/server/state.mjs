@@ -1,5 +1,5 @@
 /**
- * Trvalý stav, ktorý musí prežiť reštart: režim natáčania a „Hey Jarvis".
+ * Trvalý stav, ktorý musí prežiť reštart: režim natáčania a „Ahoj Jarvis".
  * Natáčanie hlavne: keď server spadne počas natáčania, nesmie sa vrátiť s menami na obrazovke.
  */
 import { readFileSync } from 'node:fs'

@@ -1,4 +1,4 @@
-// „Hey Jarvis" cez mikrofón prehliadača: getUserMedia (surový zvuk, hlasitosť dorovná worklet)
+// „Ahoj Jarvis" cez mikrofón prehliadača: getUserMedia (surový zvuk, hlasitosť dorovná worklet)
 // → AudioWorklet (16 kHz Int16, rámce 80 ms) → WebSocket /api/mic. V appke na ploche mikrofón
 // otvára appka sama (native-mic.js) a rámce prídu hotové, bez getUserMedia a bez AudioContextu. Wake word, koniec vety a prepis
 // rieši server, výsledok príde cez SSE `voice` a `chat` ako pri hlase.
@@ -23,7 +23,7 @@ import { micAudio } from './mic-pick.js'
 const levelOf = (rms) => Math.min(1, Math.sqrt(rms / 0.12))
 
 // desktop: true v appke Jarvis na Macu. Plocha je často zakrytá inými oknami a okno appky býva zavreté
-// (document.hidden), „Hey Jarvis" má však počúvať stále, preto sa tam stream pri skrytí nepozastaví.
+// (document.hidden), „Ahoj Jarvis" má však počúvať stále, preto sa tam stream pri skrytí nepozastaví.
 export function createWake({ onLevel, onState, onError, query = null, desktop = false } = {}) {
   let started = false
   let state = 'off'

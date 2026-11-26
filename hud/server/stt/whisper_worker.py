@@ -12,7 +12,7 @@
 # exclude-newer = "2026-11-01T00:00:00Z"
 # ///
 """
-Speech to text for the HUD (push-to-talk and commands after "Hey Jarvis") with mlx-whisper.
+Speech to text for the HUD (push-to-talk and commands after "Ahoj Jarvis") with mlx-whisper.
 Apple Silicon only. Audio is decoded by the ffmpeg binary that comes with the imageio-ffmpeg
 package, so nothing has to be installed by hand. Silero VAD checks that the recording contains
 speech first, otherwise the result is an empty text.

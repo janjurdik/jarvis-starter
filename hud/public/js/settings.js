@@ -330,7 +330,7 @@ export function createSettings({ onToast = () => {} } = {}) {
 
       pocuvanie: `<h3>Počúvanie</h3><p class="st-lead">Podržte medzerník a hovorte. Mikrofón si beriem len vtedy a hneď ho vraciam, takže hovor v inej appke ostáva nerušený.</p>
         ${row('Rozpoznávanie reči', seg('stt', [['auto', 'Automaticky'], ['whisper', 'Whisper'], ['browser', 'Prehliadač']], stt.choice ?? 'auto', { disabled: stt.locked }), `<span class="${prep ? 'is-busy' : ''}">${sttLine}</span>${stt.locked ? ' Voľbu drží súbor .env (JARVIS_STT).' : ''}${prep && Number.isFinite(prep.pct) ? `<span class="st-progress"><i style="width:${Math.max(2, Math.min(100, prep.pct))}%"></i></span>` : ''}`, 'is-tall')}
-        ${row('Hey Jarvis', toggle('data-toggle="wake"', d.wake.on, { disabled: !d.wake.available }), d.wake.available ? 'Stačí ma osloviť, netreba držať medzerník. Mikrofón je vtedy zapnutý stále, zvuk ostáva v počítači.' : 'Potrebuje Whisper v počítači.')}`,
+        ${row('Ahoj Jarvis', toggle('data-toggle="wake"', d.wake.on, { disabled: !d.wake.available }), d.wake.available ? 'Stačí ma osloviť, netreba držať medzerník. Mikrofón je vtedy zapnutý stále, zvuk ostáva v počítači.' : 'Potrebuje Whisper v počítači.')}`,
 
       mozog: `<h3>Mozog</h3><p class="st-lead">Nemám vlastný model. Myslím cez predplatné, ktoré už máte.</p>
         ${row('Bežím na', `<span class="st-val">${esc(d.brain?.name ?? 'Claude')}</span>`, esc(d.brain?.plan ? `${d.brain.product}, ${d.brain.plan}.` : ''))}

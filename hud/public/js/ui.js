@@ -106,7 +106,7 @@ export function createUI({ capture }) {
   el.chips.innerHTML = [
     `<span class="chip chip-brain" id="chip-brain" data-tip="Mozog|AI, cez ktorú myslím. Beží na vašom predplatnom, nič navyše neplatíte.">${icon('claude')}<span>Claude</span></span>`,
     `<span class="chip chip-model" id="chip-model" data-tip="Model|Ktorým modelom práve odpovedám v rozhovore.">${icon('model')}<span></span></span>`,
-    `<button type="button" class="chip chip-wake" id="chip-voice" data-tip="Hlas a počúvanie|Akým hlasom hovorím. Klik zapne Hey Jarvis: stačí ma osloviť a netreba držať medzerník.">${icon('speaker')}<span>Hlas</span></button>`,
+    `<button type="button" class="chip chip-wake" id="chip-voice" data-tip="Hlas a počúvanie|Akým hlasom hovorím. Klik zapne Ahoj Jarvis: stačí ma osloviť a netreba držať medzerník.">${icon('speaker')}<span>Hlas</span></button>`,
     `<span class="chip chip-life" id="chip-life" data-tip="Pamäť|Poznámky o vás, z ktorých čerpám. Sú len vo vašom počítači, v priečinku memory.">${icon('pamat')}<span>Pamäť</span></span>`,
     `<button type="button" class="chip chip-hands is-off" id="chip-hands" data-tip="Ovládanie rukami|Zapne kameru. Kurzor ide za dlaňou a štipnutím prstov kliknete. Obraz neopúšťa počítač." aria-label="Ovládanie rukami" aria-pressed="false">${icon('kamera')}<span>Ruky</span></button>`,
     `<button type="button" class="chip chip-film" id="chip-film" data-tip="Režim natáčania|Skryjem súkromné veci (mená, správy, obsah pamäte), aby ste mohli nahrávať alebo zdieľať obrazovku. Klávesa N.">${icon('film')}<span>Natáčanie</span></button>`,
@@ -473,29 +473,29 @@ export function createUI({ capture }) {
     })
     const model = modelName(status?.model)
     setChip('model', chip.model, { hidden: !model || mock, html: `${icon('model')}<span>${esc(model ?? '')}</span>` })
-    // Hey Jarvis poctivo: stav streamu z prehliadača (wake.js), inak uši servera (no-mic = nefunguje).
+    // Ahoj Jarvis poctivo: stav streamu z prehliadača (wake.js), inak uši servera (no-mic = nefunguje).
     const wake = status?.wake === true
     const name = voiceName(status)
     let voiceCls = name ? '' : 'is-off'
     let voiceHtml = `${icon('speaker')}<span>Hlas${name ? ` <b>${esc(name)}</b>` : ''}</span>`
-    let voiceTitle = status?.wakeAvailable ? 'Hlas Jarvisa. Klik zapne Hey Jarvis, hovoriť sa dá vždy cez medzerník.' : 'Hlas Jarvisa. Hovor cez medzerník.'
+    let voiceTitle = status?.wakeAvailable ? 'Hlas Jarvisa. Klik zapne Ahoj Jarvis, hovoriť sa dá vždy cez medzerník.' : 'Hlas Jarvisa. Hovor cez medzerník.'
     const wakeChip = (cls, text, title) => {
       voiceCls = cls
       voiceHtml = `${icon('wake')}<span>${text}</span>`
       if (title) voiceTitle = title
     }
     const MIC = {
-      streaming: ['is-on', 'Počúvam <b>Hey Jarvis</b>', 'Hey Jarvis počúva. Klik ho vypne.'],
-      connecting: ['is-warn', 'Hey Jarvis sa pripája'],
-      reconnecting: ['is-warn', 'Hey Jarvis sa pripája'],
-      suspended: ['is-warn', 'Hey Jarvis čaká na klik', 'Prehliadač pustí mikrofón až po kliknutí alebo klávese.'],
+      streaming: ['is-on', 'Počúvam <b>Ahoj Jarvis</b>', 'Ahoj Jarvis počúva. Klik ho vypne.'],
+      connecting: ['is-warn', 'Ahoj Jarvis sa pripája'],
+      reconnecting: ['is-warn', 'Ahoj Jarvis sa pripája'],
+      suspended: ['is-warn', 'Ahoj Jarvis čaká na klik', 'Prehliadač pustí mikrofón až po kliknutí alebo klávese.'],
       blocked: ['is-err', 'Mikrofón zamietnutý', 'Povoľte mikrofón pre localhost, potom kliknite na čip.'],
-      replaced: ['is-off', 'Hey Jarvis počúva inde', 'Mikrofón má iné okno HUD (napríklad appka na ploche).'],
-      paused: ['is-off', 'Hey Jarvis pozastavený', 'Okno je skryté, mikrofón je uvoľnený.'],
-      error: ['is-err', 'Hey Jarvis nefunguje', 'Stream mikrofónu zlyhal, skúša sa znova.'],
+      replaced: ['is-off', 'Ahoj Jarvis počúva inde', 'Mikrofón má iné okno HUD (napríklad appka na ploche).'],
+      paused: ['is-off', 'Ahoj Jarvis pozastavený', 'Okno je skryté, mikrofón je uvoľnený.'],
+      error: ['is-err', 'Ahoj Jarvis nefunguje', 'Stream mikrofónu zlyhal, skúša sa znova.'],
     }
     if (wake && MIC[micState]) wakeChip(...MIC[micState])
-    else if (wake) wakeChip('is-warn', 'Hey Jarvis štartuje', 'Mikrofón pre Hey Jarvis sa pripája. Hovoriť sa dá cez medzerník.')
+    else if (wake) wakeChip('is-warn', 'Ahoj Jarvis štartuje', 'Mikrofón pre Ahoj Jarvis sa pripája. Hovoriť sa dá cez medzerník.')
     setChip('voice', chip.voice, { cls: voiceCls, html: voiceHtml, title: voiceTitle })
     const mem = status?.memory
     const stale = snapshotAge !== null && snapshotAge > 45 * 60
@@ -738,7 +738,7 @@ export function createUI({ capture }) {
     thinking: 'Jarvis premýšľa…',
     speaking: 'Jarvis hovorí…',
     offline: 'Jarvis nie je pripojený',
-    wake: 'Povedzte „Hey Jarvis"…',
+    wake: 'Povedzte „Ahoj Jarvis"…',
   }
   function renderPlaceholder(state) {
     set('ph', el.input, PLACEHOLDER[state] ?? PLACEHOLDER.idle, 'placeholder')

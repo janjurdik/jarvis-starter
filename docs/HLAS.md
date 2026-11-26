@@ -141,11 +141,16 @@ Appka Jarvis (na ploche aj vo vlastnom okne) beží na jadre Safari, kde rozpozn
 Whisperom (predvolené) to nevadí. Keď medzerník ohlási, že okno nevie rozpoznávať reč, pozri
 `node scripts/voice.mjs plan`: povie, prečo sa Whisper nepripravil.
 
-### „Hey Jarvis"
+### „Ahoj Jarvis"
 
-Keď beží lokálny Whisper, dá sa zapnúť aj počúvanie na slová „Hey Jarvis": klikni na čip
+Keď beží lokálny Whisper, dá sa zapnúť aj počúvanie na slová „Ahoj Jarvis": klikni na čip
 **Hlas** v hornej lište HUD. Prvé zapnutie stiahne malý model. Je to pokročilá, experimentálna funkcia.
 Medzerník funguje vždy.
+
+Funguje aj „Hey Jarvis“. Rozpoznávanie stojí na modeli `hey_jarvis` od openWakeWord, ktorý na
+„Ahoj Jarvis“ reaguje slabšie, preto má nižší prah (0,25). Slabé zachytenie Jarvis prijme, len keď
+prepis naozaj obsahuje „Jarvis“, inak ho potichu zahodí. Keď ťa nepočuje, skús prah znížiť
+(`JARVIS_WAKE_THRESHOLD=0.15` v `.env`), keď sa zapína sám, zvýš ho (`0.4`).
 
 ## Keď hlas nejde
 

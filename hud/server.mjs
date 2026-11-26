@@ -864,7 +864,7 @@ async function routePost(req, res, path) {
       return sendJson(res, 409, { ok: false, error: 'hovor cez medzerník v okne HUD' })
     }
     case '/api/listen/wake': {
-      if (body.on === true && !wakeAvailable()) return sendJson(res, 409, { ok: false, error: 'Hey Jarvis potrebuje lokálny prepis reči (pozri docs/HLAS.md)' })
+      if (body.on === true && !wakeAvailable()) return sendJson(res, 409, { ok: false, error: 'Ahoj Jarvis potrebuje lokálny prepis reči (pozri docs/HLAS.md)' })
       state.wake = body.on === true
       await saveState()
       setMicWake(state.wake)
@@ -1242,7 +1242,7 @@ attachMic(server, {
     }
   },
   onNothing: () => sendHud({ type: 'info', text: 'Nič som nepočul', icon: 'mic', say: null, heard: null, node: null, source: 'hud' }),
-  // "Hey Jarvis" while thinking is a new command, the running answer is interrupted.
+  // "Ahoj Jarvis" while thinking is a new command, the running answer is interrupted.
   onWakeWord: () => {
     if (currentTurnId()) stopChat('wake word')
   },

@@ -387,7 +387,7 @@ export function applySettings(body, source = 'hud') {
   return serial(async () => {
     const cfg = getConfig()
     const patch = validateSettings(body, voiceList(cfg))
-    if (patch.wake === true && !wakeAvailable()) throw bad('Hey Jarvis potrebuje lokálny prepis reči (pozri docs/HLAS.md)', 409)
+    if (patch.wake === true && !wakeAvailable()) throw bad('Ahoj Jarvis potrebuje lokálny prepis reči (pozri docs/HLAS.md)', 409)
     const voiceBefore = resolveVoice(cfg).id
     const surfaceBefore = surfaceOf(cfg)
 

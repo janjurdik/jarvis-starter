@@ -32,7 +32,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Jarvis sleduje tvoje ruky, keď si zapneš ovládanie rukami. Obraz spracúva len tvoj Mac a nikam sa neposiela.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Jarvis ťa počúva, keď držíš medzerník alebo ⌃⌥J, a pri zapnutom „Hey Jarvis“. Zvuk spracúva len tvoj Mac.</string>
+	<string>Jarvis ťa počúva, keď držíš medzerník alebo ⌃⌥J, a pri zapnutom „Ahoj Jarvis“. Zvuk spracúva len tvoj Mac.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Jarvis prepisuje tvoju reč na text, keď s ním hovoríš.</string>
 	<key>JarvisRepo</key>

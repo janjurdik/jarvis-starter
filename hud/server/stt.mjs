@@ -59,7 +59,7 @@ const IDLE_MS = 15 * 60_000
 const EXT = { 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'audio/aac': 'aac' }
 
 /** Vocabulary hint for Whisper: typical commands in the user's language. */
-export const STT_PROMPT = process.env.JARVIS_STT_PROMPT || 'Hey Jarvis, čo mám dnes v kalendári? Aké mám úlohy? Zapamätaj si, že. Otvor mi Spotify. Čo ma čaká zajtra? Ciele, projekty, denník.'
+export const STT_PROMPT = process.env.JARVIS_STT_PROMPT || 'Ahoj Jarvis, čo mám dnes v kalendári? Aké mám úlohy? Zapamätaj si, že. Otvor mi Spotify. Čo ma čaká zajtra? Ciele, projekty, denník.'
 
 let proc = null
 let ready = null

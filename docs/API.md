@@ -35,7 +35,7 @@ the tunnel runs; anything served through it is `cache-control: private`.
 | `POST /api/chat/stop` | Interrupts Claude and the voice. |
 | `GET /api/chat/history` | Last 20 exchanges. |
 | `POST /api/stt` | Body = recording from `MediaRecorder` (webm, ogg, wav, mp4). Transcribed by the local Whisper and sent to the chat (`?send=0` only returns the text). `409` while the speech engine is the browser (`sttEngine` in the status is `browser`: by choice, on a weak computer, or until the local Whisper is prepared). `?attach=<JSON list of attachment paths>` sends files with the spoken message. |
-| `POST /api/listen/wake` | `{ on }` turns "Hey Jarvis" on or off (needs a local Whisper). |
+| `POST /api/listen/wake` | `{ on }` turns "Ahoj Jarvis" on or off (needs a local Whisper). |
 | `WS /api/mic` | Microphone stream for the wake word: 16 kHz mono Int16 PCM frames of 1280 samples. |
 | `GET /api/status` | Brain, model, voice, speech engine, memory, agent mode. Also pushed as SSE `status`. |
 | `GET /api/setup` | Installation summary for the onboarding. |
@@ -102,7 +102,7 @@ the tunnel runs; anything served through it is `cache-control: private`.
   "quiet": "23:00-06:30",          // "" turns quiet hours off
   "stt": "auto",                   // auto | browser | whisper
   "language": "sk",                // sk | cs
-  "wake": true                     // "Hey Jarvis" on or off (409 without a local Whisper)
+  "wake": true                     // "Ahoj Jarvis" on or off (409 without a local Whisper)
 }
 ```
 

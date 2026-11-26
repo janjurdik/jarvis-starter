@@ -6,7 +6,8 @@
 # exclude-newer = "2026-11-01T00:00:00Z"
 # ///
 """
-"Hey Jarvis" from the browser microphone stream. openWakeWord hey_jarvis on 80 ms frames and
+"Ahoj Jarvis" from the browser microphone stream. openWakeWord hey_jarvis on 80 ms frames (it also
+reacts to "Ahoj Jarvis", only weaker, so the threshold is lower and Node checks the transcript) and
 Silero VAD for the end of the sentence. Transcription is done by Node through the Whisper worker.
 Audio arrives over the WebSocket /api/mic into Node and from there to this process.
 
@@ -36,16 +37,16 @@ from openwakeword.vad import VAD
 RATE = 16000
 BLOCK = 1280                    # 80 ms, openWakeWord chce presne takéto rámce
 BLOCK_S = BLOCK / RATE
-PRE_ROLL_BLOCKS = 4             # ~0,3 s pred detekciou (koniec slova „Jarvis" a rýchly začiatok príkazu)
+PRE_ROLL_BLOCKS = 20            # ~1,6 s pred detekciou: celé „Ahoj Jarvis“, aby ho Node našiel v prepise
 SPEECH_GRACE_S = 0.32           # reč tesne po detekcii je ešte chvost wake wordu, nie príkaz
 SPEECH_START_BLOCKS = 3         # príkaz začal = 3 rámce reči za sebou (240 ms)
 END_SILENCE_S = 0.8
-START_WINDOW_S = 4.0            # po „Hey Jarvis" je čas začať hovoriť
+START_WINDOW_S = 4.0            # po „Ahoj Jarvis“ je čas začať hovoriť
 MAX_COMMAND_S = 12.0
 COOLDOWN_S = 1.0
 
 REC_DIR = os.environ.get("WAKE_REC_DIR", "/tmp")
-threshold = float(os.environ.get("WAKE_THRESHOLD", "0.5"))
+threshold = float(os.environ.get("WAKE_THRESHOLD", "0.25"))
 
 openwakeword.utils.download_models(["hey_jarvis"])
 wake_model = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")

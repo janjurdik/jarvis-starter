@@ -418,7 +418,7 @@ serveMcp({
               quiet: { type: 'string', description: 'Tiché hodiny "22:30-07:00", prázdny text ich vypne.' },
               language: { type: 'string', enum: ['sk', 'cs'] },
               stt: { type: 'string', enum: ['auto', 'browser', 'whisper'], description: 'Rozpoznávanie reči: auto, v prehliadači, alebo lokálny Whisper.' },
-              wake: { type: 'boolean', description: 'Počúvanie na slová „Hey Jarvis". Ide len s lokálnym Whisperom.' },
+              wake: { type: 'boolean', description: 'Počúvanie na slová „Ahoj Jarvis". Ide len s lokálnym Whisperom.' },
               telemetry: { type: 'boolean', description: 'false vypne anonymné štatistiky. Zapnúť ich vie len používateľ sám v Nastaveniach, časť Asistent.' },
             },
           },

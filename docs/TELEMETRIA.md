@@ -16,7 +16,7 @@ Len čísla a voľby, nič, čo ste napísali, povedali alebo uložili:
 | `notes` | `50-199` | Približný počet poznámok v pamäti, len v pásme. |
 | `counts` | `{ text: 12, voice: 5, jobs: 2, recordings: 0, screen: 1, watchHits: 0 }` | Koľko správ ste napísali a povedali, koľko úloh na pozadí, záznamov, pohľadov na obrazovku a splnených stráží od posledného pingu. |
 | `state` | `{ watches: 2, routines: 3, orbs: 1, apps: 9 }` | Koľko stráží, zapnutých rutín, vlastných orbov a vybraných appiek. |
-| `flags` | `{ mobile: false, wake: true, calls: false, alarm: true, activity: true }` | Či je zapnutý mobil, Hey Jarvis, hovory, budík a záznam aktivity. |
+| `flags` | `{ mobile: false, wake: true, calls: false, alarm: true, activity: true }` | Či je zapnutý mobil, Ahoj Jarvis, hovory, budík a záznam aktivity. |
 
 Server k tomu pridá krajinu, ktorú Cloudflare určí z adresy (napríklad `SK`). Samotná IP adresa sa nikde neukladá
 a server nemá zapnuté logy požiadaviek.

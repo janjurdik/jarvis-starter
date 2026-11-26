@@ -2,6 +2,11 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.10.2 (2026-11-26)
+
+- **„Ahoj Jarvis“ namiesto „Hey Jarvis“.** Jarvisa oslovíte po slovensky, „Hey Jarvis“ funguje ďalej. Keď si Jarvis
+  nie je istý, či ste ho oslovili, overí si to v prepise a pri planom poplachu nič nerobí.
+
 ## 1.10.1 (2026-11-26)
 
 - **Fotky a videá priamo v Jarvisovi.** Čo Jarvis vyrobí alebo ukáže (fotky, videá, zvuk), sa otvorí ako samostatné

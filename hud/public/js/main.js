@@ -487,7 +487,7 @@ function compute(T) {
   else if (server === 'thinking' || active) vs = 'thinking'
   else if (server === 'wake') vs = 'wake'
   f.voiceState = vs
-  // Úroveň mikrofónu: push-to-talk z vlastného analyzéra, „Hey Jarvis" zo streamu wake.js, mock zo servera.
+  // Úroveň mikrofónu: push-to-talk z vlastného analyzéra, „Ahoj Jarvis" zo streamu wake.js, mock zo servera.
   f.listen = vs !== 'listening' ? 0 : ptt && speech.micOpen ? speech.listenLevel() : wake?.active ? voice.wakeLevel ?? 0 : voice.level
   if (world.focus && T - world.focus.since > 14) world.focus = null
   f.focus = world.focus
@@ -619,7 +619,7 @@ function onVoice(v) {
   }
   // Server pokročil (prepis, premýšľanie, reč): lokálny stav končí. Idle hneď po stlačení ignoruj.
   if (!ptt && v.state !== 'listening' && v.state !== 'wake' && (v.state !== 'idle' || T - voice.localAt > 1.5)) voice.local = null
-  if (v.state === 'wake') pushLive({ type: 'info', icon: 'wake', text: 'Hey Jarvis · počúvam' }, T, { safe: true })
+  if (v.state === 'wake') pushLive({ type: 'info', icon: 'wake', text: 'Ahoj Jarvis · počúvam' }, T, { safe: true })
 }
 
 function onWorld(w) {
@@ -1021,7 +1021,7 @@ async function toggleWake() {
     renderStatusChips()
     if (res?.error) ui.toast(esc(res.error), { kind: 'warn', iconName: 'wake' })
   } catch (err) {
-    ui.toast(esc(errorText(err, 'Hey Jarvis')), { kind: 'warn', iconName: 'wake' })
+    ui.toast(esc(errorText(err, 'Ahoj Jarvis')), { kind: 'warn', iconName: 'wake' })
   }
 }
 
@@ -1529,7 +1529,7 @@ async function main() {
       .catch(() => undefined)
   if (scene) ui.toast('<kbd>Medzerník</kbd> spustí scénu · <kbd>Esc</kbd> zastaví · <kbd>F</kbd> celá obrazovka', { ms: 0, iconName: 'film' })
   else {
-    // „Hey Jarvis" zo streamu prehliadača (wake.js). Server ho zapína cez POST /api/listen/wake.
+    // „Ahoj Jarvis" zo streamu prehliadača (wake.js). Server ho zapína cez POST /api/listen/wake.
     wake = createWake({
       desktop: NATIVE,
       onLevel: (l) => (voice.wakeLevel = l),
