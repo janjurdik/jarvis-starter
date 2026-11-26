@@ -14,10 +14,9 @@
  * of information ends with `OTÁZKA: …`. Either way Jarvis himself asks the user (server.mjs).
  */
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
-import { basename, isAbsolute, join, resolve } from 'node:path'
-import { homedir } from 'node:os'
+import { basename, join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { CLAUDE_BIN as CLAUDE, MEMORY_EXTERNAL } from './agent.mjs'
 import { STRANGERS_NOTE, aiProvider, spawnAgent } from './provider.mjs'
@@ -26,6 +25,7 @@ import { BRAIN_DIR, clean, DATA_DIR, errMsg, log, REPO, spawnBin, winSys, writeF
 import { speakable } from './tts.mjs'
 import { addressRule } from './persona.mjs'
 import { routeJob } from './routing.mjs'
+import { MEDIA_KINDS, MEDIA_MAX, findMediaPaths, stripMediaPaths, trimText } from './shown-media.mjs'
 
 const CWD = process.env.JARVIS_JOB_CWD || REPO
 const MAX_PARALLEL = 3
@@ -47,7 +47,7 @@ const contextPrompt = (film) =>
     'Keď bez používateľa nevieš pokračovať (chýba informácia, ktorú nezistíš sám), ukonči samostatným riadkom `OTÁZKA: <jedna krátka otázka, ideálne s tvojím najlepším tipom>`. Jarvis sa ho na ňu spýta sám a jeho odpoveď ti pošle.',
     `Si Jarvisove ruky: všetko, čo sa používateľovi povie (riadok HLAS, otázka, súhlas), hovorí Jarvis v prvej osobe („nenašiel som", „mám pripravené"), nikdy „úloha" ani „agent". ${addressRule()}`,
     'Tvoja úplne posledná správa má presne tento tvar. Najprv výsledok: najviac päť krátkych riadkov obyčajného textu, čo je hotové a kde. Žiadny markdown: žiadne hviezdičky, mriežky, tabuľky, odrážky, kód ani emoji. Dlhý výstup (rešerš, zoznam, návrh textu) ulož do súboru a napíš len, kde je. Potom samostatný posledný riadok `HLAS: …` s jednou až dvoma krátkymi vetami, ktoré Jarvis povie nahlas (zdvorilo, vecne, pokojne so suchým humorom).',
-    'Keď je výsledkom web (nasadený alebo bežiaci lokálne) alebo obrázok, napíš do výsledku jeho celú adresu (https://… alebo http://localhost:…) alebo plnú cestu k súboru. Jarvis ho po dokončení ukáže na ploche.',
+    'Keď je výsledkom web (nasadený alebo bežiaci lokálne), fotka, video alebo zvuk, napíš do výsledku jeho celú adresu (https://… alebo http://localhost:…) alebo plnú cestu k súboru. Jarvis ho po dokončení ukáže na ploche, takže cestu nevysvetľuj.',
     film ? 'Režim natáčania: v poslednej správe ani v riadkoch NEEDS_OK a OTÁZKA nespomínaj mená ľudí ani firiem.' : '',
   ]
     .filter(Boolean)
@@ -79,18 +79,16 @@ const pub = (j) => ({
   weight: j.weight ?? null,
   route: j.route ?? null,
   mock: j.mock || undefined,
-  artifacts: j.artifacts?.length ? j.artifacts.map(({ kind, url, name }, i) => ({ kind, name, url: kind === 'image' ? `/api/jobs/${j.id}/file/${i}` : url })) : undefined,
+  artifacts: j.artifacts?.length ? j.artifacts.map(({ kind, url, name }, i) => ({ kind, name, url: MEDIA_KINDS.has(kind) ? `/api/jobs/${j.id}/file/${i}` : url })) : undefined,
 })
 
-const IMAGE_RE = /\.(png|jpe?g|webp|gif|avif)$/i
-const IMAGE_MAX = 25 * 1024 * 1024
-
 /**
- * Web addresses and image files a finished job names in its result. The desktop shows them in the
- * middle of the screen (a web as a glass card, an image as itself). Only files that exist are kept,
- * and only these exact files can be fetched back (GET /api/jobs/<id>/file/<n>).
+ * Web addresses and local media (photos, videos, audio) a finished job names in its result. The
+ * desktop shows a web as a glass card and every photo or video as its own floating card; the chat
+ * card shows thumbnails. Only files that exist are kept, and only these exact files can be fetched
+ * back (GET /api/jobs/<id>/file/<n>).
  */
-function findArtifacts(text) {
+export function findArtifacts(text) {
   const out = []
   const seen = new Set()
   for (const m of String(text ?? '').matchAll(/https?:\/\/[^\s<>"'`)\]]+/g)) {
@@ -99,26 +97,18 @@ function findArtifacts(text) {
     seen.add(url)
     out.push({ kind: 'web', url, name: url.replace(/^https?:\/\//, '').replace(/\/$/, '') })
   }
-  for (const m of String(text ?? '').matchAll(/(?:~\/|\/|[A-Za-z]:\\|(?:memory|data|hud)\/)[^\s"'`<>|]*?\.(?:png|jpe?g|webp|gif|avif)\b/gi)) {
-    const raw = m[0]
-    const file = raw.startsWith('~/') ? join(homedir(), raw.slice(2)) : isAbsolute(raw) ? raw : resolve(REPO, raw)
-    if (seen.has(file) || out.length >= 6 || !IMAGE_RE.test(file)) continue
-    try {
-      if (!existsSync(file) || statSync(file).size > IMAGE_MAX) continue
-    } catch {
-      continue
-    }
-    seen.add(file)
-    out.push({ kind: 'image', file, name: basename(file) })
-  }
+  for (const f of findMediaPaths(text, { base: REPO, max: MEDIA_MAX })) out.push({ kind: f.kind, file: f.file, name: f.name, raw: f.raw })
   return out
 }
 
-/** Absolute path of a job's image for GET /api/jobs/<id>/file/<n>, or null. */
+/** Absolute path of a job's photo, video or audio for GET /api/jobs/<id>/file/<n>, or null. */
 export function jobFile(id, index) {
   const a = jobs.get(id)?.artifacts?.[Number(index)]
-  return a?.kind === 'image' && existsSync(a.file) ? a.file : null
+  return a && MEDIA_KINDS.has(a.kind) && a.file && existsSync(a.file) ? a.file : null
 }
+
+/** The media of a job as the page gets them (no paths): [{ kind, name, url }]. */
+export const jobMedia = (job) => (job?.artifacts ?? []).filter((a) => MEDIA_KINDS.has(a.kind))
 
 export const listJobs = () => [...jobs.values()].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')).slice(0, 30).map(pub)
 export const runningCount = () => [...jobs.values()].filter((j) => j.status === 'running').length
@@ -354,11 +344,12 @@ function finish(j, status, { summary = null, error = null } = {}) {
       j.needsOk = null
       j.wait = null
     }
-    const body = summary.replace(WAIT_LINE, '')
+    // The paths of photos and videos shown on the screen are not repeated in the text: the cards show them.
+    const body = stripMediaPaths(summary.replace(WAIT_LINE, ''), j.artifacts.filter((a) => MEDIA_KINDS.has(a.kind)))
     // What Jarvis says aloud is the `HLAS:` line. When the model forgot it, the first two plain sentences are read instead of the whole report.
     const voice = speakable(/^\s*HLAS:\s*(.+)$/im.exec(body)?.[1] ?? '')
     const text = speakable(body.replace(/^\s*HLAS:.*$/gim, ''))
-    j.summary = clean(text, 600) || clean(voice, 600) || null
+    j.summary = trimText(clean(text, 4000), 600) || trimText(clean(voice, 4000), 600) || null
     j.say = clean(voice, 300) || firstSentences(text, 2, 240) || null
   }
   if (error) {
@@ -465,8 +456,12 @@ function runMock(j, said = '') {
     }
     j.cost = { turns: steps.length, ms: Date.now() - j.runT0 }
     // A reply (an answer or an approval) finishes the mock job; the assignment decides what it waits for first.
+    // Media named in the assignment come back in the result, the way a real job reports what it made.
+    const made = findMediaPaths(j.task)
     const mockEnd = said
       ? `Hotovo podľa odpovede: ${said.slice(0, 80)} (mock).`
+      : made.length
+      ? `Hotovo (mock): ${made.map((f) => `"${f.raw}"`).join(', ')}.\nHLAS: Mám to hotové, ukazujem na obrazovke.`
       : /otázk|otazk/i.test(j.task)
       ? 'Účet som v správach nenašiel (mock).\nOTÁZKA: Ako sa ten účet volá presne?'
       : /needs_ok|súhlas/i.test(j.task)

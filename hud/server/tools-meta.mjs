@@ -29,6 +29,7 @@ const META = {
   settings: { label: 'Mením nastavenia', icon: 'volume', node: null },
   set_alarm_sound: { label: 'Mením zvuk budíka', icon: 'music', node: 'rutiny' },
   video_open: { label: 'Otváram video', icon: 'eye', node: null },
+  show_media: { label: 'Ukazujem na obrazovke', icon: 'photo', node: null },
   video_seek: { label: 'Preskakujem vo videu', icon: 'eye', node: null },
   video_transcript: { label: 'Čítam prepis videa', icon: 'book', node: null },
   video_info: { label: 'Pozerám údaje o videu', icon: 'info', node: null },

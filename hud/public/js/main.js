@@ -30,6 +30,7 @@ import { createDrop } from './drop.js'
 import { createPeople } from './people.js'
 import { createAppsWorld, warmAppTiles } from './apps-world.js'
 import { createReveal } from './reveal.js'
+import { createMediaCards } from './media-cards.js'
 import { initVideo, videoEvent } from './video.js'
 import { setWorldApps } from './world/apps.js'
 import { activeOrbs, layoutOrbs } from './orbs.js'
@@ -287,6 +288,8 @@ let film = params.get('film') === '1'
 let keysHidden = false
 let wake = null
 let jobs = null
+/** Photos, videos and audio as floating cards (media-cards.js). */
+let mediaCards = null
 /** Dropped files and imports (drop.js) and the people review (people.js). Not in capture and scenes. */
 let drop = null
 let people = null
@@ -772,6 +775,8 @@ function connectEvents() {
   on('job-feed', (m) => jobs?.feed(m.id, m.entry))
   on('import', (ev) => drop?.applyImport(ev))
   on('video', videoEvent)
+  // show_media from the brain: each file floats as its own card.
+  on('media', (m) => Array.isArray(m?.items) && mediaCards?.show(m.items))
   on('status', onStatus)
   on('mode', (m) => typeof m?.film === 'boolean' && setFilm(m.film, { remote: true }))
   source.addEventListener('open', () => {
@@ -1391,17 +1396,33 @@ async function main() {
     },
   })
   ui = createUI({ capture: CAPTURE })
-  const reveal = CAPTURE || SCENE_ID ? null : createReveal({ onOpen: (id) => jobs?.open(id), fileUrl: api.fileUrl })
+  const reveal = CAPTURE || SCENE_ID ? null : createReveal({ onOpen: (id) => jobs?.open(id) })
+  mediaCards =
+    CAPTURE || SCENE_ID
+      ? null
+      : createMediaCards({
+          fileUrl: api.fileUrl,
+          reserveTop: () => reveal?.reserved() ?? 0,
+          // Esc and space belong to what is open above the cards.
+          blocked: () => Boolean(settings?.isOpen?.() || document.body.classList.contains('job-open') || document.querySelector('.gv')),
+          escFirst: () => Boolean(reveal?.isOpen()),
+        })
   if (!CAPTURE && !SCENE_ID) initVideo({ token: params.get('token'), fileUrl: api.fileUrl, ownsAudio })
   jobs = createJobs({
     api,
     ui,
     capture: CAPTURE,
     // What waits for him is asked by Jarvis in the conversation; the center of the screen shows only results.
-    onFinished: (job) => job.status === 'done' && reveal?.show(job),
+    onFinished: (job) => {
+      if (job.status !== 'done') return
+      reveal?.show(job)
+      // Every photo, video and audio the job made floats as a card of its own.
+      const media = (job.artifacts ?? []).filter((a) => a.kind === 'image' || a.kind === 'video' || a.kind === 'audio')
+      if (media.length) mediaCards?.show(media)
+    },
     onChange: () => paint('jobs', () => ui.renderJobsChip(jobs.active, jobs.waiting, jobs.asking)),
   })
-  chat = createChat({ onSend: (text, via) => send(text, via), capture: CAPTURE, fileUrl: api.fileUrl, login: api.login, openTerminal: api.openTerminal })
+  chat = createChat({ onSend: (text, via) => send(text, via), capture: CAPTURE, fileUrl: api.fileUrl, login: api.login, openTerminal: api.openTerminal, onMedia: (item) => mediaCards?.open(item) })
   if (!CAPTURE && !SCENE_ID) {
     people = createPeople({ api, ui, isFilm: () => film, onApplied: () => drop?.load() })
     drop = createDrop({ api, ui, desktop: NATIVE, onSend: (text, via) => send(text, via), onReview: () => people.open() })

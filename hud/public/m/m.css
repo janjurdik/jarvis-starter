@@ -175,6 +175,14 @@ button { cursor: pointer; }
 .card-chart span.hi i { background: var(--ice); box-shadow: 0 0 0.8rem rgba(127, 243, 255, 0.6); }
 .card-chart em { font: 400 0.6875rem/1 var(--sans); font-style: normal; color: var(--t3); }
 .card-text { margin: 0.45rem 0 0; font-size: 0.9375rem; color: var(--t2); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* photos, videos and audio of a card, inline */
+.card-media { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; margin-top: 0.6rem; }
+.card-media .cm-img, .card-media .cm-video { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 0.7rem; background: #05090c; box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.16); }
+.card-media .cm-video { aspect-ratio: auto; max-height: 70vh; object-fit: contain; grid-column: 1 / -1; }
+.card-media .cm-img.is-big { grid-column: 1 / -1; aspect-ratio: auto; object-fit: contain; max-height: 80vh; }
+.card-media .cm-audio { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.875rem; color: var(--t2); overflow-wrap: anywhere; }
+.card-media .cm-audio audio { width: 100%; }
+.card-media > :only-child { grid-column: 1 / -1; aspect-ratio: auto; object-fit: contain; max-height: 70vh; }
 .card-c { margin-top: 0.45rem; font: 400 0.8125rem/1.3 var(--sans); color: var(--t3); }
 
 /* ── the composer ── */

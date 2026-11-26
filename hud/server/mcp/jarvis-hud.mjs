@@ -6,6 +6,7 @@
  *   hud_focus(node, caption?)   the camera of the 3D world flies to a node
  *   hud_card(kind, title, …)    a rich card in the chat
  *   hud_log(text, icon?, type?) a line in the LOG
+ *   show_media(paths, title?)  photos, videos, audio as floating cards on the screen (server/shown-media.mjs)
  *   weather(place?, days?)      weather (Open-Meteo through the HUD server)
  *   agent_task / agent_jobs / agent_reply / agent_stop   background jobs (full Claude Code)
  *   set_alarm(time?, days?, call?, off?)   the alarm clock (scripts/alarm.mjs)
@@ -143,6 +144,27 @@ serveMcp({
       handler: async ({ service }) => {
         const r = await hud('login', { service })
         return r.isError ? r : r.text
+      },
+    },
+    {
+      name: 'show_media',
+      description:
+        'Ukáže fotky, videá a zvuk na obrazovke Jarvisa: každý súbor ako vlastnú plávajúcu kartu (video hrá hneď, bez zvuku, klik zapne zvuk) a v rozhovore ako náhľady. Viac súborov naraz je v poriadku (najviac 24). Na „ukáž mi…", „pusti mi to video", a vždy, keď je výsledkom fotka, video alebo zvuk: cestu k súboru vtedy nečítaj ani nepíš, stačí jedna veta o tom, čo ukazuješ. paths = plné cesty k súborom (aj ~/…), title = krátky nadpis.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          paths: { type: 'array', minItems: 1, maxItems: 24, items: { type: 'string' }, description: 'Plné cesty k fotkám (png, jpg, heic, gif, webp), videám (mp4, mov, m4v, webm) alebo zvuku (mp3, m4a, wav).' },
+          title: { type: 'string', description: 'Krátky nadpis, napríklad „Reel pre Instagram", max 60 znakov.' },
+        },
+        required: ['paths'],
+      },
+      handler: async ({ paths, title }) => {
+        const r = await hud('media', { paths: Array.isArray(paths) ? paths : [paths], title })
+        if (r.isError) return r
+        const kinds = { image: 0, video: 0, audio: 0 }
+        for (const x of r.shown ?? []) kinds[x.kind] = (kinds[x.kind] ?? 0) + 1
+        const what = [kinds.video && `${kinds.video} video`, kinds.image && `${kinds.image} fotky`, kinds.audio && `${kinds.audio} zvuk`].filter(Boolean).join(', ')
+        return `Na obrazovke: ${what}.${r.skipped?.length ? ` Neukázal som: ${r.skipped.join(', ')}.` : ''} Cesty k súborom nehovor, povedz len jednu vetu o tom, čo ukazuješ.`
       },
     },
     {

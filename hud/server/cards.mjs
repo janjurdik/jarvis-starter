@@ -4,7 +4,10 @@
 import { ICONS, NODES } from './tools-meta.mjs'
 import { clean } from './util.mjs'
 
-const KINDS = new Set(['stat', 'list', 'chart', 'text'])
+const KINDS = new Set(['stat', 'list', 'chart', 'text', 'media'])
+/** Media in a card point only at files the server itself allowed (server/shown-media.mjs, a job's files). */
+const MEDIA_URL = /^\/api\/(?:media\/m[0-9a-f]{16}|jobs\/j\d+\/file\/\d{1,2})$/
+const MEDIA_KIND = new Set(['image', 'video', 'audio'])
 const ACCENTS = new Set(['ice', 'amber', 'red'])
 
 const str = (v, max) => (typeof v === 'number' && Number.isFinite(v) ? String(v) : clean(v, max)) || null
@@ -13,7 +16,7 @@ export function normalizeCard(input, id) {
   if (!input || typeof input !== 'object') return { ok: false, error: 'karta musí byť objekt' }
   const src = input.card && typeof input.card === 'object' ? input.card : input
   const kind = String(src.kind ?? '').toLowerCase()
-  if (!KINDS.has(kind)) return { ok: false, error: `kind musí byť stat, list, chart alebo text (dostal som ${JSON.stringify(src.kind)})` }
+  if (!KINDS.has(kind)) return { ok: false, error: `kind musí byť stat, list, chart, text alebo media (dostal som ${JSON.stringify(src.kind)})` }
   const title = clean(src.title, 60)
   if (!title) return { ok: false, error: 'chýba title' }
   const icon = ICONS.includes(src.icon) ? src.icon : null
@@ -30,7 +33,7 @@ export function normalizeCard(input, id) {
     accent: ACCENTS.has(src.accent) ? src.accent : 'ice',
     items: [],
     series: [],
-    text: kind === 'text' ? clean(src.text, 400) || null : null,
+    text: kind === 'text' || kind === 'media' ? clean(src.text, 400) || null : null,
   }
   if (Array.isArray(src.items)) {
     card.items = src.items
@@ -45,9 +48,18 @@ export function normalizeCard(input, id) {
       .filter((it) => it && typeof it === 'object' && Number.isFinite(Number(it.value)))
       .map((it) => ({ label: str(it.label, 12) ?? '', value: Number(it.value) }))
   }
+  if (Array.isArray(src.media)) {
+    card.media = src.media
+      .filter((m) => m && typeof m === 'object' && MEDIA_KIND.has(m.kind) && MEDIA_URL.test(String(m.url ?? '')))
+      .slice(0, 24)
+      .map((m) => ({ kind: m.kind, url: m.url, name: clean(m.name, 120) || '' }))
+    if (!card.media.length) delete card.media
+  }
+  if (kind === 'text' && !card.text && card.media) card.kind = 'media'
+  if (kind === 'media' && !card.media) return { ok: false, error: 'media karta potrebuje media' }
   if (kind === 'list' && !card.items.length) return { ok: false, error: 'list karta potrebuje items' }
   if (kind === 'chart' && card.series.length < 2) return { ok: false, error: 'chart karta potrebuje aspoň 2 hodnoty v series' }
   if (kind === 'stat' && !card.value) return { ok: false, error: 'stat karta potrebuje value' }
-  if (kind === 'text' && !card.text) return { ok: false, error: 'text karta potrebuje text' }
+  if (card.kind === 'text' && !card.text) return { ok: false, error: 'text karta potrebuje text' }
   return { ok: true, card }
 }
