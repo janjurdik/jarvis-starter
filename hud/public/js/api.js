@@ -49,6 +49,8 @@ export function createApi({ token = null } = {}) {
     jobStop: (id) => post(`/api/jobs/${encodeURIComponent(id)}/stop`),
     jobReply: (id, text) => post(`/api/jobs/${encodeURIComponent(id)}/reply`, { text }),
     scene: (id) => get(`/api/scene/${encodeURIComponent(id)}`),
+    /** One task of the Úlohy board: { action: 'delete' | 'edit' | 'done' | 'restore', ref, text, due, undo }. */
+    todos: (body) => post('/api/todos', body),
 
     // ── files, imports and the people review (drop.js, people.js) ──
     /** URL of a private file (attachment, photo from an export) usable in <img>: adds the token when there is one. */

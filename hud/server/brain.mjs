@@ -25,7 +25,7 @@ const MAX_TURNS_PER_SESSION = Number(process.env.JARVIS_MAX_TURNS || 30)
 const MCP_FILE = join(BRAIN_DIR, 'mcp.json')
 const PERSONA_FILE = join(BRAIN_DIR, 'persona.md')
 
-const MEMORY_TOOLS = ['calendar_list', 'get_health', 'garmin_sync', 'view_todo', 'list_goals', 'upcoming_celebrations', 'memory_stats', 'read_note', 'search_notes', 'remember', 'add_todo', 'complete_todo', 'add_event', 'log_day', 'write_note', 'remind', 'search_messages', 'read_thread', 'activity_today', 'activity_set']
+const MEMORY_TOOLS = ['calendar_list', 'get_health', 'garmin_sync', 'view_todo', 'list_goals', 'upcoming_celebrations', 'memory_stats', 'read_note', 'search_notes', 'remember', 'add_todo', 'complete_todo', 'edit_todo', 'delete_todo', 'add_event', 'log_day', 'write_note', 'remind', 'search_messages', 'read_thread', 'activity_today', 'activity_set']
 
 /**
  * Permission rule for the built-in Read tool on one folder. Claude Code writes absolute paths in

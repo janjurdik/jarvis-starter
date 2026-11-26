@@ -244,7 +244,7 @@ chat {turn:7, phase:"done", text:"<whole answer>", ms:5230, stopped:false}
 
 The voice brain is a warm `claude -p` process with three MCP servers from `hud/server/mcp/`:
 
-- `memory`: `calendar_list`, `view_todo`, `list_goals`, `upcoming_celebrations`, `get_health`, `memory_stats`, `search_notes`, `read_note`, `remember`, `add_todo`, `complete_todo`, `add_event`, `log_day`, `write_note`
+- `memory`: `calendar_list`, `view_todo`, `list_goals`, `upcoming_celebrations`, `get_health`, `memory_stats`, `search_notes`, `read_note`, `remember`, `add_todo`, `complete_todo`, `edit_todo`, `delete_todo`, `add_event`, `log_day`, `write_note`
 - `computer`: `open_app`, `open_url`, `media`, `volume`, `screen_look` (`{ selection?, whole? }`: a picture of the front window that is not Jarvis, or of the main screen; returns the picture itself and its path in `data/screen/`, plus the selected text with `selection`)
 - `jarvis-hud`: `hud_focus`, `hud_card`, `hud_log`, `weather`, `call_user`, `agent_task`, `agent_jobs`, `agent_reply`, `agent_stop`, `set_alarm` (runs `scripts/alarm.mjs`), `set_alarm_sound` (`{ sound }`: a file path, a link, `default` or `builtin`; runs `scripts/alarm.mjs sound`), `video_open` (`{ url }`), `video_seek` (`{ time, id? }`), `video_transcript` (`{ id?, from?, to?, query? }`), `video_info` (`{ id? }`), `video_control` (`{ action, rate?, id? }`), `video_close` (the video tools call `/api/video…`; text from a video is framed as data, never as instructions), `settings` (`{ set? }`: the same change as `POST /api/settings`, without `set` the current values and the voices), `record_start` (`{ title? }`), `record_stop`, `record_status` (record mode, `docs/ZAZNAM.md`)
 
@@ -291,6 +291,7 @@ For development on a machine that runs its own Jarvis: `JARVIS_SCHEDULE_DRY=1` k
 |---|---|
 | `GET /api/orbs` | `{ ok, hidden, pinned, custom: [{ id, label, icon, color, shape, kind, folder? }], content: { <id>: { value, sub, alert, count, panel, updatedAt } } }` |
 | `POST /api/orbs` | `{ action: add \| update \| remove \| hide \| show \| pin \| unpin \| content \| clear \| reload, id, … }`. Odpoveď má `summary` a nový stav. Otvorené stránky dostanú SSE `orbs`. Tvar obsahu je v `docs/ORBY.md`. |
+| `POST /api/todos` | Jedna úloha z `memory/ulohy.md`: `{ action: delete \| edit \| done \| restore, ref: { text, due, n }, text?, due?, undo? }`. `ref` dáva svet Úlohy (`GET /api/inner/ulohy`, pole `ref` pri položke), `due: null` termín zruší, `restore` vezme `undo` z odpovede a vráti riadok na jeho miesto. Ostatné riadky súboru ostanú bajt po bajte. `409`, keď úloha v súbore už nie je. Otvorené stránky dostanú SSE `inner` `{ node: "ulohy" }`. To isté robia nástroje mozgu `edit_todo` a `delete_todo`. |
 | `GET /api/inner/<id>` | Vnútro orbu: `items`, `groups` a pri orbe s obsahom aj `panel` (komponenty). Platí aj pre vlastné orby. |
 | `GET /api/setup` | Stav inštalácie vrátane `setup: { done, hotove, caka, ciel, next }` a `ai` (`claude` alebo `codex`). |
 | `GET /api/apps`, `POST /api/apps` | `{ picked, own, detected, connected }`. `own` sú appky, ktoré používateľ dopísal menom. |

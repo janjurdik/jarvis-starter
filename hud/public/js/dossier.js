@@ -122,7 +122,7 @@ function kitHtml(c) {
   return ''
 }
 
-export function createDossier({ core, canvas = document.querySelector('canvas'), onClose = () => {}, onOpen = () => {}, onAsk = () => {} } = {}) {
+export function createDossier({ core, canvas = document.querySelector('canvas'), api = null, onClose = () => {}, onOpen = () => {}, onAsk = () => {} } = {}) {
   injectCss()
   const inner = core.inner
   const root = document.createElement('div')
@@ -152,12 +152,19 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     hero: root.querySelector('.dz-hero'),
     heroIn: root.querySelector('.dz-hero-in'),
     light: root.querySelector('.dz-light'),
+    // Over the command bar, which lies over the planet while it is open: the way back has to stay clickable.
+    toast: Object.assign(document.createElement('div'), { className: 'dz-toast', hidden: true, innerHTML: '<span></span><button type="button" class="dz-toast-undo">Vrátiť</button>' }),
   }
+  el.toast.setAttribute('role', 'status')
+  el.toast.setAttribute('aria-live', 'polite')
+  document.body.append(el.toast)
+  // A label is a small group: the name (a button) and, on a row of the Úlohy board, a tick and a ×.
   const tagPool = Array.from({ length: ROW_LABELS }, () => {
-    const t = document.createElement('button')
-    t.type = 'button'
+    const t = document.createElement('div')
     t.className = 'dz-tag'
     t.hidden = true
+    t.innerHTML = '<button type="button" class="dz-tag-main"></button>'
+    t._main = t.firstChild
     el.tags.append(t)
     return t
   })
@@ -242,9 +249,10 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
   const HINT_SPACE = `<span>ťahaj</span> otáčanie · <span>koliesko / pinch</span> let · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · <span>dvojklik</span> priletieť · <kbd>Esc</kbd> späť`
   /** A board stands still, so it only says what a click does. */
   const HINT_BOARD = '<span>klik</span> otvorí položku · <kbd>Esc</kbd> späť'
+  const HINT_TODO = '<span>klik</span> prepíše úlohu · <span>×</span> ju zmaže · <kbd>Esc</kbd> späť'
 
   function header(d) {
-    const hint = d?.layout === 'board' ? HINT_BOARD : HINT_SPACE
+    const hint = d?.layout === 'board' ? ((d.items ?? []).some((i) => i.k === 'todo') ? HINT_TODO : HINT_BOARD) : HINT_SPACE
     const hintEl = root.querySelector('.dz-hint')
     if (hintEl._html !== hint) hintEl.innerHTML = hintEl._html = hint
     el.headline.textContent = d?.title ?? titleOf(node) ?? ''
@@ -325,6 +333,8 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
   async function select(i, { fly = false } = {}) {
     const it = inner.item(i)
     if (!it) return deselect()
+    // A task is not read, it is rewritten: the click turns its row into a text field.
+    if (it.k === 'todo' && it.ref) return startEdit(i)
     sel = i
     inner.highlight(i, 'sel')
     if (fly) inner.flyTo(i)
@@ -406,6 +416,8 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
   }
 
   function resetUi() {
+    endEdit()
+    hideToast()
     clearTimeout(retry)
     worldCtrl?.abort()
     detailCtrl?.abort()
@@ -488,18 +500,33 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
         if (!t.hidden) t.hidden = true
         continue
       }
-      const key = `${node}|${l.i}|${board ? 'r' : 't'}|${l.item.t}`
+      // The row being rewritten is the editor now (positioned below), its label steps aside.
+      if (editing && editing.id === l.item.id) {
+        if (!t.hidden) t.hidden = true
+        placeEditor(l)
+        continue
+      }
+      const todo = board && l.item.k === 'todo' && Boolean(l.item.ref)
+      const key = `${node}|${l.i}|${board ? 'r' : 't'}|${l.item.t}|${l.item.s ?? ''}`
+      t._item = l.item
       if (t._key !== key) {
         t._key = key
         t._i = l.i
         t.classList.toggle('is-row', board)
-        if (board) t.innerHTML = `<b>${esc(l.item.t)}</b>${l.item.s ? `<i>${esc(l.item.s)}</i>` : ''}`
-        else t.textContent = l.item.t
+        if (board) t._main.innerHTML = `<b>${esc(l.item.t)}</b>${l.item.s ? `<i>${esc(l.item.s)}</i>` : ''}`
+        else t._main.textContent = l.item.t
         // A row has room for one line of the name: the whole of it is in the tooltip and in the detail a click opens.
-        t.title = board ? l.item.t : ''
+        const full = todo ? l.item.ref.text : l.item.t
+        t._main.title = board ? full : ''
+        if (todo) t._main.setAttribute('aria-label', `Prepísať úlohu: ${full}`)
+        else t._main.removeAttribute('aria-label')
+        if (todo) rowActs(t, full)
+        else if (t._acts) t._acts.hidden = true
+        t.classList.toggle('is-todo', todo)
         if (!board) t.style.maxWidth = t.style.fontSize = ''
       }
       t.classList.toggle('is-sel', l.i === w?.sel || (board && l.i === w?.hover))
+      t.classList.toggle('is-busy', todo && busy.has(l.item.id))
       t.hidden = false
       let tf
       if (board) {
@@ -538,6 +565,191 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
       }
     }
   }
+
+  // ── úlohy: × zmaže, ✓ odškrtne, klik na text prepíše (POST /api/todos, server/memory/todo-edit.mjs) ──
+  const ICON_X = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17"/></svg>'
+  const ICON_OK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4.2 4.2L18.5 7.8"/></svg>'
+  /** Tasks with a request on the way: their row dims and takes no second click. */
+  const busy = new Set()
+  let editing = null
+
+  function rowActs(t, text) {
+    if (!t._acts) {
+      t._acts = document.createElement('span')
+      t._acts.className = 'dz-row-acts'
+      t._acts.innerHTML = `<button type="button" class="dz-row-act" data-act="done">${ICON_OK}</button><button type="button" class="dz-row-act is-del" data-act="delete">${ICON_X}</button>`
+      t._acts.addEventListener('click', (e) => {
+        e.stopPropagation()
+        const b = e.target.closest('[data-act]')
+        if (b) todoAct(b.dataset.act, t._item)
+      })
+      t.append(t._acts)
+    }
+    t._acts.hidden = false
+    t._acts.children[0].setAttribute('aria-label', `Hotovo: ${text}`)
+    t._acts.children[0].title = 'Hotovo'
+    t._acts.children[1].setAttribute('aria-label', `Zmazať úlohu: ${text}`)
+    t._acts.children[1].title = 'Zmazať'
+  }
+
+  async function todoPost(body) {
+    try {
+      if (api?.todos) return await api.todos(body)
+      const res = await fetch('/api/todos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store' })
+      const data = await res.json().catch(() => ({}))
+      return res.ok && data.ok !== false ? data : { ok: false, error: data.error ?? `HTTP ${res.status}`, stale: res.status === 409 }
+    } catch (err) {
+      return { ok: false, error: err?.status === 0 || err instanceof TypeError ? 'Server neodpovedá, skúste to o chvíľu.' : err?.message ?? 'Nepodarilo sa.', stale: err?.status === 409 }
+    }
+  }
+
+  /** The board again from the server, now (the server also tells every other open window). */
+  function reload() {
+    if (open && node) refresh(node)
+  }
+
+  async function todoAct(act, it) {
+    if (!it?.ref || busy.has(it.id) || (act !== 'delete' && act !== 'done')) return
+    if (editing) endEdit()
+    busy.add(it.id)
+    const r = await todoPost({ action: act, ref: it.ref })
+    busy.delete(it.id)
+    if (r.ok) showToast(act === 'delete' ? 'Úloha zmazaná' : 'Úloha splnená', r.undo)
+    else showToast(r.error)
+    reload()
+  }
+
+  // The one place a task is rewritten: a text field over its row, with the term under it.
+  const ed = (() => {
+    const form = document.createElement('form')
+    form.className = 'dz-edit'
+    form.hidden = true
+    form.setAttribute('aria-label', 'Prepísať úlohu')
+    form.innerHTML = `<input class="dz-edit-text" type="text" maxlength="500" autocomplete="off" spellcheck="true" enterkeyhint="done" aria-label="Text úlohy">
+      <div class="dz-edit-row"><label class="dz-edit-due"><span>Termín</span><input type="date" aria-label="Termín úlohy"></label><button type="button" class="dz-edit-clear">Bez termínu</button><span class="dz-edit-keys"><kbd>Enter</kbd> uloží · <kbd>Esc</kbd> zruší</span></div>`
+    el.tags.append(form)
+    return { form, text: form.querySelector('.dz-edit-text'), due: form.querySelector('input[type=date]'), clear: form.querySelector('.dz-edit-clear') }
+  })()
+
+  function placeEditor(l) {
+    const zone = inner.zone?.() ?? null
+    const right = zone ? zone.right : window.innerWidth
+    const x = l.x - 10
+    const w = Math.max(260, Math.min(Math.max(l.w + 20, 380), right - x - 8))
+    const tf = `translate3d(${x.toFixed(1)}px,${(l.y - 22).toFixed(1)}px,0)`
+    if (ed.form._tf !== tf) ed.form.style.transform = ed.form._tf = tf
+    const ws = `${Math.round(w)}px`
+    if (ed.form._w !== ws) ed.form.style.width = ed.form._w = ws
+  }
+
+  function startEdit(i) {
+    const it = inner.item(i)
+    if (!it?.ref || busy.has(it.id)) return
+    if (editing) endEdit()
+    if (!el.hero.hidden) deselect()
+    editing = { id: it.id, i, ref: it.ref, stale: false, busy: false }
+    inner.highlight(i, 'sel')
+    ed.text.value = it.ref.text
+    ed.due.value = it.ref.due ?? ''
+    ed.clear.hidden = !it.ref.due
+    ed.form.classList.remove('is-busy')
+    const l = inner.rowLabels(ROW_LABELS).find((x) => x.i === i)
+    if (l) placeEditor(l)
+    ed.form.hidden = false
+    ed.text.focus({ preventScroll: true })
+    ed.text.setSelectionRange(ed.text.value.length, ed.text.value.length)
+  }
+
+  function endEdit() {
+    if (!editing) return
+    const stale = editing.stale
+    editing = null
+    ed.form.hidden = true
+    ed.form._tf = ed.form._w = null
+    inner.highlight(-1, 'sel')
+    if (document.activeElement && ed.form.contains(document.activeElement)) document.activeElement.blur()
+    if (stale) reload()
+  }
+
+  async function commitEdit() {
+    if (!editing || editing.busy) return
+    const { ref, id, i } = editing
+    const text = ed.text.value.replace(/\s+/g, ' ').trim()
+    const due = ed.due.value || null
+    // Nothing changed, or the text was emptied (a task is deleted with ×, not by an empty name): leave it as it was.
+    if (!text || (text === ref.text && due === (ref.due ?? null))) {
+      if (!text) showToast('Prázdnu úlohu som nechal, ako bola. Zmaže ju ×.')
+      return endEdit()
+    }
+    editing.busy = true
+    ed.form.classList.add('is-busy')
+    const r = await todoPost({ action: 'edit', ref, text, due })
+    const it = inner.item(i)
+    if (r.ok && it?.id === id) it.t = text
+    if (editing?.id === id) {
+      editing.stale = true
+      endEdit()
+    }
+    if (!r.ok) showToast(r.error)
+  }
+
+  ed.form.addEventListener('submit', (e) => {
+    e.preventDefault()
+    commitEdit()
+  })
+  // Keys typed here are text: neither the push-to-talk space nor the flight keys nor Esc of the planet see them.
+  ed.form.addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault()
+      commitEdit()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      endEdit()
+    }
+  })
+  ed.form.addEventListener('keyup', (e) => e.stopPropagation())
+  // Leaving the editor saves it; moving between its own fields does not.
+  ed.form.addEventListener('focusout', (e) => {
+    if (e.relatedTarget && ed.form.contains(e.relatedTarget)) return
+    commitEdit()
+  })
+  // A click on its button or its empty space keeps the focus in the field (Safari does not focus buttons).
+  ed.form.addEventListener('mousedown', (e) => {
+    if (!e.target.closest('input')) e.preventDefault()
+  })
+  ed.due.addEventListener('input', () => (ed.clear.hidden = !ed.due.value))
+  ed.clear.addEventListener('click', () => {
+    ed.due.value = ''
+    ed.clear.hidden = true
+    ed.text.focus({ preventScroll: true })
+  })
+
+  // A short note at the bottom of the board, with a way back for a deleted or ticked task.
+  let toastTimer = null
+  let toastUndo = null
+  function showToast(text, undo = null) {
+    clearTimeout(toastTimer)
+    toastUndo = undo
+    el.toast.querySelector('span').textContent = text
+    el.toast.querySelector('.dz-toast-undo').hidden = !undo
+    el.toast.hidden = false
+    toastTimer = setTimeout(hideToast, undo ? 6000 : 4500)
+  }
+  function hideToast() {
+    clearTimeout(toastTimer)
+    toastUndo = null
+    el.toast.hidden = true
+  }
+  el.toast.querySelector('.dz-toast-undo').addEventListener('click', async (e) => {
+    e.stopPropagation()
+    const undo = toastUndo
+    if (!undo) return
+    hideToast()
+    const r = await todoPost({ action: 'restore', undo })
+    if (!r.ok) showToast(r.error)
+    reload()
+  })
 
   // ── vstupy ──
   let press = null
@@ -604,7 +816,7 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
   window.addEventListener('blur', () => inner.keys.clear())
 
   for (const t of tagPool)
-    t.addEventListener('click', (e) => {
+    t._main.addEventListener('click', (e) => {
       e.stopPropagation()
       if (Number.isInteger(t._i)) select(t._i, { fly: inner.world()?.data?.layout !== 'board' })
     })
@@ -644,9 +856,16 @@ export function createDossier({ core, canvas = document.querySelector('canvas'),
     if (open && inner.keys.size === 0 && performance.now() - lastInput > IDLE_MS) close()
   }, 5000)
 
-  /** The orb's content changed while it is open (a stráž was checked, a routine filled it): load it again, unless an item is being read. */
+  /** The orb's content changed while it is open (a stráž was checked, a routine filled it, a task was deleted): load it again, unless an item is being read or rewritten. */
   function refresh(id) {
-    if (!open || node !== id || sel >= 0 || !el.hero.hidden) return false
+    if (!open || node !== id) return false
+    // What is cached for this world is old now, also the details of its items.
+    for (const k of [...cache.keys()]) if (k === `/api/inner/${encodeURIComponent(id)}` || k.startsWith(`/api/inner/${encodeURIComponent(id)}/`)) cache.delete(k)
+    if (editing) {
+      editing.stale = true
+      return false
+    }
+    if (sel >= 0 || !el.hero.hidden) return false
     loadWorld(id)
     return true
   }

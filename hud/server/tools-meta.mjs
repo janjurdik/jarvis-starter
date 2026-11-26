@@ -37,6 +37,8 @@ const META = {
   search_messages: { label: 'Hľadám v rozhovoroch', icon: 'search', node: 'spravy' },
   read_thread: { label: 'Čítam rozhovor', icon: 'search', node: 'spravy' },
   complete_todo: { label: 'Odškrtávam úlohu', icon: 'check', node: 'projekty' },
+  edit_todo: { label: 'Prepisujem úlohu', icon: 'check', node: 'projekty' },
+  delete_todo: { label: 'Mažem úlohu', icon: 'check', node: 'projekty' },
   add_event: { label: 'Zapisujem do kalendára', icon: 'calendar', node: 'kalendar' },
   log_day: { label: 'Píšem do denníka', icon: 'book', node: 'udalosti' },
   write_note: { label: 'Píšem poznámku', icon: 'book', node: 'fotky' },

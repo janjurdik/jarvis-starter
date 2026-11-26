@@ -29,7 +29,7 @@ import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, ini
 import { CONFIG_FILE, getConfig } from './server/config.mjs'
 import { createJob, initJobs, jobDetail, jobFile, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob, waitNudge } from './server/jobs.mjs'
 import { normalizeCard } from './server/cards.mjs'
-import { FILES, MEMORY_DIR, getIndex, stats } from './server/memory/index.mjs'
+import { FILES, MEMORY_DIR, changeTodo, getIndex, stats } from './server/memory/index.mjs'
 import { attachMic, micStats, micStatus, micWorkerState, onVoice, setMicWake, stopMic, wakeAvailable } from './server/mic.mjs'
 import { currentSnapshot, filmNameList, forFilm, memoryStatus, refreshSnapshot, startSnapshots } from './server/snapshot.mjs'
 import { openStream, send, sendHud, setGreeting, clientCount, desktopCount, roleCounts, setOnRolesChange } from './server/sse.mjs'
@@ -592,6 +592,20 @@ async function postStt(req, res) {
   }
 }
 
+/** A click on the Úlohy board. Every open window redraws the board, also when the task was gone already (409). */
+async function postTodos(res, body) {
+  try {
+    const result = await changeTodo({ action: body.action, ref: body.ref, text: body.text, due: body.due, undo: body.undo })
+    log('todos', `${result.action} ${clean(result.item?.text ?? '', 60)}`)
+    send('inner', { node: 'ulohy' })
+    pushSnapshot('úlohy').catch(() => {})
+    return sendJson(res, 200, { ok: true, ...result })
+  } catch (err) {
+    if (err.status === 409) send('inner', { node: 'ulohy' })
+    return sendJson(res, err.status ?? 500, { ok: false, error: err.status ? err.message : errMsg(err), stale: err.status === 409 })
+  }
+}
+
 /** One change to the orbs of the 3D world (hud/server/orbs.mjs): the page redraws the ring at once. */
 function orbAction(body) {
   // `reload` only tells the open pages that the files changed (scripts/orb.mjs wrote them itself).
@@ -651,6 +665,8 @@ async function routePost(req, res, path) {
     }
     if (body.action === 'memory_changed') {
       pushSnapshot('zápis do pamäte').catch(() => {})
+      // The inside of a planet that changed (a task the brain deleted or rewrote): open windows redraw it.
+      if (typeof body.node === 'string' && body.node) send('inner', { node: body.node })
       return sendJson(res, 200, { ok: true })
     }
     if (body.action === 'call') {
@@ -786,6 +802,8 @@ async function routePost(req, res, path) {
     return sendJson(res, 200, { ok: true, items })
   }
   if (path === '/api/orbs') return sendJson(res, 200, orbAction(body))
+  // One task of ulohy.md: delete, rewrite, tick or put back (server/memory/todo-edit.mjs), the same as the brain's todo tools.
+  if (path === '/api/todos') return postTodos(res, body)
   if (path === '/api/jobs') {
     const job = await createJob({ task: body.task, title: body.title, weight: body.weight, mock: body.mock === true, silent: body.silent === true })
     return sendJson(res, 202, { ok: true, job })
