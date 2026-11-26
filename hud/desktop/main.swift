@@ -838,14 +838,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   ) {
     // Only the HUD itself (its exact address, its main frame) may listen and, for hand control, see.
     // Another local port is another program. The page asks for the camera only after a click on its chip.
+    decisionHandler(isHUDOrigin(origin) && frame.isMainFrame ? .grant : .deny)
+  }
+
+  /// The HUD's own address: http on 127.0.0.1 or localhost with the port of this Jarvis. Another local
+  /// port is another program, an iframe (the video theater, a page Jarvis shows) is another site.
+  func isHUDOrigin(_ origin: WKSecurityOrigin) -> Bool {
     let home = URL(string: HUD_ORIGIN)
-    let own = (origin.host == "127.0.0.1" || origin.host == "localhost") && origin.port == (home?.port ?? 0)
-    decisionHandler(own && frame.isMainFrame ? .grant : .deny)
+    let port = home?.port ?? Int(HUD_PORT) ?? 4545
+    return origin.protocol == (home?.scheme ?? "http") && (origin.host == "127.0.0.1" || origin.host == "localhost") && origin.port == port
   }
 
   // MARK: Správy zo stránky
 
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    // The bridge answers the HUD itself only: its main frame on its own address. A frame inside the page
+    // (a video, a web page in the theater) can reach window.webkit too, and is ignored.
+    guard message.frameInfo.isMainFrame, isHUDOrigin(message.frameInfo.securityOrigin) else {
+      log("správa mostu z cudzieho rámca ignorovaná (\(message.frameInfo.securityOrigin.host))")
+      return
+    }
     guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
     switch type {
     case "dismiss": lower(reactivatePrevious: true)
