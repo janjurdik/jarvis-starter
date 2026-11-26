@@ -277,7 +277,7 @@ function onConnection(ws, url) {
   ws.mock = url.searchParams.get('mock') === '1'
   ws.silent = url.searchParams.get('silent') === '1'
   ws.desktop = url.searchParams.get('client') === 'desktop'
-  // Appka na ploche (Jarvis HUD.app) má prednosť: karta v Chrome jej mikrofón nezoberie.
+  // Appka Jarvis na ploche Macu má prednosť: karta v Chrome jej mikrofón nezoberie.
   if (prev && prev !== ws && prev.desktop && !ws.desktop && prev.readyState === prev.OPEN) {
     toClient(ws, { type: 'replaced' })
     ws.close(4002, 'mikrofón má appka na ploche')

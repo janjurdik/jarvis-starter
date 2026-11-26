@@ -21,7 +21,7 @@ export const TASK_FOLDER = 'Jarvis'
 export const has = (path) => existsSync(path)
 
 /** Runs a command and returns { code, out }. Never throws. */
-export function sh(bin, args = [], { timeout = 20_000, cwd = REPO, input = null } = {}) {
+export function sh(bin, args = [], { timeout = 20_000, cwd = REPO, input = null, env = null } = {}) {
   return new Promise((resolve) => {
     let out = ''
     let done = false
@@ -33,7 +33,7 @@ export function sh(bin, args = [], { timeout = 20_000, cwd = REPO, input = null 
     }
     let child
     try {
-      child = spawnBin(bin, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'] })
+      child = spawnBin(bin, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], ...(env ? { env } : {}) })
     } catch (err) {
       return resolve({ code: 1, out: String(err?.message ?? err) })
     }

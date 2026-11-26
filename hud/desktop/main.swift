@@ -1,13 +1,22 @@
-// Jarvis HUD on the Mac desktop: the HUD (http://127.0.0.1:<port>) as a live wallpaper.
+// Jarvis for the Mac: one app, two ways to live on the screen.
 //
-// The window sits at desktop level (below all windows, above the wallpaper) on every Space.
-// When desktop icons are hidden (Finder CreateDesktop = false, opt-in from the menu), clicks and
-// typing go straight to the HUD. The shortcut ⌃⌥J brings the HUD above all windows: hold = talk,
-// tap = type. Esc sends it back to the desktop. Menu bar icon: reload, desktop icons on/off,
-// launch at login, quit and restore the desktop.
+//   desktop  the HUD (http://127.0.0.1:<port>) as a live wallpaper: a window at desktop level (below
+//            all windows, above the wallpaper) on every Space, a ring in the menu bar, no Dock icon.
+//            When desktop icons are hidden (Finder CreateDesktop = false, opt-in from the menu),
+//            clicks and typing go straight to the HUD. ⌃⌥J brings the HUD above all windows:
+//            hold = talk, tap = type. Esc sends it back to the desktop.
+//   app      a normal macOS window: title bar, resizable, full screen with the green button or ⌃⌘F,
+//            Dock icon and ⌘Tab. Closing the window hides it, Jarvis keeps running and keeps
+//            talking; the Dock icon or opening the app again brings the window back.
+//
+// Which one comes from the place the user chose (`surface` in config/jarvis.json): the app asks the
+// HUD server every 3 s (GET /api/health) and moves between the two on its own when it changes in
+// Settings. Until the server answers it uses the launch argument (`--surface app`, from
+// scripts/hud.mjs) or the mode it had last time. `browser` means Jarvis lives in a browser page: the
+// app gives the desktop back and ends.
 // The app also starts the HUD server (node hud/server.mjs) when it is not running; the paths of
 // node and of the Jarvis folder are written into Info.plist by desktop/build.sh.
-// Build and install: desktop/build.sh. Log: ~/Library/Logs/jarvis-hud-desktop.log.
+// Build and install: desktop/build.sh. Log: ~/Library/Logs/jarvis-app.log.
 
 import Carbon.HIToolbox
 import Cocoa
@@ -22,20 +31,21 @@ let HUD_ORIGIN = ProcessInfo.processInfo.environment["JARVIS_HUD_ORIGIN"] ?? "ht
 /// Where the Jarvis folder and node live, baked in by build.sh so the app can start the server itself.
 let JARVIS_REPO = (Bundle.main.object(forInfoDictionaryKey: "JarvisRepo") as? String) ?? ""
 let NODE_PATH = (Bundle.main.object(forInfoDictionaryKey: "JarvisNode") as? String) ?? ""
-let BUNDLE_ID = "com.jarvis-starter.hud"
-let AGENT_LABEL = "com.jarvis-starter.hud-desktop"
+let BUNDLE_ID = Bundle.main.bundleIdentifier ?? "com.jarvis-starter.app"
+/// The desktop app of 1.9.7 and older ("Jarvis HUD.app"). Its settings are taken over once.
+let OLD_BUNDLE_ID = "com.jarvis-starter.hud"
+let AGENT_LABEL = "com.jarvis-starter.app-login"
 let HOME = FileManager.default.homeDirectoryForCurrentUser
-let CACHE_DIR = HOME.appendingPathComponent("Library/Caches/JarvisHUD", isDirectory: true)
-let LOG_PATH = HOME.appendingPathComponent("Library/Logs/jarvis-hud-desktop.log").path
-let SERVER_LOG_PATH = HOME.appendingPathComponent("Library/Logs/jarvis-hud-server.log").path
+let CACHE_DIR = HOME.appendingPathComponent("Library/Caches/Jarvis", isDirectory: true)
+let LOG_PATH = HOME.appendingPathComponent("Library/Logs/jarvis-app.log").path
+let SERVER_LOG_PATH = HOME.appendingPathComponent("Library/Logs/jarvis-server.log").path
 let AGENT_URL = HOME.appendingPathComponent("Library/LaunchAgents/\(AGENT_LABEL).plist")
-/// When this copy of the app started (seconds since 1970), to tell a move that happened since from an older one.
-let APP_START = Date().timeIntervalSince1970
 let HOTKEY_LABEL = "⌃⌥J"
+let WINDOW_AUTOSAVE = "JarvisWindow"
 
 // MARK: - Pomocné funkcie
 
-let logQueue = DispatchQueue(label: "jarvis.desktop.log")
+let logQueue = DispatchQueue(label: "jarvis.app.log")
 
 func log(_ msg: String) {
   let stamp = ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withFullDate, .withFullTime])
@@ -71,7 +81,14 @@ func run(_ exe: String, _ args: [String]) -> (code: Int32, out: String) {
   return (p.terminationStatus, String(data: data, encoding: .utf8) ?? "")
 }
 
-/// Okno bez rámu, ktoré aj tak môže prijímať klávesnicu (písanie Jarvisovi, medzerník).
+/// The place given on the command line (`--surface desktop|app`), if any.
+func launchSurface() -> String? {
+  let args = CommandLine.arguments
+  guard let i = args.firstIndex(of: "--surface"), i + 1 < args.count else { return nil }
+  return args[i + 1].lowercased()
+}
+
+/// Okno, ktoré aj bez rámu môže prijímať klávesnicu (písanie Jarvisovi, medzerník).
 final class HUDWindow: NSWindow {
   override var canBecomeKey: Bool { true }
   override var canBecomeMain: Bool { true }
@@ -94,21 +111,31 @@ final class HUDWebView: WKWebView {
   }
 }
 
+/// The two ways the app lives on the screen.
+enum Mode: String {
+  case desktop
+  case app
+}
+
 // MARK: - Appka
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate,
-  WKScriptMessageHandler, NSMenuDelegate
+  WKScriptMessageHandler, NSMenuDelegate, NSWindowDelegate
 {
-  var window: HUDWindow!
+  var window: HUDWindow?
+  var root: NSView!
   var web: HUDWebView!
   var statusLabel: NSTextField!
-  var statusItem: NSStatusItem!
+  var statusItem: NSStatusItem?
   let control = ControlOverlay()
   let mic = NativeMic()
+  var mode = Mode.desktop
+  var started = false
   var leaving = false
   var hotKeyRef: EventHotKeyRef?
   var signalSource: DispatchSourceSignal?
+  var reloadSource: DispatchSourceSignal?
 
   var raised = false
   var previousApp: NSRunningApplication?
@@ -119,12 +146,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   var serverProcess: Process?
   var pageLoaded = false
   var loading = false
-  var ticks = 0
   var lastDailyReload = ""
 
   let defaults = UserDefaults.standard
+  let background = NSColor(red: 0.016, green: 0.027, blue: 0.039, alpha: 1)
 
-  /// Úroveň okna: tesne nad tapetou, pod ikonami plochy a všetkými oknami.
+  /// Úroveň okna na ploche: tesne nad tapetou, pod ikonami plochy a všetkými oknami.
   var desktopLevel: NSWindow.Level {
     NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) + 1)
   }
@@ -135,60 +162,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     let me = ProcessInfo.processInfo.processIdentifier
     let others = NSRunningApplication.runningApplications(withBundleIdentifier: BUNDLE_ID)
       .filter { $0.processIdentifier != me }
-    if !others.isEmpty {
-      log("Jarvis HUD už beží (pid \(others[0].processIdentifier)), druhá inštancia končí")
+    if let other = others.first {
+      // Opened a second time: the copy that runs shows itself (the reopen event does that) and this one ends.
+      log("Jarvis už beží (pid \(other.processIdentifier)), druhá inštancia končí")
+      other.activate()
       exit(0)
     }
+    // The desktop app of 1.9.7 and older would show a second Jarvis next to this one.
+    for old in NSRunningApplication.runningApplications(withBundleIdentifier: OLD_BUNDLE_ID) {
+      log("končím starú appku Jarvis HUD (pid \(old.processIdentifier))")
+      old.terminate()
+    }
     NSApp.setActivationPolicy(.accessory)
+    migrateDefaults()
     // Both are opt-in from the menu: the app never changes Finder or login items on its own.
-    defaults.register(defaults: ["hideDesktopIcons": false, "launchAtLogin": false])
+    defaults.register(defaults: ["hideDesktopIcons": false, "launchAtLogin": false, "mode": Mode.desktop.rawValue, "fullScreen": false])
     try? FileManager.default.createDirectory(at: CACHE_DIR, withIntermediateDirectories: true)
     log("štart, \(Bundle.main.bundlePath)")
 
-    buildWindow()
-    buildStatusItem()
+    buildContent()
+    buildMainMenu()
     registerHotKey()
     observe()
     installSignals()
 
-    if defaults.bool(forKey: "hideDesktopIcons") && desktopIconsVisible() {
-      setDesktopIcons(visible: false)
+    // The server decides where Jarvis lives. Until it answers (or when it does not run yet), the
+    // launch argument and then the mode of the last time.
+    fetchHealth(timeout: 1.5) { [weak self] health in
+      guard let self else { return }
+      let surface = health?["surface"] as? String
+      if surface == "browser" {
+        // Opened while Jarvis lives in a browser page: the page opens instead (unless one is open already).
+        let windows = health?["windows"] as? [String: Any]
+        let tabs = (windows?["browser"] as? NSNumber)?.intValue ?? 0
+        return self.leave(openBrowser: tabs == 0)
+      }
+      let wanted = surface ?? launchSurface() ?? self.defaults.string(forKey: "mode") ?? "desktop"
+      self.enter(wanted == Mode.app.rawValue ? .app : .desktop)
+      self.serverStatus(health != nil)
+      if self.defaults.bool(forKey: "launchAtLogin") && !self.loginItemEnabled() { self.setLoginItem(true) }
+      Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+        MainActor.assumeIsolated { self?.tick() }
+      }
     }
-    if defaults.bool(forKey: "launchAtLogin") && !loginItemEnabled() {
-      setLoginItem(true)
-    }
+  }
 
-    checkServer()
-    load()
-    Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-      MainActor.assumeIsolated { self?.tick() }
+  /// The settings of the old "Jarvis HUD" app (another bundle id) come along once.
+  func migrateDefaults() {
+    guard !defaults.bool(forKey: "migratedFromHUD") else { return }
+    defaults.set(true, forKey: "migratedFromHUD")
+    guard let old = UserDefaults(suiteName: OLD_BUNDLE_ID) else { return }
+    for key in ["hideDesktopIcons", "launchAtLogin"] {
+      if let value = old.object(forKey: key) { defaults.set(value, forKey: key) }
     }
   }
 
   // MARK: Okno a web
 
-  func buildWindow() {
-    let frame = screen.frame
-    window = HUDWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
-    window.setFrame(frame, display: false)
-    window.level = desktopLevel
-    window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
-    window.backgroundColor = NSColor(red: 0.016, green: 0.027, blue: 0.039, alpha: 1)
-    window.isOpaque = true
-    window.hasShadow = false
-    window.isMovable = false
-    window.isReleasedWhenClosed = false
-    window.acceptsMouseMovedEvents = true
-    window.title = "Jarvis HUD"
-
-    let root = NSView(frame: NSRect(origin: .zero, size: frame.size))
+  /// The web view with its status line. It lives in whichever window the mode has and moves between them.
+  func buildContent() {
+    root = NSView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
     root.autoresizingMask = [.width, .height]
 
     statusLabel = NSTextField(labelWithString: "Jarvis štartuje…")
     statusLabel.font = NSFont.systemFont(ofSize: 22, weight: .light)
     statusLabel.textColor = NSColor(red: 0.5, green: 0.95, blue: 1, alpha: 0.8)
     statusLabel.alignment = .center
-    statusLabel.frame = NSRect(x: 0, y: frame.height / 2 - 20, width: frame.width, height: 40)
+    statusLabel.frame = NSRect(x: 0, y: root.bounds.height / 2 - 20, width: root.bounds.width, height: 40)
     statusLabel.autoresizingMask = [.width, .minYMargin, .maxYMargin]
     root.addSubview(statusLabel)
 
@@ -200,23 +240,103 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     cfg.preferences.setValue(inspect, forKey: "developerExtrasEnabled")
     let ucc = WKUserContentController()
     ucc.add(self, name: "jarvis")
-    ucc.addUserScript(
-      WKUserScript(source: bootstrapJS(), injectionTime: .atDocumentStart, forMainFrameOnly: true))
     cfg.userContentController = ucc
 
     web = HUDWebView(frame: root.bounds, configuration: cfg)
     web.autoresizingMask = [.width, .height]
     web.navigationDelegate = self
     web.uiDelegate = self
-    web.underPageBackgroundColor = window.backgroundColor
+    web.underPageBackgroundColor = background
     web.isInspectable = inspect
     web.alphaValue = 0
     web.onDragFiles = { [weak self] urls in self?.dragFiles(urls) }
     root.addSubview(web)
+  }
 
-    window.contentView = root
-    window.orderFront(nil)
+  /// Jarvis as the desktop: borderless, the size of the screen, under every window, on every Space.
+  func makeDesktopWindow() -> HUDWindow {
+    let frame = screen.frame
+    let w = HUDWindow(contentRect: frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    w.setFrame(frame, display: false)
+    w.level = desktopLevel
+    w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
+    w.isOpaque = true
+    w.hasShadow = false
+    w.isMovable = false
+    return w
+  }
+
+  /// Jarvis in his own window: like any other program. Its size and place are remembered.
+  func makeAppWindow() -> HUDWindow {
+    let visible = screen.visibleFrame
+    let w = HUDWindow(
+      contentRect: visible, styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+    w.titlebarAppearsTransparent = true
+    w.titleVisibility = .hidden
+    w.appearance = NSAppearance(named: .darkAqua)
+    w.collectionBehavior = [.fullScreenPrimary, .managed]
+    w.minSize = NSSize(width: 820, height: 560)
+    w.isOpaque = true
+    w.tabbingMode = .disallowed
+    if !w.setFrameUsingName(WINDOW_AUTOSAVE) { w.setFrame(visible, display: false) }
+    w.setFrameAutosaveName(WINDOW_AUTOSAVE)
+    return w
+  }
+
+  /// Moves Jarvis into the given mode: a new window for it, the web view moves over and loads the page for it.
+  func enter(_ next: Mode) {
+    if started && next == mode { return }
+    let from = started ? mode : nil
+    started = true
+    mode = next
+    defaults.set(next.rawValue, forKey: "mode")
+    log(from == nil ? "režim \(next.rawValue)" : "presúvam sa: \(from!.rawValue) → \(next.rawValue)")
+    raised = false
+    previousApp = nil
+
+    let old = window
+    let w = next == .desktop ? makeDesktopWindow() : makeAppWindow()
+    w.backgroundColor = background
+    w.isReleasedWhenClosed = false
+    w.acceptsMouseMovedEvents = true
+    w.title = "Jarvis"
+    w.delegate = self
+    old?.contentView = NSView()
+    root.frame = NSRect(origin: .zero, size: w.contentLayoutRect.size)
+    w.contentView = root
+    window = w
+
+    if next == .desktop {
+      NSApp.setActivationPolicy(.accessory)
+      buildStatusItem()
+      if defaults.bool(forKey: "hideDesktopIcons") && desktopIconsVisible() { setDesktopIcons(visible: false) }
+      old?.orderOut(nil)
+      w.orderFront(nil)
+    } else {
+      removeStatusItem()
+      // The desktop is not Jarvis any more: icons he hid come back.
+      if defaults.bool(forKey: "hideDesktopIcons") && !desktopIconsVisible() { setDesktopIcons(visible: true) }
+      NSApp.setActivationPolicy(.regular)
+      old?.orderOut(nil)
+      showWindow()
+      if defaults.bool(forKey: "fullScreen") && !w.styleMask.contains(.fullScreen) {
+        DispatchQueue.main.async { w.toggleFullScreen(nil) }
+      }
+    }
+    old?.close()
+    installBootstrap()
+    pageLoaded = false
+    web.alphaValue = 0
+    showStatus("Jarvis štartuje…")
+    load()
     writeWindowInfo()
+  }
+
+  /// The bridge for the page of the current mode, injected before the page's own scripts.
+  func installBootstrap() {
+    let ucc = web.configuration.userContentController
+    ucc.removeAllUserScripts()
+    ucc.addUserScript(WKUserScript(source: bootstrapJS(), injectionTime: .atDocumentStart, forMainFrameOnly: true))
   }
 
   /// Most medzi appkou a stránkou: window.__jarvisDesktop (okraje lišty a Docku, skratka, vyvolanie).
@@ -225,7 +345,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     (() => {
       const d = (window.__jarvisDesktop = window.__jarvisDesktop || {});
       d.native = true;
-      d.version = 4;
+      d.version = 5;
+      // 'desktop': Jarvis is the desktop under the windows. 'app': Jarvis in his own window.
+      d.mode = '\(mode.rawValue)';
       // The microphone is opened by the app (a plain system input), not by the web view: the web
       // view's capture restarts the audio devices for every app and a call elsewhere loses its microphone.
       // The page sets d.onMicFrame(base64 of 1280 Int16 samples at 16 kHz, rms) and d.onMicState(state).
@@ -251,10 +373,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       d.setPref = (key, value) => d.post({ type: 'pref', key, value: !!value });
       d.prefsChanged = (prefs) => { d.prefs = prefs; emit({ type: 'prefs', prefs }); };
       d.dismiss = () => d.post({ type: 'dismiss' });
-      // Jarvis moved to another place (his own window, a browser page): the desktop gives itself back.
+      // Jarvis moved (Settings, Plocha): the app follows to the desktop or to its window, or ends for a browser page.
+      d.moved = (keep) => d.post({ type: 'moved', keep: String(keep || '') });
       d.leave = () => d.post({ type: 'leave' });
       d.summon = () => d.post({ type: 'raise' });
-      document.documentElement.classList.add('jarvis-desktop');
+      d.fullscreen = () => d.post({ type: 'fullscreen' });
+      if (d.mode === 'desktop') document.documentElement.classList.add('jarvis-desktop');
       d.setInsets(\(insetsJSON(currentInsets())));
     })();
     """
@@ -273,14 +397,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     loading = true
     // A page that is loading again has no listener yet: the microphone is given back until it asks.
     mic.stop()
-    var req = URLRequest(url: URL(string: HUD_ORIGIN + "/?desktop=1")!)
+    let query = mode == .desktop ? "/?desktop=1" : "/?surface=app"
+    var req = URLRequest(url: URL(string: HUD_ORIGIN + query)!)
     req.cachePolicy = .reloadIgnoringLocalCacheData
     req.timeoutInterval = 15
     web.load(req)
   }
 
   func reload() {
-    log("obnovujem HUD")
+    log("obnovujem stránku")
     load()
   }
 
@@ -329,6 +454,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   // MARK: Okraje (menu lišta hore, Dock dole) pre rozloženie HUD
 
   func currentInsets() -> NSEdgeInsets {
+    // In his own window the title bar and the Dock are outside the page.
+    if mode == .app { return NSEdgeInsetsZero }
     let f = screen.frame
     let v = screen.visibleFrame
     return NSEdgeInsets(
@@ -351,6 +478,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   }
 
   func refit() {
+    guard mode == .desktop, let window else { return }
     let f = screen.frame
     if window.frame != f {
       window.setFrame(f, display: true)
@@ -361,14 +489,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   }
 
   func writeWindowInfo() {
-    let info = "{\"windowNumber\":\(window.windowNumber),\"pid\":\(ProcessInfo.processInfo.processIdentifier)}"
+    guard let window else { return }
+    let info = "{\"windowNumber\":\(window.windowNumber),\"pid\":\(ProcessInfo.processInfo.processIdentifier),\"mode\":\"\(mode.rawValue)\"}"
     try? info.write(to: CACHE_DIR.appendingPathComponent("window.json"), atomically: true, encoding: .utf8)
   }
 
+  // MARK: Vlastné okno: zatvorenie ho len schová
+
+  /// The window of the app mode comes forward (also after it was closed or the app hidden).
+  func showWindow() {
+    guard let window else { return }
+    NSApp.unhide(nil)
+    if window.isMiniaturized { window.deminiaturize(nil) }
+    window.makeKeyAndOrderFront(nil)
+    NSApp.activate()
+    window.makeFirstResponder(web)
+  }
+
+  /// Closing the window keeps Jarvis running: he still talks, rings and reminds, the window just goes away.
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    guard mode == .app else { return false }
+    // A full-screen window has its own Space: hiding the app leaves no empty Space behind.
+    if sender.styleMask.contains(.fullScreen) { NSApp.hide(nil) } else { sender.orderOut(nil) }
+    log("okno zatvorené, Jarvis beží ďalej")
+    return false
+  }
+
+  func windowDidEnterFullScreen(_ notification: Notification) {
+    if mode == .app { defaults.set(true, forKey: "fullScreen") }
+  }
+
+  func windowDidExitFullScreen(_ notification: Notification) {
+    if mode == .app { defaults.set(false, forKey: "fullScreen") }
+  }
+
+  /// The Dock icon, Launchpad or `open` of the running app: the window comes back, the desktop comes above the windows.
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    if mode == .app { showWindow() } else { raise() }
+    return false
+  }
+
+  func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
   // MARK: Vyvolanie nad okná a návrat na plochu
 
+  /// Is Jarvis in front right now (the window of the app mode is the key window)?
+  var inFront: Bool {
+    guard let window else { return false }
+    return mode == .app ? NSApp.isActive && window.isVisible && window.isKeyWindow : raised
+  }
+
   func raise() {
+    if mode == .app { return showWindow() }
     if raised { return }
+    guard let window else { return }
     let front = NSWorkspace.shared.frontmostApplication
     previousApp = front?.bundleIdentifier == BUNDLE_ID ? nil : front
     raised = true
@@ -381,7 +555,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   }
 
   func lower(reactivatePrevious: Bool) {
+    if mode == .app {
+      // A tap on the shortcut while the window is in front: back to whatever was there before.
+      if reactivatePrevious { NSApp.hide(nil) }
+      return
+    }
     if !raised { return }
+    guard let window else { return }
     raised = false
     window.level = desktopLevel
     window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
@@ -418,8 +598,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
   func hotkey(down: Bool) {
     if down {
-      let was = raised
-      if !raised { raise() }
+      let was = inFront
+      if !was { raise() }
       js("window.__jarvisDesktop && window.__jarvisDesktop.hotkey('down', \(was))")
     } else {
       js("window.__jarvisDesktop && window.__jarvisDesktop.hotkey('up', true)")
@@ -477,37 +657,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
   // MARK: HUD server (the app starts it when it is not running)
 
-  func checkServer() {
+  /// GET /api/health: nil when the server does not answer.
+  func fetchHealth(timeout: TimeInterval, _ done: @escaping @MainActor ([String: Any]?) -> Void) {
     var req = URLRequest(url: URL(string: HUD_ORIGIN + "/api/health")!)
-    req.timeoutInterval = 2.5
-    URLSession.shared.dataTask(with: req) { [weak self] data, resp, _ in
+    req.timeoutInterval = timeout
+    URLSession.shared.dataTask(with: req) { data, resp, _ in
       let ok = (resp as? HTTPURLResponse)?.statusCode == 200
-      // The server says where Jarvis lives since the last move ("keep") and when that was decided.
-      // A move away from the desktop that happened while this app runs means: give the desktop back.
-      // The page hears it too, but a desktop covered by a full-screen window is put to sleep by the system.
-      var moved = false
-      if ok, let data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let keep = json["keep"] as? String, keep != "desktop", let at = json["keepAt"] as? Double
-      {
-        moved = at / 1000 > APP_START
-      }
-      Task { @MainActor in
-        self?.serverStatus(ok)
-        if moved { self?.leaveDesktop() }
-      }
+      let json = ok ? data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:] : nil
+      Task { @MainActor in done(json) }
     }.resume()
   }
 
-  /// The user chose another place for Jarvis: no start at login from here any more, the desktop
+  func checkServer() {
+    fetchHealth(timeout: 2.5) { [weak self] health in
+      guard let self else { return }
+      self.serverStatus(health != nil)
+      // The server says where Jarvis lives (`surface`, the choice in Settings). The app follows it,
+      // also when the page cannot hear it: a desktop covered by a full-screen window is put to sleep by the system.
+      if let surface = health?["surface"] as? String { self.follow(surface) }
+    }
+  }
+
+  /// Jarvis lives somewhere else now: the desktop and the window swap, a browser page means the app ends.
+  func follow(_ surface: String) {
+    guard started, !leaving else { return }
+    switch surface {
+    case Mode.desktop.rawValue: enter(.desktop)
+    case Mode.app.rawValue: enter(.app)
+    case "browser": leave(openBrowser: false)
+    default: break
+    }
+  }
+
+  /// The user chose a browser page for Jarvis: no start at login from here any more, the desktop
   /// icons come back and the app ends cleanly (launchd leaves a clean exit alone).
-  func leaveDesktop() {
+  func leave(openBrowser: Bool) {
     if leaving { return }
     leaving = true
-    log("sťahujem sa z plochy")
+    log(openBrowser ? "Jarvis býva v prehliadači, otváram stránku" : "sťahujem sa do prehliadača")
     mic.stop()
     defaults.set(false, forKey: "launchAtLogin")
-    setLoginItem(false)
-    if !desktopIconsVisible() { setDesktopIcons(visible: true) }
+    if loginItemEnabled() { setLoginItem(false) }
+    if defaults.bool(forKey: "hideDesktopIcons") && !desktopIconsVisible() { setDesktopIcons(visible: true) }
+    if openBrowser, let url = URL(string: "http://localhost:\(HUD_PORT)/") { NSWorkspace.shared.open(url) }
     NSApp.terminate(nil)
   }
 
@@ -516,7 +708,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       if !serverOK { log("server HUD beží") }
       serverOK = true
       serverFails = 0
-      if !pageLoaded && !loading { load() }
+      if started && !pageLoaded && !loading { load() }
       return
     }
     if serverOK { log("server HUD neodpovedá") }
@@ -533,8 +725,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     guard !JARVIS_REPO.isEmpty, FileManager.default.isExecutableFile(atPath: NODE_PATH),
       FileManager.default.fileExists(atPath: script)
     else {
-      log("server HUD nebeží a neviem ho spustiť (node: \(NODE_PATH), priečinok: \(JARVIS_REPO)). Spusti v priečinku Jarvisa: npm start")
-      showStatus("Jarvis nebeží. V priečinku Jarvisa spusti: npm start")
+      log("server HUD nebeží a neviem ho spustiť (node: \(NODE_PATH), priečinok: \(JARVIS_REPO)). Spusti v priečinku Jarvisa: node scripts/hud.mjs")
+      showStatus("Jarvis nebeží. V priečinku Jarvisa spusti: node scripts/hud.mjs")
       return
     }
     if let p = serverProcess, p.isRunning { return }
@@ -564,19 +756,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   }
 
   func tick() {
-    ticks += 1
     pushInsets()
-    if window.frame != screen.frame { refit() }
-    // The server is asked every 3 s: is it there, and has Jarvis moved somewhere else.
+    if mode == .desktop, let window, window.frame != screen.frame { refit() }
+    // The server is asked every 3 s: is it there, and does Jarvis still live here.
     checkServer()
     dailyReload()
   }
+
+  /// Nobody is looking at Jarvis right now: a fresh load does not interrupt anything.
+  var unattended: Bool { mode == .app ? !NSApp.isActive : !raised }
 
   /// Raz denne o 4:00 čerstvé načítanie: nový kód HUD, uvoľnená pamäť WebKitu a čas v shaderoch
   /// (float32) nezačne po dňoch behu sekať.
   func dailyReload() {
     let c = Calendar.current.dateComponents([.year, .month, .day, .hour], from: Date())
-    guard c.hour == 4, !raised else { return }
+    guard c.hour == 4, unattended else { return }
     let day = "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0)"
     if lastDailyReload == day { return }
     lastDailyReload = day
@@ -610,7 +804,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       ctx.duration = 0.6
       web.animator().alphaValue = 1
     }
-    log("HUD načítaný")
+    log("stránka načítaná (\(mode.rawValue))")
   }
 
   func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
@@ -626,7 +820,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     pageLoaded = false
     web.alphaValue = 0
     showStatus("Jarvis štartuje…")
-    log("HUD sa nenačítal: \(error.localizedDescription)")
+    log("stránka sa nenačítala: \(error.localizedDescription)")
   }
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
@@ -671,7 +865,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       default: break
       }
       pushPrefs()
-    case "leave": leaveDesktop()
+    case "moved": follow((body["keep"] as? String) ?? "")
+    // A page from before 2.0 says only that the desktop is not his place any more: the server knows where it is.
+    case "leave": checkServer()
+    case "fullscreen": if mode == .app { window?.toggleFullScreen(nil) }
     case "mic":
       wireMic()
       if (body["on"] as? Bool) ?? false { mic.start() } else { mic.stop() }
@@ -687,15 +884,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
   }
 
-  // MARK: Ikona v lište
+  // MARK: Hlavné menu (vo vlastnom okne v lište hore, na ploche len pre skratky)
+
+  func buildMainMenu() {
+    let main = NSMenu()
+    func add(_ menu: NSMenu, _ title: String, _ action: Selector?, _ key: String, _ mods: NSEvent.ModifierFlags = [.command], target: AnyObject? = nil) {
+      let it = NSMenuItem(title: title, action: action, keyEquivalent: key)
+      it.keyEquivalentModifierMask = mods
+      it.target = target
+      menu.addItem(it)
+    }
+    func top(_ title: String, _ build: (NSMenu) -> Void) -> NSMenu {
+      let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+      let menu = NSMenu(title: title)
+      build(menu)
+      item.submenu = menu
+      main.addItem(item)
+      return menu
+    }
+    _ = top("Jarvis") { m in
+      add(m, "O appke Jarvis", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), "")
+      m.addItem(.separator())
+      add(m, "Nastavenia…", #selector(menuSettings), ",", target: self)
+      m.addItem(.separator())
+      add(m, "Skryť Jarvisa", #selector(NSApplication.hide(_:)), "h")
+      add(m, "Skryť ostatné", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option])
+      add(m, "Zobraziť všetko", #selector(NSApplication.unhideAllApplications(_:)), "")
+      m.addItem(.separator())
+      add(m, "Ukončiť Jarvisa", #selector(menuQuit), "q", target: self)
+    }
+    _ = top("Upraviť") { m in
+      add(m, "Späť", Selector(("undo:")), "z")
+      add(m, "Znova", Selector(("redo:")), "z", [.command, .shift])
+      m.addItem(.separator())
+      add(m, "Vystrihnúť", #selector(NSText.cut(_:)), "x")
+      add(m, "Kopírovať", #selector(NSText.copy(_:)), "c")
+      add(m, "Vložiť", #selector(NSText.paste(_:)), "v")
+      add(m, "Vybrať všetko", #selector(NSText.selectAll(_:)), "a")
+    }
+    _ = top("Zobraziť") { m in
+      add(m, "Načítať Jarvisa znova", #selector(menuReload), "r", target: self)
+      add(m, "Celá obrazovka", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control])
+    }
+    let windowMenu = top("Okno") { m in
+      add(m, "Minimalizovať", #selector(NSWindow.performMiniaturize(_:)), "m")
+      add(m, "Zväčšiť", #selector(NSWindow.performZoom(_:)), "")
+      add(m, "Zavrieť", #selector(NSWindow.performClose(_:)), "w")
+    }
+    NSApp.mainMenu = main
+    NSApp.windowsMenu = windowMenu
+  }
+
+  // MARK: Ikona v lište (len na ploche)
 
   func buildStatusItem() {
-    statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-    statusItem.button?.image = AppDelegate.menuIcon()
-    statusItem.button?.toolTip = "Jarvis HUD"
+    if statusItem != nil { return }
+    let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    item.button?.image = AppDelegate.menuIcon()
+    item.button?.toolTip = "Jarvis"
     let menu = NSMenu()
     menu.delegate = self
-    statusItem.menu = menu
+    item.menu = menu
+    statusItem = item
+  }
+
+  func removeStatusItem() {
+    guard let item = statusItem else { return }
+    NSStatusBar.system.removeStatusItem(item)
+    statusItem = nil
   }
 
   static func menuIcon() -> NSImage {
@@ -766,8 +1022,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     pushPrefs()
   }
 
+  /// Quit from a menu or ⌘Q: the desktop gets its icons back. The HUD server keeps running.
   @objc func menuQuit() {
-    if !desktopIconsVisible() { setDesktopIcons(visible: true) }
+    if !desktopIconsVisible() && defaults.bool(forKey: "hideDesktopIcons") { setDesktopIcons(visible: true) }
     log("koniec cez menu")
     NSApp.terminate(nil)
   }
@@ -791,7 +1048,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       // Po spánku môže WebGL stratiť kontext: o 3 s stránku čisto načítame.
       DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
         MainActor.assumeIsolated {
-          guard let self, !self.raised else { return }
+          guard let self, self.unattended else { return }
           self.reload()
         }
       }
@@ -811,8 +1068,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     signalSource = snap
     reloadSource = rel
   }
-
-  var reloadSource: DispatchSourceSignal?
 
   func snapshot() {
     writeWindowInfo()

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Makes the Jarvis HUD start on its own after you log in.
+ * Makes Jarvis start on its own after you log in: the HUD server and Jarvis where he lives.
  *
  *   npm run autostart -- install            turn it on
  *   npm run autostart -- install --dry-run  only show what would be written
@@ -9,8 +9,11 @@
  *   npm run autostart -- ensure             turn it on unless it is on already or the user turned it off;
  *                                           scripts/hud.mjs runs this, so Jarvis starts after every login
  *
- * macOS: a launchd agent that runs `node scripts/hud.mjs` at login.
- * Windows: a small script in your Startup folder that does the same (no admin rights needed).
+ * macOS: a launchd agent that runs `node scripts/hud.mjs --login` at login. That opens the Jarvis
+ *        app (~/Applications/Jarvis.app) on the desktop or in its own window, and nothing for a
+ *        Jarvis who lives in a browser page.
+ * Windows: a small script in your Startup folder that does the same (no admin rights needed). Its
+ *        name, Jarvis HUD.vbs, stays from older versions so that an existing start is recognized.
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, userInfo } from 'node:os'
@@ -54,7 +57,7 @@ const macPlist = () => `<?xml version="1.0" encoding="UTF-8"?>
 `
 
 const vbq = (s) => `"${String(s).replace(/"/g, '""')}"`
-const winVbs = () => `' Starts the Jarvis HUD after login, without a console window. Created by scripts/autostart.mjs.\r\nSet shell = CreateObject("WScript.Shell")\r\nshell.CurrentDirectory = ${vbq(REPO)}\r\nshell.Run ${vbq(`"${NODE}" "${SCRIPT}" --login`)}, 0, False\r\n`
+const winVbs = () => `' Starts Jarvis after login, without a console window. Created by scripts/autostart.mjs.\r\nSet shell = CreateObject("WScript.Shell")\r\nshell.CurrentDirectory = ${vbq(REPO)}\r\nshell.Run ${vbq(`"${NODE}" "${SCRIPT}" --login`)}, 0, False\r\n`
 
 if (!IS_MAC && !IS_WIN) {
   console.error('Automatické spúšťanie je pripravené pre macOS a Windows.')
@@ -103,8 +106,8 @@ if (action === 'ensure') {
   if (IS_MAC) await sh('/bin/launchctl', ['bootout', `gui/${userInfo().uid}/${MAC_LABEL}`])
   write()
   rmSync(OFF_FILE, { force: true })
-  // Registered for the next login. The HUD is not restarted now (start it with: npm run hud).
-  console.log(`Hotovo. HUD sa po prihlásení spustí sám.\n  ${file}`)
+  // Registered for the next login. Jarvis is not restarted now (start him with: npm run hud).
+  console.log(`Hotovo. Jarvis sa po prihlásení spustí sám.\n  ${file}`)
 } else if (action === 'remove') {
   if (dry) console.log(`Odstránil by som ${file}`)
   else {

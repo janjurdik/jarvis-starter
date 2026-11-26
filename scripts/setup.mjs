@@ -12,9 +12,10 @@
  *       5. yt-dlp and the default alarm song
  *       6. Jarvis on the screen, starting with the computer from now on. `--surface` says where:
  *          `desktop` (macOS only and the default there: Jarvis as the desktop itself, under the
- *          windows), `app` (his own window with a Jarvis icon, like any other program) or
- *          `browser` (a plain page in the user's browser). The choice is kept in data/setup.json
- *          (Settings on the desktop write `surface` to config/jarvis.json later, which wins).
+ *          windows), `app` (his own window with a Jarvis icon, like any other program; on a Mac
+ *          both are the one Jarvis app in ~/Applications) or `browser` (a plain page in the user's
+ *          browser). The choice is kept in data/setup.json (Settings on the desktop write `surface`
+ *          to config/jarvis.json later, which wins).
  *     Every step is safe to repeat. A step that fails never stops the rest: it is listed at the
  *     end with what to do, and Jarvis works without it in the meantime.
  *
@@ -209,16 +210,20 @@ if (wanted) {
 if (!flags.has('no-hud')) {
   say('Štartujem Jarvisa na ploche…')
   const r = await sh(process.execPath, [join(REPO, 'scripts', 'hud.mjs'), '--no-prepare'], { timeout: 90_000 })
-  const where = /appka Jarvis HUD na ploche/.test(r.out)
+  const where = /appku Jarvis na ploche/.test(r.out)
     ? 'Jarvis je na ploche (pod oknami, namiesto tapety).'
-    : /stránka v prehliadači/.test(r.out)
-      ? `Jarvis je otvorený ako stránka v prehliadači: http://localhost:${PORT}`
-      : /ikona Jarvis je/.test(r.out)
-        ? `Jarvis beží vo vlastnom okne a má ikonu ${IS_MAC ? 'v Launchpade a v priečinku Aplikácie' : 'na pracovnej ploche a v ponuke Štart'}.`
-        : 'Jarvis beží v okne na celú obrazovku.'
+    : /appku Jarvis vo vlastnom okne/.test(r.out)
+      ? 'Jarvis beží ako appka Jarvis vo vlastnom okne. Je v Docku, v Launchpade a v priečinku Aplikácie.'
+      : /stránku v prehliadači/.test(r.out)
+        ? `Jarvis je otvorený ako stránka v prehliadači: http://localhost:${PORT}`
+        : /kartu v predvolenom prehliadači/.test(r.out)
+          ? `Jarvis je otvorený ako karta v prehliadači (okno bez kariet vie otvoriť len Chrome, Edge alebo Brave): http://localhost:${PORT}`
+          : /ikona Jarvis je/.test(r.out)
+            ? `Jarvis beží vo vlastnom okne a má ikonu ${IS_MAC ? 'v Launchpade a v priečinku Aplikácie' : 'na pracovnej ploche a v ponuke Štart'}.`
+            : 'Jarvis beží vo vlastnom okne.'
   step('hud', await hudAlive(), (await hudAlive()) ? where : 'Obrazovku Jarvisa sa nepodarilo spustiť.', r.out.split('\n').slice(-2).join(' ') || 'Skús: node scripts/hud.mjs')
-  // The desktop was asked for and this Mac could not build the app: say what to do, Jarvis runs in a window meanwhile.
-  if (IS_MAC && (wanted ?? 'desktop') === 'desktop' && /xcode-select --install/.test(r.out)) step('desktop', false, 'Na plochu ma zatiaľ neviem položiť, bežím v okne.', 'Spusti: xcode-select --install, potom: node scripts/hud.mjs')
+  // This Mac could not build the Jarvis app: say what to do, Jarvis runs in a window of the browser meanwhile.
+  if (IS_MAC && /xcode-select --install/.test(r.out)) step('desktop', false, (wanted ?? 'desktop') === 'desktop' ? 'Na plochu ma zatiaľ neviem položiť, bežím v okne prehliadača.' : 'Appku Jarvis si Mac zatiaľ nevie postaviť, bežím v okne prehliadača.', 'Spusti: xcode-select --install, potom: node scripts/hud.mjs')
 }
 
 const setup = getSetup()

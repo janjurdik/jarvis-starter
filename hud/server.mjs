@@ -32,7 +32,7 @@ import { normalizeCard } from './server/cards.mjs'
 import { FILES, MEMORY_DIR, getIndex, stats } from './server/memory/index.mjs'
 import { attachMic, micStats, micStatus, micWorkerState, onVoice, setMicWake, stopMic, wakeAvailable } from './server/mic.mjs'
 import { currentSnapshot, filmNameList, forFilm, memoryStatus, refreshSnapshot, startSnapshots } from './server/snapshot.mjs'
-import { openStream, send, sendHud, setGreeting, clientCount, desktopCount, setOnRolesChange } from './server/sse.mjs'
+import { openStream, send, sendHud, setGreeting, clientCount, desktopCount, roleCounts, setOnRolesChange } from './server/sse.mjs'
 import { saveState, setPersist, state } from './server/state.mjs'
 import { pruneTtsCache, stopTts, ttsFileExists, ttsInfo, warmCommonPhrases } from './server/tts.mjs'
 import { BRAIN_DIR, DATA_DIR, REPO, clean, errMsg, isLoopback, log, readJson, readRaw, sendJson, slug, winSys, writeFileAtomic } from './server/util.mjs'
@@ -46,8 +46,8 @@ import { initImports, loadImports, resolveAttachments, routeImportGet, routeImpo
 import { startUpdateWatch, updateInfo } from './server/updates.mjs'
 import { callProblems } from './server/call.mjs'
 import { getApps, saveApps } from './server/apps.mjs'
-import { closeAppWindow, normalizeSurface } from './server/surface.mjs'
-import { applyCall, applySettings, brainSettings, initSettings, previewVoice, settingsBody, testCall } from './server/settings.mjs'
+import { closeAppWindow, closesProfileWindow, normalizeSurface } from './server/surface.mjs'
+import { applyCall, applySettings, brainSettings, initSettings, previewVoice, settingsBody, surfaceOf, testCall } from './server/settings.mjs'
 import { routeVideoGet, routeVideoPost, stopVideo } from './server/video.mjs'
 import { changeOrbs, getOrbs } from './server/orbs.mjs'
 import { getSetup, noteSetup, setupContextNote } from './server/setup.mjs'
@@ -683,8 +683,9 @@ async function routePost(req, res, path) {
     if (!keep) return sendJson(res, 400, { ok: false, error: 'keep: desktop, app alebo browser' })
     lastKeep = { keep, at: Date.now() }
     send('surface', { keep })
-    const closed = keep === 'app' ? 0 : closeAppWindow(DATA_DIR)
-    log('hud', `Jarvis je teraz: ${keep}${closed ? ', okno appky zavreté' : ''}`)
+    // The Edge window of Windows when Jarvis moved elsewhere, on a Mac the Chrome window of 1.9.7 and older.
+    const closed = closesProfileWindow(keep) ? closeAppWindow(DATA_DIR) : 0
+    log('hud', `Jarvis je teraz: ${keep}${closed ? ', okno s vlastným profilom prehliadača zavreté' : ''}`)
     return sendJson(res, 200, { ok: true, keep, clients: clientCount() })
   }
   if (path === '/api/apps/open') {
@@ -864,8 +865,9 @@ async function route(req, res) {
     if (file && (await serveFile(req, res, file, { cache: true, immutable: true }))) return
     return sendJson(res, 404, { ok: false, error: 'klip neexistuje' })
   }
-  // keep and keepAt: where Jarvis lives since the last move and when it was decided (the desktop app reads it, server/surface.mjs).
-  if (path === '/api/health') return sendJson(res, 200, { ok: true, port: PORT, clients: clientCount(), primary: PRIMARY, ...(lastKeep ? { keep: lastKeep.keep, keepAt: lastKeep.at } : {}) })
+  // surface: where Jarvis lives (the choice in Settings), the Mac app follows it. windows: the open windows by place.
+  // keep and keepAt: the last move and when it was decided (server/surface.mjs).
+  if (path === '/api/health') return sendJson(res, 200, { ok: true, port: PORT, clients: clientCount(), windows: roleCounts(), surface: surfaceOf(), primary: PRIMARY, ...(lastKeep ? { keep: lastKeep.keep, keepAt: lastKeep.at } : {}) })
 
   for (const mount of MOUNTS) {
     if (!path.startsWith(mount.prefix)) continue
