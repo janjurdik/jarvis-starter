@@ -68,21 +68,32 @@
   position: absolute;
   left: 0;
   top: 0;
+  display: flex;
+  align-items: center;
   max-width: 11rem;
+  font: 500 0.75rem/1.2 var(--sans);
+  color: var(--t1, rgba(234, 251, 255, 0.95));
+  text-shadow: 0 0 0.45rem rgba(2, 5, 7, 1), 0 0 0.9rem rgba(2, 5, 7, 0.9);
+  pointer-events: auto;
+  will-change: transform;
+}
+/* The name itself is the button; the label around it only places it (and the tick and × of a task). */
+.dz-tag-main {
+  min-width: 0;
+  max-width: 100%;
   padding: 0.12rem 0.35rem;
   border: 0;
   border-radius: 0.4rem;
   background: none;
-  font: 500 0.75rem/1.2 var(--sans);
-  color: var(--t1, rgba(234, 251, 255, 0.95));
-  text-shadow: 0 0 0.45rem rgba(2, 5, 7, 1), 0 0 0.9rem rgba(2, 5, 7, 0.9);
+  font: inherit;
+  color: inherit;
+  text-shadow: inherit;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  pointer-events: auto;
   cursor: pointer;
-  will-change: transform;
 }
+.dz-tag-main:focus-visible { outline: 1px solid rgba(127, 243, 255, 0.55); outline-offset: 1px; }
 .dz-tag[hidden] { display: none; }
 .dz-tag:hover, .dz-tag.is-sel { color: var(--amber, #ffb25c); }
 
@@ -106,7 +117,7 @@
 .dz-year:hover { color: var(--amber, #ffb25c); }
 
 /* Board (Úlohy, Kalendár): a name on every row, right of its dot, and a title over every column. */
-.dz-tag.is-row {
+.dz-tag.is-row .dz-tag-main {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -121,6 +132,107 @@
 .dz-tag.is-row:hover i, .dz-tag.is-row.is-sel i { color: inherit; opacity: 0.75; }
 .dz-tag.is-row.is-tight i { display: none; }
 .dz-tag.is-row[hidden] { display: none; }
+/* A task row: a tick and a × right after the name, on hover or focus (always on a touch screen). */
+.dz-row-acts { flex: none; display: inline-flex; align-items: center; max-width: 0; overflow: hidden; opacity: 0; transition: opacity 0.15s ease, max-width 0.15s ease; }
+.dz-row-acts[hidden] { display: none; }
+.dz-tag.is-todo:hover .dz-row-acts, .dz-tag.is-todo:focus-within .dz-row-acts, .dz-tag.is-todo.is-sel .dz-row-acts { max-width: 3.4rem; opacity: 1; }
+.dz-row-act { flex: none; display: grid; place-items: center; width: 1.6rem; height: 1.6rem; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--t2, rgba(234, 251, 255, 0.68)); cursor: pointer; transition: color 0.15s, background 0.15s; }
+.dz-row-act svg { width: 0.95rem; height: 0.95rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 0.3rem rgba(2, 5, 7, 1)); }
+.dz-row-act:hover, .dz-row-act:focus-visible { background: rgba(176, 246, 255, 0.1); color: var(--ice, #7ff3ff); outline: 0; }
+.dz-row-act.is-del:hover, .dz-row-act.is-del:focus-visible { color: var(--amber, #ffb25c); }
+.dz-tag.is-busy { opacity: 0.35; pointer-events: none; }
+@media (hover: none) {
+  .dz-tag.is-todo .dz-row-acts { max-width: 4.2rem; opacity: 1; }
+  .dz-row-act { width: 2.1rem; height: 2.1rem; }
+}
+
+/* Rewriting a task: a pane of glass over its row, the text on top and the term under it. */
+.dz-edit {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.6rem 0.8rem 0.65rem;
+  border-radius: 0.9rem;
+  background: linear-gradient(180deg, rgba(10, 22, 30, 0.92), rgba(6, 13, 19, 0.9));
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  backdrop-filter: blur(16px) saturate(1.3);
+  box-shadow: inset 0 1px 0 rgba(210, 250, 255, 0.14), 0 1.2rem 3rem rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+  will-change: transform;
+}
+.dz-edit::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 18%;
+  bottom: 18%;
+  width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, transparent, rgba(255, 196, 120, 1) 25%, rgba(255, 178, 92, 0.8) 70%, transparent);
+  filter: drop-shadow(0 0 6px rgba(255, 178, 92, 0.85));
+  pointer-events: none;
+}
+.dz-edit[hidden] { display: none; }
+.dz-edit.is-busy { opacity: 0.6; pointer-events: none; }
+.dz-edit-text {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.2rem 0 0.3rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: inset 0 -1px 0 rgba(127, 243, 255, 0.3);
+  font: 400 1rem/1.3 var(--sans);
+  color: var(--white, #eafbff);
+  caret-color: var(--amber, #ffb25c);
+  outline: 0;
+}
+.dz-edit-text:focus { box-shadow: inset 0 -1px 0 rgba(255, 178, 92, 0.75); }
+.dz-edit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; font: 500 0.8125rem/1 var(--sans); color: var(--t3, rgba(234, 251, 255, 0.5)); }
+.dz-edit-due { display: inline-flex; align-items: center; gap: 0.45rem; }
+.dz-edit-due input { height: 1.9rem; box-sizing: border-box; padding: 0 0.5rem; border: 0; border-radius: 0.5rem; background: rgba(176, 246, 255, 0.08); font: 500 0.8125rem/1 var(--sans); color: var(--t1, rgba(234, 251, 255, 0.95)); color-scheme: dark; outline: 0; }
+.dz-edit-due input:focus { background: rgba(176, 246, 255, 0.14); }
+.dz-edit-clear { padding: 0.25rem 0; border: 0; background: none; font: inherit; color: var(--t2, rgba(234, 251, 255, 0.68)); cursor: pointer; }
+.dz-edit-clear:hover, .dz-edit-clear:focus-visible { color: var(--amber, #ffb25c); outline: 0; }
+.dz-edit-clear[hidden] { display: none; }
+.dz-edit-keys { margin-left: auto; white-space: nowrap; }
+.dz-edit-keys kbd { font: 500 0.6875rem/1 var(--mono, monospace); padding: 0.2rem 0.38rem; border-radius: 0.35rem; background: rgba(176, 246, 255, 0.09); color: var(--t2, rgba(234, 251, 255, 0.68)); }
+@media (hover: none) { .dz-edit-keys { display: none; } }
+
+/* A short note after a task is deleted or ticked, with the way back. It hangs on the body above the
+   command bar (z-index 32 while a planet is open), so Vrátiť is never under it. */
+.dz-toast {
+  position: fixed;
+  bottom: calc(var(--safe-bottom, 0px) + 8.9rem);
+  left: calc(var(--safe-left, 0px) + var(--edge, 1.5rem) + var(--lw, 0px) + var(--gap, 1rem));
+  right: calc(var(--safe-right, 0px) + var(--edge, 1.5rem) + var(--rw, 0px) + var(--gap, 1rem));
+  z-index: 33;
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 1.4rem;
+  background: rgba(10, 22, 30, 0.88);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 0 rgba(210, 250, 255, 0.12), 0 1rem 2.5rem rgba(0, 0, 0, 0.4);
+  font: 500 0.9375rem/1.25 var(--sans);
+  color: var(--t1, rgba(234, 251, 255, 0.95));
+  pointer-events: auto;
+  animation: dz-in 0.25s ease;
+}
+.dz-toast[hidden] { display: none; }
+.dz-toast-undo { padding: 0.2rem 0; border: 0; background: none; font: 600 0.9375rem/1 var(--sans); color: var(--amber, #ffb25c); cursor: pointer; }
+.dz-toast-undo:hover, .dz-toast-undo:focus-visible { color: #ffd29e; outline: 0; text-shadow: 0 0 0.8rem rgba(255, 178, 92, 0.6); }
+.dz-toast-undo[hidden] { display: none; }
+
 .dz-year.is-col {
   font: 600 1.05rem/1.1 var(--sans);
   letter-spacing: 0;

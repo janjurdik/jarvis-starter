@@ -10,11 +10,16 @@ import '../env.mjs'
 import { readFileSync } from 'node:fs'
 import { describeDay, garminConnected, garminDays, readCache, readState, syncGarmin } from '../garmin/index.mjs'
 import { addEvent, calendarRange } from '../memory/calendar.mjs'
-import { FILES, FOLDERS, addTodo, appendUnder, completeTodo, dayStats, findNote, getIndex, goals, logDay, search, slugify, stats, todos, writeNote } from '../memory/index.mjs'
+import { FILES, FOLDERS, addTodo, appendUnder, changeTodo, completeTodo, dayStats, findNote, findTodo, getIndex, goals, logDay, search, slugify, stats, todos, writeNote } from '../memory/index.mjs'
 import { DOW_LONG, addDays, dowOf, isoDay } from '../util.mjs'
 import { READ_ONLY, serveMcp } from './stdio.mjs'
 import { formatHits, search as searchMessages, thread as readThread } from '../../../scripts/import/search.mjs'
 
+/** A todo tool did not find exactly one task: say which ones fit, so the next try can be precise. */
+const notFound = (found, match) =>
+  found.candidates
+    ? { text: `Na „${match}" sedí viac úloh: ${found.candidates.slice(0, 8).map((t) => `${t.text}${t.due ? ` (do ${t.due})` : ''}`).join('; ')}. Vyber presnejší text.`, isError: true }
+    : { text: `Otvorenú úlohu s „${match}" som nenašiel.`, isError: true }
 const dayArg = (v, fallback) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : fallback)
 const fmtMin = (m) => (m === null || m === undefined ? '–' : `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, '0')} min`)
 const label = (day) => {
@@ -51,11 +56,11 @@ async function auto(tool, data) {
   }
 }
 
-/** Tells the HUD that memory changed, so panels and the 3D world refresh right away. */
-async function changed() {
+/** Tells the HUD that memory changed, so panels and the 3D world refresh right away. node: the planet whose inside changed ('ulohy'). */
+async function changed(node = null) {
   if (!HUD || !HUD_TOKEN) return
   try {
-    await fetch(`${HUD}/api/brain/hud`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-brain-token': HUD_TOKEN }, body: JSON.stringify({ action: 'memory_changed' }), signal: AbortSignal.timeout(1500) })
+    await fetch(`${HUD}/api/brain/hud`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-brain-token': HUD_TOKEN }, body: JSON.stringify({ action: 'memory_changed', node }), signal: AbortSignal.timeout(1500) })
   } catch {
     // the next periodic refresh picks it up
   }
@@ -352,7 +357,7 @@ serveMcp({
       inputSchema: { type: 'object', properties: { text: { type: 'string' }, due: { type: 'string' } }, required: ['text'] },
       handler: async ({ text, due }) => {
         const line = await addTodo(String(text), dayArg(due, null))
-        await changed()
+        await changed('ulohy')
         return `Pridané: ${line}`
       },
     },
@@ -378,8 +383,41 @@ serveMcp({
       handler: async ({ match }) => {
         const done = await completeTodo(String(match ?? ''))
         if (!done) return { text: `Otvorenú úlohu s „${match}" som nenašiel.`, isError: true }
-        await changed()
+        await changed('ulohy')
         return `Hotovo: ${done}`
+      },
+    },
+    {
+      name: 'edit_todo',
+      description:
+        'Prepíše otvorenú úlohu v ulohy.md, tak ako keď na ňu používateľ klikne na ploche. match = časť jej doterajšieho textu. text = nový text (voliteľné). due = nový termín YYYY-MM-DD, prázdny reťazec termín zruší (voliteľné, bez neho ostane, aký bol).',
+      inputSchema: { type: 'object', properties: { match: { type: 'string' }, text: { type: 'string' }, due: { type: 'string' } }, required: ['match'] },
+      handler: async ({ match, text, due }) => {
+        const found = await findTodo(String(match ?? ''))
+        if (!found.ref) return notFound(found, match)
+        try {
+          const r = await changeTodo({ action: 'edit', ref: found.ref, text: typeof text === 'string' && text.trim() ? text : undefined, due: due === undefined ? undefined : String(due ?? '').trim() || null })
+          await changed('ulohy')
+          return `Úloha teraz znie: ${r.item.text}${r.item.due ? ` (do ${r.item.due})` : ''}`
+        } catch (err) {
+          return { text: err.message, isError: true }
+        }
+      },
+    },
+    {
+      name: 'delete_todo',
+      description: 'Zmaže otvorenú úlohu z ulohy.md (riadok zmizne, ako × na ploche). match = časť jej textu. Na hotovú úlohu použi complete_todo.',
+      inputSchema: { type: 'object', properties: { match: { type: 'string' } }, required: ['match'] },
+      handler: async ({ match }) => {
+        const found = await findTodo(String(match ?? ''))
+        if (!found.ref) return notFound(found, match)
+        try {
+          const r = await changeTodo({ action: 'delete', ref: found.ref })
+          await changed('ulohy')
+          return `Zmazané: ${r.item.text}`
+        } catch (err) {
+          return { text: err.message, isError: true }
+        }
       },
     },
     {
@@ -395,7 +433,7 @@ serveMcp({
         if (!d) return { text: 'day musí byť YYYY-MM-DD', isError: true }
         const hm = (v) => (/^\d{1,2}:\d{2}$/.test(String(v ?? '')) ? String(v).padStart(5, '0') : null)
         const line = await addEvent({ day: d, time: hm(time), end: hm(end), title, place })
-        await changed()
+        await changed('kalendar')
         return `Pridané do kalendára: ${line}`
       },
     },

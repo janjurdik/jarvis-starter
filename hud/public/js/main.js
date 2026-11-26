@@ -766,6 +766,8 @@ function connectEvents() {
     ui.toast(`Presťahoval som sa ${where}. Túto kartu môžete zavrieť.`, { iconName: 'info', ms: 20_000 })
   })
   on('orbs', (o) => paint('orbs', () => applyOrbs(o)))
+  // The inside of a planet changed (a task deleted or rewritten here, in another window or by Jarvis): the open board redraws.
+  on('inner', (m) => m?.node && dossier?.refresh?.(m.node))
   on('settings', (st) => settings?.apply(st))
   on('job-feed', (m) => jobs?.feed(m.id, m.entry))
   on('import', (ev) => drop?.applyImport(ev))
@@ -1419,7 +1421,7 @@ async function main() {
   const num = (key) => (params.has(key) && Number.isFinite(Number(params.get(key))) ? Number(params.get(key)) : undefined)
   core = await createCore(canvas, { quality: QUALITY, capture: CAPTURE, ringText, nodes, bloom: num('bloom'), bloomRadius: num('bloomr'), bloomThreshold: num('bloomt'), debug: params.has('debug') })
   if (!CAPTURE && !SCENE_ID && core.inner) {
-    dossier = createDossier({ core, canvas, onClose: () => (world.focus = null), onAsk: (text) => text && send(text, 'text') })
+    dossier = createDossier({ core, canvas, api, onClose: () => (world.focus = null), onAsk: (text) => text && send(text, 'text') })
     dossier.setFilm(film)
     dossier.setOrbs(nodes)
     appsWorld = createAppsWorld({

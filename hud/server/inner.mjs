@@ -210,6 +210,8 @@ const WORLDS = {
       g: byTerm ? term(t) : (t.group ?? 'Úlohy'),
       k: 'todo',
       full: t.text,
+      // Which line of ulohy.md this is, for a click that deletes or rewrites it (POST /api/todos).
+      ref: { text: t.text, due: t.due, n: t.n },
     }))
     const keys = byTerm ? order.filter((k) => items.some((i) => i.g === k)) : [...new Set(list.map((t) => t.group ?? 'Úlohy'))]
     return { items, groups: keys.map((key) => ({ key, label: key })) }

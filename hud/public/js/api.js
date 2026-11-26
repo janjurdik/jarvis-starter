@@ -53,6 +53,8 @@ export function createApi({ token = null } = {}) {
     login: (body) => post('/api/login', body),
     /** A button under "not signed in": Jarvis opens the login window himself (server/terminal.mjs). */
     openTerminal: (action) => post('/api/terminal', { action }),
+    /** One task of the Úlohy board: { action: 'delete' | 'edit' | 'done' | 'restore', ref, text, due, undo }. */
+    todos: (body) => post('/api/todos', body),
 
     // ── files, imports and the people review (drop.js, people.js) ──
     /** URL of a private file (attachment, photo from an export) usable in <img>: adds the token when there is one. */

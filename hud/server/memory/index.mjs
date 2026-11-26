@@ -16,9 +16,10 @@
  * The index is rebuilt lazily when files change (cheap mtime scan), no database needed.
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { REPO, isoDay, writeFileAtomic } from '../util.mjs'
+import { editTodos, parseTodos, refOf } from './todo-edit.mjs'
 
 export const MEMORY_DIR = resolve(process.env.JARVIS_MEMORY_DIR || join(REPO, 'memory'))
 
@@ -272,9 +273,7 @@ export function goals(ix) {
   })
 }
 
-const DUE = /(?:\(?\s*(?:do|termín|due|📅)\s*:?\s*(\d{4}-\d{2}-\d{2})\s*\)?)/i
-
-/** Open and done items of ulohy.md, with an optional due date and the heading they sit under. */
+/** Open and done items of ulohy.md, with an optional due date, the heading they sit under and n (see todo-edit.mjs). */
 export async function todos() {
   let text = ''
   try {
@@ -282,20 +281,7 @@ export async function todos() {
   } catch {
     return []
   }
-  const out = []
-  let group = null
-  for (const line of text.split(/\r?\n/)) {
-    const h = /^#{1,6}\s+(.*)$/.exec(line)
-    if (h) {
-      group = h[1].trim()
-      continue
-    }
-    const m = /^\s*[-*]\s+\[( |x|X)\]\s+(.+)$/.exec(line)
-    if (!m) continue
-    const due = DUE.exec(m[2])?.[1] ?? null
-    out.push({ done: m[1] !== ' ', text: m[2].replace(DUE, '').replace(/\s+/g, ' ').trim(), due, group })
-  }
-  return out
+  return parseTodos(text).map(({ done, text: t, due, group, n }) => ({ done, text: t, due, group, n }))
 }
 
 /** Sleep and mood per day from the daily log frontmatter. Sleep accepts 7.5, "7,5", "7:30" or "7h 30m". */
@@ -427,36 +413,77 @@ export async function appendUnder(rel, heading, line) {
   lastScan = 0
 }
 
-export async function addTodo(text, due = null) {
+// One change to the task file at a time: two quick clicks never read the same old file.
+let todoQueue = Promise.resolve()
+
+export function addTodo(text, due = null) {
   const line = `- [ ] ${String(text).trim()}${due ? ` (do ${due})` : ''}`
-  const full = join(MEMORY_DIR, FILES.todos)
-  let old = ''
-  try {
-    old = await readFile(full, 'utf8')
-  } catch {
-    old = '# Úlohy\n'
-  }
-  await mkdir(MEMORY_DIR, { recursive: true })
-  await writeFileAtomic(full, `${old.replace(/\s+$/, '')}\n${line}\n`)
-  return line
+  const run = todoQueue.then(async () => {
+    const full = join(MEMORY_DIR, FILES.todos)
+    let old = ''
+    try {
+      old = await readFile(full, 'utf8')
+    } catch {
+      old = '# Úlohy\n'
+    }
+    await mkdir(MEMORY_DIR, { recursive: true })
+    await writeFileAtomic(full, `${old.replace(/\s+$/, '')}\n${line}\n`)
+    lastScan = 0
+    return line
+  })
+  todoQueue = run.catch(() => {})
+  return run
 }
 
-/** Ticks the first open to-do whose text contains `match`. Returns the item text or null. */
+/** Ticks the open to-do `match` means (findTodo; the first one when more fit). Returns the item text or null. */
 export async function completeTodo(match) {
-  const full = join(MEMORY_DIR, FILES.todos)
-  let text
-  try {
-    text = await readFile(full, 'utf8')
-  } catch {
-    return null
-  }
+  const { ref, candidates } = await findTodo(match)
+  const pick = ref ?? (candidates?.length ? refOf(candidates[0]) : null)
+  if (!pick) return null
+  await changeTodo({ action: 'done', ref: pick })
+  return pick.text
+}
+
+/**
+ * Deletes, rewrites, ticks or puts back one task of ulohy.md (hud/server/memory/todo-edit.mjs).
+ * The HUD (POST /api/todos) and the brain's todo tools both go through here, so a click and a
+ * sentence do exactly the same. Throws an error with `status` 400 (bad input) or 409 (the task
+ * is not in the file any more, nothing written).
+ */
+export function changeTodo(op) {
+  const run = todoQueue.then(async () => {
+    const full = join(MEMORY_DIR, FILES.todos)
+    let text = ''
+    try {
+      text = await readFile(full, 'utf8')
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err
+      if (op?.action !== 'restore') throw Object.assign(new Error('Zoznam úloh je prázdny.'), { status: 409 })
+    }
+    const { text: next, result } = editTodos(text, op)
+    if (next !== text) {
+      await mkdir(MEMORY_DIR, { recursive: true })
+      await writeFileAtomic(full, next)
+      lastScan = 0
+    }
+    return result
+  })
+  todoQueue = run.catch(() => {})
+  return run
+}
+
+/**
+ * The open task a sentence means ("zmaž úlohu kúpiť mlieko"): the same text first, then the only one
+ * that contains it. { ref, item } when it is clear, { candidates } when more tasks fit, {} when none.
+ */
+export async function findTodo(match) {
   const want = slugify(match)
-  const lines = text.split(/\r?\n/)
-  const i = lines.findIndex((l) => /^\s*[-*]\s+\[ \]\s+/.test(l) && slugify(l).includes(want))
-  if (i < 0) return null
-  lines[i] = lines[i].replace('[ ]', '[x]')
-  await writeFile(full, lines.join('\n'))
-  return lines[i].replace(/^\s*[-*]\s+\[x\]\s+/, '').trim()
+  if (!want) return {}
+  const open = (await todos()).filter((t) => !t.done)
+  const exact = open.filter((t) => slugify(t.text) === want)
+  const hits = exact.length ? exact : open.filter((t) => slugify(t.text).includes(want))
+  if (hits.length === 1 || (exact.length && hits.every((t) => t.text === hits[0].text && t.due === hits[0].due))) return { ref: refOf(hits[0]), item: hits[0] }
+  return hits.length ? { candidates: hits } : {}
 }
 
 /** Today's daily log: appends a line and optionally sets sleep and mood in the frontmatter. */
