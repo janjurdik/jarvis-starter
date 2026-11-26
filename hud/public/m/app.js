@@ -91,6 +91,11 @@ function linkify(s) {
 }
 
 function cardHtml(c = {}) {
+  // The login card is filled in only at the computer: a password never goes through the tunnel (server/login.mjs).
+  if (c.kind === 'login') {
+    const text = c.state === 'done' ? c.message || 'Prihlásené.' : c.state === 'closed' ? c.message || 'Prihlásenie zrušené.' : 'Prihlásenie dokončíte priamo na počítači, na ktorom bežím. Heslo cez internet neposielam.'
+    return `<div class="card"><div class="card-h">${icon(c.icon || NODE_ICON[c.node] || 'shield')}<span>${esc(c.title ?? 'Prihlásenie')}</span></div><p class="card-text">${esc(text)}</p></div>`
+  }
   const acc = c.accent === 'amber' ? ' acc-amber' : c.accent === 'red' ? ' acc-red' : ''
   let body = ''
   if (c.value !== null && c.value !== undefined && c.value !== '') body += `<div class="card-v">${esc(c.value)}${c.unit ? `<small>${esc(c.unit)}</small>` : ''}</div>`

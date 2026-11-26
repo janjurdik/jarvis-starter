@@ -350,12 +350,12 @@ export function createSettings({ onToast = () => {} } = {}) {
           onDesk
             ? native
               ? 'V lište úplne hore vpravo je môj krúžok. Cez neho ma vyvoláte, načítate znova alebo vypnete a vrátite si pôvodnú plochu.'
-              : 'Na plochu ma položí appka Jarvis, ktorú si Mac postaví sám. Potrebuje na to nástroje pre vývojárov od Apple (xcode-select --install), potom stačí node scripts/hud.mjs. Alebo to povedzte AI, ktorá má priečinok Jarvisa otvorený.'
+              : 'Na plochu ma položí appka Jarvis, ktorú si Mac postaví sám. Potrebuje na to nástroje pre vývojárov od Apple: povedzte mi „nainštaluj nástroje od Apple“ a inštaláciu vám otvorím.'
             : surface === 'app'
               ? mac
                 ? !browserWindow
                   ? 'Zelené tlačidlo okna alebo ⌃⌘F ma dá na celú obrazovku. Keď okno zavriete, bežím ďalej, hovorím aj zvoním, a ikona v Docku ma vráti. Po prihlásení do počítača sa otvorím sám.'
-                  : 'Teraz bežím v okne prehliadača. Appku Jarvis si Mac postaví sám, keď bude mať nástroje pre vývojárov od Apple (xcode-select --install).'
+                  : 'Teraz bežím v okne prehliadača. Appku Jarvis si Mac postaví sám, keď bude mať nástroje pre vývojárov od Apple: povedzte mi „nainštaluj nástroje od Apple“ a inštaláciu vám otvorím.'
                 : 'Okno je na celú obrazovku, F11 ho prepne na bežné okno a späť. Po prihlásení do počítača sa otvorím sám.'
               : 'Po prihlásení do počítača bežím potichu na pozadí a žiadne okno neotváram.'
         }</p>`,

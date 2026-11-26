@@ -11,8 +11,11 @@
  *   <data>/garmin/state.json           last attempt, last error, what the sync wrote into the notes
  *   <data>/logs/garmin.log             one line per sync
  *
- * Credentials: the password is typed only into the worker's own terminal prompt. It never passes
- * through this module, a process argument, the environment, a file or the log.
+ * Credentials: the password is typed either into the login card in the HUD (server/login.mjs, which
+ * hands it to loginSession() below) or into the worker's own terminal prompt (`node scripts/garmin.mjs
+ * login`, for people who like a terminal). From the card it goes to the worker on its stdin and
+ * nowhere else: never a process argument or the environment (other processes can read those),
+ * never a file, the log, the chat or the brain.
  *
  * Fields in the daily log header (all optional, the user may also write them by hand):
  *   spanok: 7:12              sleep, hours:minutes        spanok_zdroj: garmin   who wrote `spanok`
@@ -107,13 +110,23 @@ function logLine(msg) {
   }
 }
 
-/** The one line the user types into their own terminal. The password is asked there, by the worker. */
+/**
+ * The terminal login, for power users and for docs: the login card in the HUD is the normal way.
+ * The brain never shows these lines to the user (it opens the card, or open_terminal opens a window).
+ */
 export function loginCommands() {
   return {
     mac: `cd '${REPO.replace(/'/g, `'\\''`)}' && node scripts/garmin.mjs login`,
     windows: `cd '${REPO.replace(/'/g, "''")}'; node scripts/garmin.mjs login`,
   }
 }
+
+/**
+ * How to connect, in the answers of sync and status: the login card (`ask_login` on the screen,
+ * `node scripts/garmin.mjs connect` from a script or the setup chat). The terminal line stays only
+ * for people who want it and is never read out to the user.
+ */
+const connectInfo = () => ({ connect: 'card', terminal: loginCommands() })
 
 // ── formatting ─────────────────────────────────────────────────────────
 
@@ -433,6 +446,134 @@ export function runLogin() {
   })
 }
 
+/**
+ * The login of the HUD's login card: one worker process (`login --stdin`) that lives from the
+ * e-mail and password until the session is saved, including the wait for a one-time code.
+ *
+ *   const s = loginSession()
+ *   await s.submit({ email, password })   → { state: 'connected', name } | { state: 'code' } | { state: 'error', error, message, retry? }
+ *   await s.code('123456')                → the same shapes (after 'code' or a retryable 'wrong_code')
+ *   s.close()                             ends the worker (a card that was closed, a server shutdown)
+ *
+ * The credentials go to the worker's stdin as one JSON line and are not kept here. The answers
+ * the worker prints never carry them.
+ */
+export function loginSession({ timeout = 12 * 60_000 } = {}) {
+  let child = null
+  let buf = ''
+  let closed = false
+  let waiting = null
+  const events = []
+  const timer = setTimeout(() => close(), timeout)
+  timer.unref?.()
+
+  const deliver = (ev) => {
+    if (waiting) {
+      const w = waiting
+      waiting = null
+      w(ev)
+    } else events.push(ev)
+  }
+  const next = () => new Promise((resolve) => (events.length ? resolve(events.shift()) : (waiting = resolve)))
+  const shape = (ev) => {
+    if (ev.event === 'connected') return { state: 'connected', name: clean(ev.name ?? '', 80) || null }
+    if (ev.event === 'needs_code') return { state: 'code' }
+    const error = ['wrong_credentials', 'wrong_code', 'rate_limited', 'network', 'timeout', 'usage', 'no_uv'].includes(ev.error) ? ev.error : 'failed'
+    return { state: 'error', error, message: clean(ev.message ?? '', 200) || MESSAGES.failed, ...(ev.retry === true ? { retry: true } : {}) }
+  }
+
+  function close() {
+    if (closed) return
+    closed = true
+    clearTimeout(timer)
+    try {
+      child?.stdin.end()
+    } catch {
+      // already gone
+    }
+    if (child && child.exitCode === null) child.kill()
+    deliver({ event: 'error', error: 'failed', message: 'Prihlásenie sa prerušilo.' })
+  }
+
+  function start() {
+    const uv = uvBin()
+    if (!uv) return false
+    ensureDir()
+    try {
+      child = spawnBin(uv, workerArgs(['login', '--stdin']), { cwd: REPO, env: workerEnv(), stdio: ['pipe', 'pipe', 'pipe'] })
+    } catch (e) {
+      logLine(`login card: worker did not start (${clean(errMsg(e), 160)})`)
+      return false
+    }
+    child.stdin.on('error', () => {})
+    child.stdout.on('data', (d) => {
+      buf += d
+      let i
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim()
+        buf = buf.slice(i + 1)
+        if (!line.startsWith('{')) continue
+        try {
+          const ev = JSON.parse(line)
+          if (ev && typeof ev.event === 'string') deliver(ev)
+        } catch {
+          // not a protocol line
+        }
+      }
+      if (buf.length > 100_000) buf = ''
+    })
+    // stderr holds only the worker's own diagnostics (no secrets); it is not kept.
+    child.stderr.on('data', () => {})
+    child.on('error', () => deliver({ event: 'error', error: 'failed', message: MESSAGES.failed }))
+    // 'close', not 'exit': the last line on stdout may still be on its way when the process exits.
+    child.on('close', (code) => {
+      closed = true
+      clearTimeout(timer)
+      deliver({ event: 'error', error: 'failed', message: code === 0 ? 'Prihlásenie skončilo bez odpovede.' : MESSAGES.failed })
+    })
+    return true
+  }
+
+  const send = (obj) => {
+    try {
+      child.stdin.write(`${JSON.stringify(obj)}\n`)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  return {
+    get open() {
+      return !closed
+    },
+    async submit({ email, password } = {}) {
+      if (child) return { state: 'error', error: 'failed', message: 'Prihlásenie už beží.' }
+      if (!start()) {
+        closed = true
+        clearTimeout(timer)
+        return { state: 'error', error: 'no_uv', message: MESSAGES.no_uv }
+      }
+      send({ email: String(email ?? ''), password: String(password ?? '') })
+      const res = shape(await next())
+      if (res.state !== 'code') close()
+      if (res.state === 'connected') logLine('login card: connected')
+      else if (res.state === 'error') logLine(`login card: ${res.error}`)
+      return res
+    },
+    async code(value) {
+      if (!child || closed) return { state: 'error', error: 'timeout', message: 'Na kód už nečakám. Prihláste sa znova, Garmin pošle nový.' }
+      send({ code: String(value ?? '') })
+      const res = shape(await next())
+      if (!(res.state === 'error' && res.retry)) close()
+      if (res.state === 'connected') logLine('login card: connected after a code')
+      else if (res.state === 'error') logLine(`login card: ${res.error}`)
+      return res
+    },
+    close,
+  }
+}
+
 /** Asks Garmin whether the saved session still works: { connected, valid, name, error }. */
 export async function checkGarmin() {
   if (!garminConnected()) return { connected: false, valid: false }
@@ -504,7 +645,7 @@ export async function syncGarmin({ days = 14, fixture = null, today = null, reas
   if (fixture && !(process.env.JARVIS_MEMORY_DIR && process.env.JARVIS_DATA_DIR)) {
     return { ok: false, error: 'failed', message: 'Skúšobné dáta (--fixture) idú len do skúšobných priečinkov: nastav JARVIS_MEMORY_DIR aj JARVIS_DATA_DIR.' }
   }
-  if (!fixture && !garminConnected()) return { ok: false, error: 'not_connected', message: MESSAGES.not_connected, login: loginCommands() }
+  if (!fixture && !garminConnected()) return { ok: false, error: 'not_connected', message: MESSAGES.not_connected, ...connectInfo() }
 
   // Somebody else is syncing right now: wait for them instead of asking Garmin twice.
   let locked = takeLock()
@@ -532,7 +673,7 @@ export async function syncGarmin({ days = 14, fixture = null, today = null, reas
       if (error === 'rate_limited') state.cooldownUntil = new Date(Date.now() + 60 * 60_000).toISOString()
       await writeState(state)
       logLine(`sync ${reason} days=${n} FAILED ${error}${res.json?.message ? ` · ${clean(res.json.message, 200)}` : ''}${!res.json && res.err ? ` · ${clean(res.err.split('\n').at(-1), 200)}` : ''}`)
-      return { ok: false, error, message, ...(error === 'needs_login' || error === 'not_connected' ? { login: loginCommands() } : {}) }
+      return { ok: false, error, message, ...(error === 'needs_login' || error === 'not_connected' ? connectInfo() : {}) }
     }
 
     const cache = readCache()
@@ -645,7 +786,7 @@ export function garminStatus() {
     lastAttempt: state.lastAttempt ?? null,
     lastError: state.lastError ?? null,
     ...overview(cache),
-    ...(connected ? {} : { login: loginCommands() }),
+    ...(connected ? {} : connectInfo()),
   }
 }
 

@@ -89,6 +89,49 @@ export function standaloneCard(turn, card, extra = {}) {
   remember({ turn, via: 'text', user: null, attachments: [], jarvis: '', tools: [], cards: [card], at: new Date().toISOString(), ms: 0, stopped: false, error: null, film: false })
 }
 
+/**
+ * A card built by the server itself, not by the brain's hud_card (the login card, server/login.mjs).
+ * It joins the turn that is running, so it shows up under Jarvis's sentence, or stands on its own.
+ * Returns the turn it belongs to.
+ */
+export function pushCard(card) {
+  if (current?.active) {
+    current.cards.push(card)
+    send('chat', { turn: current.id, phase: 'card', card })
+    return current.id
+  }
+  const turn = `card-${Date.now().toString(36)}`
+  standaloneCard(turn, card)
+  return turn
+}
+
+/** Where a card lives: { card, turn } from the running turn or the kept conversation, or null. */
+export function findCard(id) {
+  if (!id) return null
+  if (current) {
+    const card = current.cards.find((c) => c.id === id)
+    if (card) return { card, turn: current.id }
+  }
+  for (let i = history.length - 1; i >= 0; i--) {
+    const card = (history[i].cards ?? []).find((c) => c.id === id)
+    if (card) return { card, turn: history[i].turn }
+  }
+  return null
+}
+
+/**
+ * Changes a card that is already on the screen (the login card moves from the form to the code and
+ * to done). The open windows redraw it (`card-update`), the kept conversation remembers the change.
+ */
+export function updateCard(id, patch) {
+  const found = findCard(id)
+  if (!found) return null
+  Object.assign(found.card, patch)
+  send('chat', { turn: found.turn, phase: 'card-update', card: found.card })
+  saveHistory()
+  return found.card
+}
+
 // ── hlasový stav ─────────────────────────────────────────────────────────
 
 const voiceListeners = new Set()
@@ -225,7 +268,7 @@ function historyEntry(turn) {
   }
 }
 
-function finish(turn, { error = null, stopped = false, meta = {} } = {}) {
+function finish(turn, { error = null, stopped = false, meta = {}, fix = null } = {}) {
   if (!turn.active) return
   turn.active = false
   turn.finishing = !stopped
@@ -242,7 +285,7 @@ function finish(turn, { error = null, stopped = false, meta = {} } = {}) {
     turn.queue.end()
   }
   const ms = Date.now() - turn.t0
-  if (error) send('chat', { turn: turn.id, phase: 'error', message: error })
+  if (error) send('chat', { turn: turn.id, phase: 'error', message: error, ...(fix ? { fix } : {}) })
   else send('chat', { turn: turn.id, phase: 'done', text: turn.text.trim(), ms, stopped })
   const entry = historyEntry(turn)
   Object.defineProperty(entry, '_turn', { value: turn, enumerable: false })
@@ -336,8 +379,9 @@ function sinkFor(turn) {
     done(meta = {}) {
       finish(turn, { meta })
     },
-    error(message) {
-      finish(turn, { error: clean(message, 300) || 'neznáma chyba' })
+    /** `fix`: an action of open_terminal (server/terminal.mjs) the screen offers as a button, e.g. a login of the AI. */
+    error(message, { fix = null } = {}) {
+      finish(turn, { error: clean(message, 300) || 'neznáma chyba', fix })
     },
   }
 }

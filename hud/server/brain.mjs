@@ -52,6 +52,7 @@ export function allowedTools() {
     'mcp__computer__media',
     'mcp__computer__volume',
     'mcp__computer__screen_look',
+    'mcp__computer__open_terminal',
     'mcp__jarvis-hud__hud_focus',
     'mcp__jarvis-hud__hud_card',
     'mcp__jarvis-hud__hud_log',
@@ -77,11 +78,15 @@ export function allowedTools() {
     'mcp__jarvis-hud__record_start',
     'mcp__jarvis-hud__record_stop',
     'mcp__jarvis-hud__record_status',
+    'mcp__jarvis-hud__ask_login',
     'WebSearch',
     'WebFetch',
     'Read',
   ]
 }
+
+/** What the Claude CLI answers when its login is missing or expired. */
+export const NOT_SIGNED_IN = /please run \/login|not logged in|oauth token (has )?expired|invalid api key|authentication_error/i
 
 /** The one thing that stays closed: the HUD's own access token in data/brain. It is of no use to the user and would open the HUD to another device. */
 export function deniedTools() {
@@ -342,7 +347,12 @@ export class Brain {
     this.turns++
     if (!job.interrupted) {
       if (msg.subtype === 'success' && !msg.is_error) job.sink.done(meta)
-      else job.sink.error(msg.result || (Array.isArray(msg.errors) ? msg.errors.join('; ') : '') || `mozog skončil chybou (${msg.subtype})`)
+      else {
+        const text = msg.result || (Array.isArray(msg.errors) ? msg.errors.join('; ') : '') || `mozog skončil chybou (${msg.subtype})`
+        // Not signed in: the screen offers a button that opens the login window, nobody types a command.
+        if (NOT_SIGNED_IN.test(text)) job.sink.error('Claude nie je prihlásený.', { fix: 'claude_login' })
+        else job.sink.error(text)
+      }
     }
     job.resolve()
     if (!this.queue.some((j) => !j.interrupted)) this.setState(this.proc ? 'ready' : 'off')

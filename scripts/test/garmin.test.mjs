@@ -48,22 +48,33 @@ const localClock = (iso) => new Date(iso).toLocaleTimeString('sv-SE').slice(0, 5
 const test = (name, fn) => nodeTest(name, { skip: uvReady() ? false : 'uv is not installed' }, fn)
 process.on('exit', () => rmSync(BOX, { recursive: true, force: true }))
 
-await test('status without a login says not connected and prints the one line to type', () => {
+await test('status without a login says not connected and points to the login card', () => {
   const r = cli(['status', '--json'])
   const s = r.json()
   assert.equal(r.code, 0)
   assert.equal(s.connected, false)
-  assert.match(s.login.mac, /node scripts\/garmin\.mjs login$/)
-  assert.match(s.login.windows, /node scripts\/garmin\.mjs login$/)
+  assert.equal(s.connect, 'card')
+  // The terminal line stays for people who want it, it is not what the user is told.
+  assert.match(s.terminal.mac, /node scripts\/garmin\.mjs login$/)
+  assert.match(s.terminal.windows, /node scripts\/garmin\.mjs login$/)
   assert.equal(garminConnected(), false)
+  const text = cli(['status']).out
+  assert.match(text, /karta na prihlásenie/i)
+  assert.doesNotMatch(text, /Terminál|PowerShell/)
 })
 
 await test('login refuses without a terminal instead of waiting for a password', () => {
   const r = cli(['login'], { input: 'someone@example.com\nnot-a-real-password\n' })
   assert.equal(r.code, 2)
-  assert.match(r.out, /len v termináli/)
+  assert.match(r.out, /karta na prihlásenie/i)
   assert.doesNotMatch(r.out, /not-a-real-password/)
   assert.equal(garminConnected(), false)
+})
+
+await test('connect without a running Jarvis says so instead of printing a command', () => {
+  const r = spawnSync(process.execPath, [join(REPO, 'scripts', 'garmin.mjs'), 'connect', '--json'], { cwd: REPO, env: { ...process.env, PORT: '1' }, encoding: 'utf8', timeout: 30_000 })
+  assert.equal(r.status, 1)
+  assert.equal(JSON.parse(r.stdout).error, 'no_hud')
 })
 
 await test('sync without a login does not contact Garmin', () => {
@@ -184,7 +195,7 @@ await test('rate limit: a short one is waited out, a lasting one stops the sync 
 await test('an expired login is reported as "log in again"', () => {
   const r = sync(fixtureFile((f) => ((f.fail = { summary: 'auth' }), f)))
   assert.equal(r.json().error, 'needs_login')
-  assert.match(r.json().login.mac, /garmin\.mjs login/)
+  assert.equal(r.json().connect, 'card')
   const state = readState()
   assert.equal(autoPlan({ cfg: {}, now: new Date(), state: { ...state, cooldownUntil: null }, cache: { days: {} }, tokenSavedAt: 0 }), null, 'not retried until the user logs in again')
   assert.ok(autoPlan({ cfg: {}, now: new Date(Date.now() + 4 * 3600_000), state: { ...state, cooldownUntil: null }, cache: { days: {} }, tokenSavedAt: Date.now() + 1000 }), 'retried after a new login')

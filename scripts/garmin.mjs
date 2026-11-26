@@ -5,15 +5,17 @@
  *
  *   node scripts/garmin.mjs                    is Garmin connected, when was the last sync (also --json)
  *   node scripts/garmin.mjs status --check     also ask Garmin whether the saved login still works
- *   node scripts/garmin.mjs login              connect: the user runs this in their own terminal
+ *   node scripts/garmin.mjs connect            connect: shows the login card on Jarvis's screen
+ *   node scripts/garmin.mjs login              connect in a real terminal, for people who want one
  *   node scripts/garmin.mjs sync               pull the last 14 days into the daily log (also --json)
  *   node scripts/garmin.mjs sync --days 2      a shorter range (the alarm's brief uses 2)
  *   node scripts/garmin.mjs logout             disconnect: delete the saved login from this computer
  *
- * `login` asks for the Garmin e-mail and password, so it only runs in a real terminal with the
- * user at the keyboard. From Claude, a routine or any other place without one it refuses and prints
- * the one line to type. The password goes from the keyboard to Garmin and is never stored: only
- * the session tokens are kept, in data/garmin/ (docs/GARMIN.md).
+ * The normal way to connect is the login card in the conversation (the voice tool ask_login, or
+ * `connect` from here): the user types the e-mail and password into the card and they go straight
+ * to Garmin (hud/server/login.mjs). `login` asks for them in a real terminal instead and refuses
+ * without one. Either way the password is never stored: only the session tokens are kept, in
+ * data/garmin/ (docs/GARMIN.md).
  *
  * `sync` writes into memory/dennik/RRRR-MM-DD.md: the header fields spanok, spanok_skore, hrv,
  * tep_pokoj, bateria, kroky… and workouts under "## Tréning". Running it twice changes nothing,
@@ -30,7 +32,7 @@ import '../hud/server/env.mjs'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getConfig } from '../hud/server/config.mjs'
-import { checkGarmin, describeDay, garminConnected, garminStatus, hMin, loginCommands, logoutGarmin, readState, runLogin, syncGarmin, uvReady, STATE_FILE } from '../hud/server/garmin/index.mjs'
+import { checkGarmin, describeDay, garminConnected, garminStatus, hMin, logoutGarmin, readState, runLogin, syncGarmin, uvReady, STATE_FILE } from '../hud/server/garmin/index.mjs'
 import { isoDay, writeFileAtomic } from '../hud/server/util.mjs'
 import { DATA_DIR, IS_WIN, hudListeners, notify, postHud, quietNow } from './lib.mjs'
 
@@ -54,17 +56,13 @@ const when = (iso) => {
   const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   return `${day === isoDay() ? 'dnes' : `${shortDay(day)} ${d.getFullYear()}`} o ${time}`
 }
-const myCommand = () => (IS_WIN ? loginCommands().windows : loginCommands().mac)
 const out = (data, text) => console.log(asJson ? JSON.stringify(data, null, 2) : text)
 
 const UV_HINT = IS_WIN ? 'PowerShell: irm https://astral.sh/uv/install.ps1 | iex' : 'Terminál: curl -LsSf https://astral.sh/uv/install.sh | sh'
 
+/** For whoever reads this output (the setup chat, a background job): the way is the card, not a terminal. */
 function howToConnect() {
-  return [
-    'Pripojenie spustíš sám v termináli, lebo sa pri ňom zadáva heslo ku Garminu (Jarvis ani Claude ho nevidia):',
-    `  macOS (Terminál):       ${loginCommands().mac}`,
-    `  Windows (PowerShell):   ${loginCommands().windows}`,
-  ].join('\n')
+  return 'Pripojenie: karta na prihlásenie na obrazovke Jarvisa (node scripts/garmin.mjs connect, na ploche nástroj ask_login). E-mail a heslo používateľ napíše len do nej, ide to rovno Garminu. Do rozhovoru heslo nepatrí a príkaz používateľovi neukazuj.'
 }
 
 /** What the last night looked like, or why it is not known yet. */
@@ -93,10 +91,24 @@ async function status() {
 
 // ── login ───────────────────────────────────────────────────────────────
 
+/** Shows the login card in the conversation on Jarvis's screen. */
+async function connect() {
+  if (garminConnected() && !flags.has('again')) {
+    return out({ ok: true, connected: true, message: 'Garmin je už pripojený.' }, 'Garmin je už pripojený. Nové prihlásenie: node scripts/garmin.mjs connect --again')
+  }
+  const shown = await postHud('/api/login/card', { service: 'garmin' })
+  if (!shown) {
+    const message = 'Jarvis na obrazovke teraz nebeží, kartu na prihlásenie nemám kde ukázať. Najprv node scripts/hud.mjs, potom znova connect.'
+    out({ ok: false, error: 'no_hud', message }, message)
+    process.exit(1)
+  }
+  out({ ok: true, shown: true, message: 'Karta na prihlásenie je na obrazovke Jarvisa.' }, 'Karta na prihlásenie do Garminu je na obrazovke Jarvisa. Používateľ v nej zadá e-mail a heslo, Jarvis potom sám stiahne posledné dni.')
+}
+
 async function login() {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    const message = 'Prihlásenie do Garminu sa dá spustiť len v termináli s človekom pri klávesnici, lebo sa pri ňom zadáva heslo.'
-    out({ ok: false, error: 'needs_terminal', message, login: loginCommands() }, `${message}\n${howToConnect()}\nKeď to dobehne, napíš Jarvisovi „hotovo".`)
+    const message = 'Prihlásenie v termináli potrebuje človeka pri klávesnici. Bez terminálu ide prihlásenie cez kartu na obrazovke Jarvisa.'
+    out({ ok: false, error: 'needs_terminal', message, connect: 'card' }, `${message}\n${howToConnect()}`)
     process.exit(2)
   }
   if (!uvReady()) {
@@ -139,7 +151,9 @@ async function afterAuto(res, before) {
   const state = readState()
   if (!res.ok) {
     if (res.error === 'needs_login' && state.notifiedLogin !== state.lastError?.at) {
-      await notify('Jarvis: Garmin', 'Prihlásenie do Garminu vypršalo. Pripoj ho znova: node scripts/garmin.mjs login')
+      // The card is put on the screen right away, the notification only says where it is.
+      const shown = (await hudListeners()) >= 0 && (await postHud('/api/login/card', { service: 'garmin', reason: 'expired' }))
+      await notify('Jarvis: Garmin', shown ? 'Prihlásenie do Garminu vypršalo. Na obrazovke Jarvisa je karta na nové prihlásenie.' : 'Prihlásenie do Garminu vypršalo. Povedzte Jarvisovi „pripoj Garmin“ a ukáže vám kartu na prihlásenie.')
       await patchState({ notifiedLogin: state.lastError?.at ?? now.toISOString() })
     }
     return
@@ -200,9 +214,9 @@ async function logout() {
   out(res, res.removed ? 'Garmin je odpojený: uložené prihlásenie som z tohto počítača zmazal. Čo je už v denníku, ostáva.' : 'Garmin nebol pripojený, nie je čo mazať.')
 }
 
-const ACTIONS = { status, login, sync, logout }
+const ACTIONS = { status, connect, login, sync, logout }
 if (!ACTIONS[action]) {
-  console.error('Použitie: node scripts/garmin.mjs [status|login|sync|logout] [--days 14] [--json]')
+  console.error('Použitie: node scripts/garmin.mjs [status|connect|login|sync|logout] [--days 14] [--json]')
   process.exit(1)
 }
 await ACTIONS[action]()

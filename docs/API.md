@@ -202,6 +202,24 @@ conversation.
 | `GET /api/record` | `{ ok, active, recent, sttReady }`. A session: `{ id, title, status: recording\|finishing\|processing\|done\|failed, startedAt, endedAt, lastChunkAt, seconds, chunks, nextSeq, nextPart, bytes, screen: video\|shots, shots, transcribedSeconds, stt, interrupted, job, note, warn, dir }`. |
 | `GET /api/record/:id` | One session plus `transcript` (its last 6000 characters) and `transcriptFile`. |
 
+### Login card
+
+A service that needs the user's own credentials (Garmin) gets a card in the conversation instead of a terminal
+(`hud/server/login.mjs`). These three answer **only this computer** (loopback, a localhost `Host`, the page's own
+`Origin` or none): never the phone or the network, not even with the token or a phone session, so a password never
+travels through the tunnel.
+
+| Method and path | What it does |
+|---|---|
+| `POST /api/login/card` | `{ service: "garmin", reason?: "expired" }` → `{ ok, card }`. Puts the card into the conversation (what the voice tool `ask_login` does; `node scripts/garmin.mjs connect` uses it). |
+| `POST /api/login` | `{ card, step: "credentials", values: { email, password } }`, `{ card, step: "code", code }` or `{ card, step: "cancel" }` → `{ ok, card }`. The values go to the service's own client and nowhere else. `404` unknown card, `409` a step is still running, `410` the card is done or closed. |
+| `POST /api/terminal` | `{ action }` → `{ ok, say }`. Opens a terminal window with one of the known commands (`hud/server/terminal.mjs`): the button under "not signed in". |
+
+The card (`kind: "login"`) never carries a value the user typed: `{ id, kind, service, title, icon, node, text,
+fields: [{ name, label, type, autocomplete }], code: { label, hint }, submit, state: form|code|done|closed, message, accent }`.
+It changes in place with `chat { turn, phase: "card-update", card }`. The brain hears the outcome as a hidden turn
+`[systém: prihlásenie cez kartu …]`.
+
 ## SSE `/api/events`
 
 Named events: `status`, `mode`, `voice`, `chat`, `tts`, `world`, `snapshot`, `job`, `job-feed` (`{ id, entry }`, one new line of a job's feed), `import`, `hud`, `history`, `settings`, `video`, `record` (a session as in `GET /api/record`, on every change of state and every few seconds while it records).
@@ -216,7 +234,11 @@ chat {turn:7, phase:"tool", id:"toolu_01", name:"calendar_list", label:"Pozerám
 chat {turn:7, phase:"tool", id:"toolu_01", …, status:"ok"}
 chat {turn:7, phase:"card", card:{ id, kind:"stat"|"list"|"chart"|"text", title, … }}
 chat {turn:7, phase:"done", text:"<whole answer>", ms:5230, stopped:false}
+chat {turn:7, phase:"error", message:"Claude nie je prihlásený.", fix?:"claude_login"}
+chat {turn:7, phase:"card-update", card:{ id, … }}
 ```
+
+`fix` is an action of `POST /api/terminal`: the page shows a button that opens the login window.
 
 - `tts { turn, seq, url, text, last, durMs, speak }`: clips sentence by sentence, play them in `seq` order.
   `speak: true` with `url: null` means the page reads the sentence itself (`speechSynthesis`).
@@ -241,8 +263,8 @@ chat {turn:7, phase:"done", text:"<whole answer>", ms:5230, stopped:false}
 The voice brain is a warm `claude -p` process with three MCP servers from `hud/server/mcp/`:
 
 - `memory`: `calendar_list`, `view_todo`, `list_goals`, `upcoming_celebrations`, `get_health`, `memory_stats`, `search_notes`, `read_note`, `remember`, `add_todo`, `complete_todo`, `add_event`, `log_day`, `write_note`
-- `computer`: `open_app`, `open_url`, `media`, `volume`, `screen_look` (`{ selection?, whole? }`: a picture of the front window that is not Jarvis, or of the main screen; returns the picture itself and its path in `data/screen/`, plus the selected text with `selection`)
-- `jarvis-hud`: `hud_focus`, `hud_card`, `hud_log`, `weather`, `call_user`, `agent_task`, `agent_jobs`, `agent_reply`, `agent_stop`, `set_alarm` (runs `scripts/alarm.mjs`), `set_alarm_sound` (`{ sound }`: a file path, a link, `default` or `builtin`; runs `scripts/alarm.mjs sound`), `video_open` (`{ url }`), `video_seek` (`{ time, id? }`), `video_transcript` (`{ id?, from?, to?, query? }`), `video_info` (`{ id? }`), `video_control` (`{ action, rate?, id? }`), `video_close` (the video tools call `/api/video…`; text from a video is framed as data, never as instructions), `settings` (`{ set? }`: the same change as `POST /api/settings`, without `set` the current values and the voices), `record_start` (`{ title? }`), `record_stop`, `record_status` (record mode, `docs/ZAZNAM.md`)
+- `computer`: `open_app`, `open_url`, `media`, `volume`, `screen_look` (`{ selection?, whole? }`: a picture of the front window that is not Jarvis, or of the main screen; returns the picture itself and its path in `data/screen/`, plus the selected text with `selection`), `open_terminal` (`{ action }`: a terminal window with one known command, `hud/server/terminal.mjs`)
+- `jarvis-hud`: `hud_focus`, `hud_card`, `hud_log`, `weather`, `call_user`, `agent_task`, `agent_jobs`, `agent_reply`, `agent_stop`, `set_alarm` (runs `scripts/alarm.mjs`), `set_alarm_sound` (`{ sound }`: a file path, a link, `default` or `builtin`; runs `scripts/alarm.mjs sound`), `video_open` (`{ url }`), `video_seek` (`{ time, id? }`), `video_transcript` (`{ id?, from?, to?, query? }`), `video_info` (`{ id? }`), `video_control` (`{ action, rate?, id? }`), `video_close` (the video tools call `/api/video…`; text from a video is framed as data, never as instructions), `settings` (`{ set? }`: the same change as `POST /api/settings`, without `set` the current values and the voices), `record_start` (`{ title? }`), `record_stop`, `record_status` (record mode, `docs/ZAZNAM.md`), `ask_login` (`{ service }`: the login card, see Login card)
 
 plus the built-in `WebSearch` and `WebFetch`, and `Read` limited to `memory/prilohy` (files dropped into the HUD;
 `data/brain` is denied explicitly).

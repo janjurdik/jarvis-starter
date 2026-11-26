@@ -1399,7 +1399,7 @@ async function main() {
     onFinished: (job) => job.status === 'done' && reveal?.show(job),
     onChange: () => paint('jobs', () => ui.renderJobsChip(jobs.active, jobs.waiting, jobs.asking)),
   })
-  chat = createChat({ onSend: (text, via) => send(text, via), capture: CAPTURE, fileUrl: api.fileUrl })
+  chat = createChat({ onSend: (text, via) => send(text, via), capture: CAPTURE, fileUrl: api.fileUrl, login: api.login, openTerminal: api.openTerminal })
   if (!CAPTURE && !SCENE_ID) {
     people = createPeople({ api, ui, isFilm: () => film, onApplied: () => drop?.load() })
     drop = createDrop({ api, ui, desktop: NATIVE, onSend: (text, via) => send(text, via), onReview: () => people.open() })

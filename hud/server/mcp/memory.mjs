@@ -8,7 +8,7 @@
  */
 import '../env.mjs'
 import { readFileSync } from 'node:fs'
-import { describeDay, garminConnected, garminDays, loginCommands, readCache, readState, syncGarmin } from '../garmin/index.mjs'
+import { describeDay, garminConnected, garminDays, readCache, readState, syncGarmin } from '../garmin/index.mjs'
 import { addEvent, calendarRange } from '../memory/calendar.mjs'
 import { FILES, FOLDERS, addTodo, appendUnder, completeTodo, dayStats, findNote, getIndex, goals, logDay, search, slugify, stats, todos, writeNote } from '../memory/index.mjs'
 import { DOW_LONG, addDays, dowOf, isoDay } from '../util.mjs'
@@ -175,8 +175,8 @@ serveMcp({
         const dayList = [...new Set([...list.filter((d) => d.sleepMin || d.mood).map((d) => d.day), ...watch.keys()])].sort()
         const notes = []
         if (connected && !watch.get(today)?.sleep?.minutes) notes.push('Dnešnú noc hodinky ešte neposlali (posielajú ju až po zobudení, keď sa zosynchronizujú s mobilom). Neodhaduj ju.')
-        if (readState().lastError?.code === 'needs_login') notes.push('Prihlásenie do Garminu vypršalo: používateľ ho obnoví sám v termináli príkazom node scripts/garmin.mjs login.')
-        if (!dayList.length) return ['V denníku zatiaľ nie je spánok ani nálada. Zapíšu sa, keď používateľ povie, ako spal (log_day so sleepHours) alebo akú má náladu (mood 1 až 5).', connected ? '' : 'Hodinky Garmin sa dajú pripojiť naživo (docs/GARMIN.md).', ...notes].filter(Boolean).join(' ')
+        if (readState().lastError?.code === 'needs_login') notes.push('Prihlásenie do Garminu vypršalo: ukáž mu kartu na prihlásenie (ask_login, service garmin), heslo zadá len do nej.')
+        if (!dayList.length) return ['V denníku zatiaľ nie je spánok ani nálada. Zapíšu sa, keď používateľ povie, ako spal (log_day so sleepHours) alebo akú má náladu (mood 1 až 5).', connected ? '' : 'Hodinky Garmin sa dajú pripojiť naživo: karta na prihlásenie (ask_login, service garmin).', ...notes].filter(Boolean).join(' ')
         const byDay = new Map(list.map((d) => [d.day, d]))
         const lines = dayList.map((day) => {
           const d = byDay.get(day)
@@ -194,13 +194,12 @@ serveMcp({
     {
       name: 'garmin_sync',
       description:
-        'Stiahne čerstvé dáta z hodiniek Garmin (spánok, HRV, pokojový tep, body battery, kroky, stres, tréningy) a zapíše ich do denníka. Použi, keď používateľ chce aktuálne čísla z hodiniek alebo povie, že hodinky práve zosynchronizoval. days = koľko dní dozadu (default 2, max 30). Keď Garmin nie je pripojený, vráti príkaz, ktorý si používateľ spustí sám v termináli. Heslo ku Garminu sa nikdy nepýtaj a neprijímaj.',
+        'Stiahne čerstvé dáta z hodiniek Garmin (spánok, HRV, pokojový tep, body battery, kroky, stres, tréningy) a zapíše ich do denníka. Použi, keď používateľ chce aktuálne čísla z hodiniek alebo povie, že hodinky práve zosynchronizoval. days = koľko dní dozadu (default 2, max 30). Keď Garmin nie je pripojený alebo prihlásenie vypršalo, ukáž kartu na prihlásenie (ask_login, service garmin). Heslo ku Garminu sa nikdy nepýtaj a neprijímaj.',
       inputSchema: { type: 'object', properties: { days: { type: 'integer', minimum: 1, maximum: 30 } } },
       handler: async ({ days }) => {
         const res = await syncGarmin({ days: Math.min(30, Math.max(1, Number(days) || 2)), reason: 'voice', timeout: 60_000 })
         if (!res.ok) {
-          const cmd = process.platform === 'win32' ? loginCommands().windows : loginCommands().mac
-          const how = res.error === 'not_connected' || res.error === 'needs_login' ? ` Pripojí ho používateľ sám: v termináli spustí ${cmd} a zadá tam e-mail, heslo a prípadný overovací kód. Heslo sa nepýtaj, do rozhovoru nepatrí. Postup: docs/GARMIN.md.` : ''
+          const how = res.error === 'not_connected' || res.error === 'needs_login' ? ' Zavolaj ask_login so service garmin: v rozhovore sa ukáže karta, kam napíše e-mail, heslo a prípadný overovací kód, a ty ich nevidíš. Povedz mu to jednou vetou. Heslo sa nepýtaj, do rozhovoru nepatrí, a príkaz ani terminál mu nespomínaj.' : ''
           return { text: `${res.message}${how}`, isError: true }
         }
         await getIndex({ force: true })

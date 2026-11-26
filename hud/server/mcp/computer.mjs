@@ -7,6 +7,7 @@
  *   media(action)    play, pause, next and previous track in the running player
  *   volume(…)        the computer's volume
  *   screen_look(…)   a picture of what the user is looking at (the front window that is not Jarvis), server/screen.mjs
+ *   open_terminal(action)   a real terminal window with one known Jarvis command running (server/terminal.mjs)
  *
  * Everything bigger (clicking through an app, filling a web form) is a background job with a
  * shell, app scripting and the browser: docs/OVLADANIE.md.
@@ -14,6 +15,7 @@
 import { spawn } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import { captureScreen, pruneScreens } from '../screen.mjs'
+import { TERMINAL_ACTIONS, openTerminal } from '../terminal.mjs'
 import { serveMcp } from './stdio.mjs'
 
 const IS_WIN = process.platform === 'win32'
@@ -169,6 +171,19 @@ serveMcp({
           // the path in the text is enough
         }
         return { content }
+      },
+    },
+    {
+      name: 'open_terminal',
+      description:
+        'Posledná možnosť, keď niečo naozaj potrebuje okno terminálu s človekom pri klávesnici (prihlásenie do Claude, ChatGPT alebo Antigravity, ktoré skočí do prehliadača). Otvorí skutočné okno terminálu s príkazom už spusteným v priečinku Jarvisa. Používateľovi nikdy nehovor, nech otvorí terminál alebo niečo napíše či spustí: zavolaj toto a povedz mu jednou vetou, čo uvidí (veta je vo výsledku). Prihlásenie do Garminu je karta (ask_login), nie toto. action: ' +
+        Object.entries(TERMINAL_ACTIONS)
+          .map(([id, a]) => `${id} (${a.title})`)
+          .join(', '),
+      inputSchema: { type: 'object', properties: { action: { type: 'string', enum: Object.keys(TERMINAL_ACTIONS) } }, required: ['action'] },
+      handler: async ({ action }) => {
+        const r = await openTerminal(String(action ?? ''))
+        return r.ok ? `Okno je otvorené (${r.title}). Povedz mu len toto, vlastnými slovami a s oslovením: ${r.say} Príkaz ani cestu mu nepíš.` : { text: `Okno sa nepodarilo otvoriť: ${r.error}`, isError: true }
       },
     },
     {

@@ -58,6 +58,8 @@ import { getOrbState } from './server/orbs.mjs'
 import { attachEventsSocket, auth as remoteAuth, deny, initMobile, isPhone, openPath, routeMobile, sessionFor, stopMobile, tunnelHosts } from './server/mobile.mjs'
 import { kickWatches } from './server/watches.mjs'
 import { brainRecord, initRecordings, noteTalk, routeRecordGet, routeRecordPost } from './server/record.mjs'
+import { brainLogin, loginStep, stopLogins } from './server/login.mjs'
+import { openTerminal } from './server/terminal.mjs'
 
 const ROOT = import.meta.dirname
 const PORT = Number(process.env.PORT ?? process.env.HUD_PORT ?? 4545)
@@ -656,10 +658,32 @@ async function routePost(req, res, path) {
       const r = await brainRecord(body)
       return sendJson(res, r.ok ? 200 : 400, r)
     }
+    // The brain's `ask_login` tool: a login card in the conversation (server/login.mjs).
+    if (body.action === 'login') {
+      const r = brainLogin(body)
+      return sendJson(res, r.ok ? 200 : 400, r)
+    }
     // The brain's `settings` tool: the same change POST /api/settings makes (server/settings.mjs).
     if (body.action === 'settings') return sendJson(res, 200, await brainSettings(body))
     const result = String(body.action ?? '').startsWith('job_') ? await jobAction(body) : hudAction(body)
     return sendJson(res, result.ok ? 200 : 400, result)
+  }
+  // The login card and the button that opens a login window: only from this computer, never from the
+  // phone or the network, so a password never travels through the tunnel (server/login.mjs).
+  // `/api/login/card` is how a script shows the card (node scripts/garmin.mjs connect, an expired login).
+  if (path === '/api/login' || path === '/api/login/card' || path === '/api/terminal') {
+    if (!isLocal(req) || !originOk(req)) return sendJson(res, 403, { ok: false, error: 'Prihlásiť sa dá len priamo na počítači, na ktorom Jarvis beží.' })
+    const body = await readJson(req, 8_000)
+    if (path === '/api/login/card') {
+      const r = brainLogin(body)
+      return sendJson(res, r.ok ? 200 : 400, r)
+    }
+    if (path === '/api/terminal') {
+      const r = await openTerminal(String(body.action ?? ''))
+      return sendJson(res, r.ok ? 200 : 400, r.ok ? { ok: true, say: r.say } : { ok: false, error: r.error })
+    }
+    const r = await loginStep(body)
+    return sendJson(res, r.status, r.body)
   }
   if (!allowPost(req)) return sendJson(res, 403, { ok: false, error: 'POST len z localhostu alebo s x-hud-token' })
   if (path === '/api/stt') return postStt(req, res)
@@ -1143,6 +1167,7 @@ function shutdown(signal) {
   log('hud', `koniec (${signal})`)
   brain?.stop()
   stopMobile()
+  stopLogins()
   stopAllJobs()
   stopVideo()
   stopMic()

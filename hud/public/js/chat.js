@@ -12,8 +12,39 @@ const SUGGESTIONS = [
   { icon: 'pamat', text: 'Čo o mne vieš?' },
 ]
 
+/** This page is on the computer Jarvis runs on: only then can the login card send anything (server/login.mjs). */
+const ON_COMPUTER = typeof location !== 'undefined' && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
+/** What the user typed into a login card's e-mail, so a redraw (wrong password, next step) keeps it. Only in this page's memory. */
+const loginEmail = new Map()
+
+/**
+ * The login card (server/login.mjs): rows with the field on the right, one line about where the
+ * password goes, one button. States: form, code, done, closed. It never holds a value from the server.
+ */
+function loginHtml(card) {
+  const acc = card.accent === 'amber' ? ' acc-amber' : ''
+  const head = `<div class="card-h">${icon(card.icon || NODE_ICON[card.node] || 'shield')}<span>${esc(card.title ?? 'Prihlásenie')}</span></div>`
+  const msg = card.message ? `<p class="lc-msg${card.state === 'done' ? ' is-done' : ''}" role="status">${card.state === 'done' ? icon('check') : ''}<span>${esc(card.message)}</span></p>` : ''
+  if (card.state === 'done' || card.state === 'closed') return `<div class="card login-card is-${card.state}${card.state === 'closed' ? '' : acc}" data-login="${esc(card.id)}">${head}${msg}</div>`
+  if (!ON_COMPUTER) return `<div class="card login-card" data-login="${esc(card.id)}">${head}<p class="card-text">Prihlásenie dokončíte priamo na počítači, na ktorom bežím. Heslo cez internet neposielam.</p></div>`
+  const field = (f) => {
+    const value = f.name === 'email' ? loginEmail.get(card.id) ?? '' : ''
+    return `<label class="lc-row"><span class="lc-l">${esc(f.label)}</span><input class="lc-in" name="${esc(f.name)}" type="${f.type === 'password' ? 'password' : f.type === 'email' ? 'email' : 'text'}" autocomplete="${esc(f.autocomplete ?? 'off')}" value="${esc(value)}" spellcheck="false" autocapitalize="off" maxlength="${f.type === 'password' ? 1024 : 320}" required></label>`
+  }
+  const rows =
+    card.state === 'code'
+      ? `<p class="lc-note">${esc(card.code?.hint ?? 'Služba vám poslala overovací kód.')}</p><label class="lc-row"><span class="lc-l">${esc(card.code?.label ?? 'Kód')}</span><input class="lc-in is-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" spellcheck="false" required></label>`
+      : `<p class="lc-note">${esc(card.text ?? '')}</p>${(card.fields ?? []).map(field).join('')}`
+  const step = card.state === 'code' ? 'code' : 'credentials'
+  return (
+    `<form class="card login-card${acc}" data-login="${esc(card.id)}" data-step="${step}" autocomplete="on" novalidate>${head}${rows}${msg}` +
+    `<div class="lc-act"><button type="button" class="lc-cancel">Zrušiť</button><button type="submit" class="lc-go">${esc(card.state === 'code' ? 'Overiť kód' : card.submit ?? 'Prihlásiť')}</button></div></form>`
+  )
+}
+
 /** Karta od Jarvisa (hud_card): stat, list, chart alebo text, všetky polia voliteľné. */
 export function cardHtml(card = {}) {
+  if (card.kind === 'login') return loginHtml(card)
   const acc = card.accent === 'amber' ? ' acc-amber' : card.accent === 'red' ? ' acc-red' : ''
   const holo = holoImage(card.node)
   const ic = card.icon || NODE_ICON[card.node] || 'sparkle'
@@ -78,6 +109,26 @@ function userHtml(turn) {
 }
 
 /**
+ * A command, a file path or `code` that slipped into an answer is shown as a code chip, not as a
+ * run-on sentence. Jarvis should not write them at all (persona), this only keeps the screen tidy.
+ */
+const CODE_RE = /`([^`\n]{1,240})`|\b((?:node|npx|npm) [\w./-]+(?:\.m?js)?(?: (?:--?[\w-]+(?:=[\w./:@-]+)?|[\w./:@=-]+))*|cd (?:"[^"\n]{1,200}"|'[^'\n]{1,200}'|[^\s,;]+)|(?:claude auth|codex) login|xcode-select --install)|((?:~|\/Users|\/home|\/opt|\/Applications)\/[^\s,;"'`]+|[A-Z]:\\[^\s,;"'`]+)/g
+
+export function sayHtml(text) {
+  const src = String(text ?? '')
+  let out = ''
+  let at = 0
+  for (const m of src.matchAll(CODE_RE)) {
+    const code = (m[1] ?? m[2] ?? m[3] ?? '').replace(/[.:]$/, '')
+    if (!code) continue
+    out += esc(src.slice(at, m.index))
+    out += `<code class="say-code">${esc(code)}</code>`
+    at = m.index + (m[1] !== undefined ? m[0].length : code.length)
+  }
+  return out + esc(src.slice(at))
+}
+
+/**
  * Bloky odpovede Jarvisa ako HTML, každý zvlášť (pri streamingu sa mení len posledný).
  * parts: [{kind: 'text', text, cursor} | {kind: 'tools', items} | {kind: 'card', card}].
  */
@@ -85,12 +136,12 @@ function jarvisBlocks(turn) {
   const parts = turn.parts ?? []
   const blocks = []
   for (const p of parts) {
-    if (p.kind === 'text' && (p.text || p.cursor)) blocks.push(`<p class="say">${esc(p.text)}${p.cursor ? '<i class="cursor"></i>' : ''}</p>`)
+    if (p.kind === 'text' && (p.text || p.cursor)) blocks.push(`<p class="say">${sayHtml(p.text)}${p.cursor ? '<i class="cursor"></i>' : ''}</p>`)
     else if (p.kind === 'tools' && p.items.length) blocks.push(`<div class="tools">${p.items.map(toolHtml).join('')}</div>`)
     else if (p.kind === 'card' && p.card) blocks.push(cardHtml(p.card))
   }
   if (turn.state === 'thinking') blocks.push(thinkingHtml)
-  if (turn.state === 'error') blocks.push(`<div class="msg-err">${icon('alarm')}<span>${esc(turn.error || 'Niečo sa pokazilo.')}</span></div>`)
+  if (turn.state === 'error') blocks.push(`<div class="msg-err">${icon('alarm')}<span>${esc(turn.error || 'Niečo sa pokazilo.')}</span>${turn.fix && ON_COMPUTER ? `<button type="button" class="msg-fix" data-fix="${esc(turn.fix)}">Otvoriť prihlásenie</button>` : ''}</div>`)
   if (turn.state === 'stopped') blocks.push('<div class="msg-stopped">Prerušené.</div>')
   return blocks
 }
@@ -142,7 +193,7 @@ function patchTurn(row, turn) {
   row._j.hidden = blocks.length === 0
 }
 
-export function createChat({ onSend, capture = false, fileUrl: toFileUrl = null }) {
+export function createChat({ onSend, capture = false, fileUrl: toFileUrl = null, login = null, openTerminal = null }) {
   if (toFileUrl) fileUrl = toFileUrl
   const list = document.getElementById('chat')
   const view = document.getElementById('chat-view')
@@ -165,6 +216,88 @@ export function createChat({ onSend, capture = false, fileUrl: toFileUrl = null 
   empty.addEventListener('click', (e) => {
     const b = e.target.closest('.sugg')
     if (b) onSend?.(b.dataset.text, 'text')
+  })
+  function applyCardUpdate(card) {
+    if (!card?.id) return
+    for (const turn of turns.values()) {
+      const part = turn.parts.find((p) => p.kind === 'card' && p.card?.id === card.id)
+      if (part) part.card = { ...card }
+    }
+    if (card.state === 'done' || card.state === 'closed') loginEmail.delete(card.id)
+    if (card.state === 'code' || card.state === 'form') focusLogin = card.id
+    dirty = true
+  }
+  let focusLogin = null
+
+  /** The login card talks only to this computer (POST /api/login). The values leave the page once, in that request. */
+  async function sendLogin(form, step) {
+    if (!login || !form || form.classList.contains('is-busy')) return
+    const id = form.dataset.login
+    const go = form.querySelector('.lc-go')
+    const msg = (text) => {
+      let p = form.querySelector('.lc-msg')
+      if (!p) {
+        p = document.createElement('p')
+        p.className = 'lc-msg'
+        p.setAttribute('role', 'status')
+        form.querySelector('.lc-act')?.before(p)
+      }
+      p.textContent = text
+    }
+    const body = { card: id, step }
+    if (step === 'credentials') {
+      const values = {}
+      for (const input of form.querySelectorAll('.lc-in')) values[input.name] = input.value
+      if (!String(values.email ?? '').trim() || !values.password) return msg('Vyplňte e-mail aj heslo.')
+      loginEmail.set(id, String(values.email).trim())
+      body.values = values
+    } else if (step === 'code') {
+      const code = form.querySelector('.lc-in[name="code"]')?.value.trim() ?? ''
+      if (!code) return msg('Opíšte kód, ktorý vám prišiel.')
+      body.code = code
+    }
+    form.classList.add('is-busy')
+    for (const el of form.querySelectorAll('input, button')) el.disabled = true
+    if (go) go.textContent = step === 'cancel' ? 'Ruším…' : 'Prihlasujem…'
+    try {
+      const res = await login(body)
+      if (res?.card) applyCardUpdate(res.card)
+    } catch (err) {
+      form.classList.remove('is-busy')
+      for (const el of form.querySelectorAll('input, button')) el.disabled = false
+      if (go) go.textContent = step === 'code' ? 'Overiť kód' : 'Prihlásiť'
+      if (err?.data?.card) applyCardUpdate(err.data.card)
+      else msg(err?.message || 'Prihlásenie sa nepodarilo odoslať.')
+    } finally {
+      // The password field is emptied right away, whatever comes back.
+      const pw = form.querySelector('.lc-in[type="password"]')
+      if (pw) pw.value = ''
+      body.values = null
+    }
+  }
+  list.addEventListener('submit', (e) => {
+    const form = e.target.closest?.('form.login-card')
+    if (!form) return
+    e.preventDefault()
+    sendLogin(form, form.dataset.step === 'code' ? 'code' : 'credentials')
+  })
+  list.addEventListener('click', (e) => {
+    const cancel = e.target.closest('.lc-cancel')
+    if (cancel) return sendLogin(cancel.closest('form.login-card'), 'cancel')
+    const fix = e.target.closest('.msg-fix')
+    if (fix && openTerminal && !fix.disabled) {
+      fix.disabled = true
+      openTerminal(fix.dataset.fix)
+        .then(() => (fix.textContent = 'Okno je otvorené'))
+        .catch((err) => {
+          fix.disabled = false
+          fix.textContent = err?.message ? 'Skúsiť znova' : 'Otvoriť prihlásenie'
+        })
+    }
+  })
+  // Keys typed into a login card stay in the card: Space must not start push-to-talk, Esc must not stop Jarvis.
+  list.addEventListener('keydown', (e) => {
+    if (e.target.closest?.('form.login-card')) e.stopPropagation()
   })
   // An attachment the browser cannot draw (HEIC outside Safari, a damaged file) turns into a named chip.
   list.addEventListener(
@@ -206,6 +339,8 @@ export function createChat({ onSend, capture = false, fileUrl: toFileUrl = null 
 
   /** Živá udalosť z SSE alebo mocku: {turn, phase, ...}. */
   function apply(ev) {
+    // A card that changes in place (the login card) is found by its id, wherever it is.
+    if (ev?.phase === 'card-update') return applyCardUpdate(ev.card)
     if (!ev || ev.turn === undefined || ev.turn === null) return
     const t = ensure(String(ev.turn))
     switch (ev.phase) {
@@ -266,6 +401,7 @@ export function createChat({ onSend, capture = false, fileUrl: toFileUrl = null 
       case 'error':
         t.state = 'error'
         t.error = ev.message ?? 'Chyba'
+        t.fix = ev.fix ?? null
         break
       case 'stopped':
         t.state = 'stopped'
@@ -410,6 +546,12 @@ export function createChat({ onSend, capture = false, fileUrl: toFileUrl = null 
       model.push({ ...t, parts })
     }
     syncRows(model)
+    if (focusLogin) {
+      // After a redraw of a login card the cursor waits in the field that needs typing (the code, or the password again).
+      const form = [...list.querySelectorAll('form.login-card')].find((f) => f.dataset.login === focusLogin)
+      form?.querySelector('.lc-in[name="code"], .lc-in[type="password"]')?.focus({ preventScroll: true })
+      focusLogin = null
+    }
     // Kým písací stroj dobieha text, kresli ďalej, potom ticho až do ďalšej udalosti.
     dirty = catching
   }

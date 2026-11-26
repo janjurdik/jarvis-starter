@@ -13,6 +13,7 @@
  *   settings(set?)              voice, assistant's name and gender, how the user is addressed (server/settings.mjs)
  *   video_open / video_seek / video_transcript / video_info / video_control / video_close, set_alarm_sound   (video-tools.mjs)
  *   record_start(title?) / record_stop / record_status   record mode (server/record.mjs)
+ *   ask_login(service)          the login card in the chat: the user types the password there, never into the chat (server/login.mjs)
  */
 import { execFile, spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
@@ -131,6 +132,16 @@ serveMcp({
       handler: async (card) => {
         const r = await hud('card', { card })
         return r.isError ? r : 'Karta je na obrazovke. Ak si odpoveď už povedal, skonči bez ďalšieho textu, nič neopakuj.'
+      },
+    },
+    {
+      name: 'ask_login',
+      description:
+        'Ukáže v rozhovore kartu na bezpečné prihlásenie do služby, ktorá potrebuje e-mail a heslo používateľa (service: garmin). Heslo píše len do karty, ide rovno službe a ty ho nikdy nevidíš. Použi vždy, keď treba prihlásenie (pripoj Garmin, prihlásenie vypršalo). Nikdy si heslo ani kód nepýtaj do rozhovoru a neposielaj ho do terminálu. Výsledok (pripojené, treba kód, zlé heslo, zlyhalo) ti príde sám ako správa [systém: …].',
+      inputSchema: { type: 'object', properties: { service: { type: 'string', enum: ['garmin'] } }, required: ['service'] },
+      handler: async ({ service }) => {
+        const r = await hud('login', { service })
+        return r.isError ? r : r.text
       },
     },
     {
