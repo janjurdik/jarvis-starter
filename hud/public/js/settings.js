@@ -54,7 +54,8 @@ export function createSettings({ onToast = () => {} } = {}) {
   root.setAttribute('aria-label', 'Nastavenia')
   root.innerHTML = `<div class="st-sheet">
     <header class="st-head"><h2>Nastavenia</h2><span class="st-saved" aria-live="polite"></span><button type="button" class="st-x" aria-label="Zavrieť">Zavrieť<kbd>Esc</kbd></button></header>
-    <div class="st-main"><nav class="st-nav" aria-label="Časti nastavení"></nav><div class="st-body"></div></div></div>`
+    <div class="st-main"><nav class="st-nav" aria-label="Časti nastavení"></nav><div class="st-body"></div></div>
+    <footer class="st-foot"><a class="st-credit" href="https://janjurdik.com" target="_blank" rel="noopener"><img src="/img/autor.jpg" alt="" width="36" height="36"><span>Vytvoril <b>Ján Jurdik</b></span></a></footer></div>`
   document.body.append(root)
   const body = root.querySelector('.st-body')
   const nav = root.querySelector('.st-nav')
