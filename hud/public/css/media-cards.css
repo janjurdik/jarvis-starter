@@ -1,0 +1,133 @@
+/* ── fotky, videá a zvuk ako plávajúce karty (js/media-cards.js) ─────────── */
+/* Over the 3D world, the panes (10) and the command bar (20), under the job-done card (35), toasts (40) and Settings (60). */
+.mc { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+.mc-card {
+  --rx: 0deg; --ry: 0deg; --turn: 0deg; --depth: 0px; --mx: 50%; --my: 30%; --i: 0;
+  --c: var(--ice, #7ff3ff);
+  position: absolute; left: 0; top: 0;
+  pointer-events: auto; touch-action: none; cursor: grab;
+  perspective: 1200px;
+  border-radius: 1.375rem;
+  outline: none;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.mc-card.is-on { transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), width 0.55s cubic-bezier(0.22, 1, 0.36, 1), height 0.55s cubic-bezier(0.22, 1, 0.36, 1); }
+.mc-card.is-drag { transition: none; cursor: grabbing; }
+.mc-in {
+  position: absolute; inset: 0; border-radius: inherit;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--rx)) rotateY(calc(var(--ry) + var(--turn))) translateZ(calc(var(--depth) - 160px)) translateY(2rem) scale(0.86);
+  opacity: 0; filter: blur(10px);
+  transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.55s ease, filter 0.7s ease, box-shadow 0.4s ease;
+  transition-delay: calc(var(--i) * 90ms);
+  background: linear-gradient(160deg, rgba(20, 44, 52, 0.82), rgba(4, 10, 14, 0.94));
+  box-shadow: 0 2.5rem 6rem -2rem rgba(0, 0, 0, 0.9), 0 0 4.5rem -1.6rem rgba(95, 230, 255, 0.45);
+}
+.mc-card.is-on .mc-in { transform: rotateX(var(--rx)) rotateY(calc(var(--ry) + var(--turn))) translateZ(var(--depth)); opacity: 1; filter: none; }
+.mc-card.is-on .mc-in, .mc-card.is-drag .mc-in { transition-delay: 0s; }
+.mc-card.is-drag .mc-in { transition: transform 0.2s ease-out, box-shadow 0.25s ease; box-shadow: 0 3.5rem 7rem -2rem rgba(0, 0, 0, 0.95), 0 0 5.5rem -1.4rem rgba(95, 230, 255, 0.6); }
+.mc-card:focus-visible .mc-rim { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--c) 80%, transparent); }
+.mc-card.is-out { pointer-events: none; }
+.mc-card.is-out .mc-in { opacity: 0; transform: rotateX(var(--rx)) rotateY(calc(var(--ry) + var(--turn))) translateZ(calc(var(--depth) - 120px)) scale(0.9); filter: blur(6px); transition-duration: 0.3s; transition-delay: 0s; }
+.mc-card.is-pulse .mc-in { animation: mc-pulse 0.9s ease; }
+@keyframes mc-pulse { 30% { box-shadow: 0 2.5rem 6rem -2rem rgba(0, 0, 0, 0.9), 0 0 6rem -0.6rem rgba(127, 243, 255, 0.85); } }
+
+.mc-media { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; background: #04080b; }
+.mc-media img, .mc-media video { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; opacity: 0; transition: opacity 0.5s ease; }
+.mc-card.is-ready .mc-media img, .mc-card.is-ready .mc-media video { opacity: 1; }
+.mc-media audio { display: none; }
+/* holographic film look: faint scan lines and a light that follows the cursor over the glass */
+.mc-sheen {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none; mix-blend-mode: screen; opacity: 0.5;
+  background:
+    radial-gradient(42% 34% at var(--mx) var(--my), rgba(255, 255, 255, 0.14), transparent 70%),
+    linear-gradient(118deg, transparent 38%, rgba(127, 243, 255, 0.08) 50%, transparent 62%),
+    repeating-linear-gradient(180deg, rgba(127, 243, 255, 0.035) 0 1px, transparent 1px 3px);
+  transform: translateZ(1px);
+}
+.mc-rim { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 34%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -2.4rem 3.2rem -2.6rem color-mix(in srgb, var(--c) 55%, transparent); transition: box-shadow 0.3s ease; }
+.mc-card:hover .mc-rim { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -2.4rem 3.2rem -2.6rem color-mix(in srgb, var(--c) 65%, transparent); }
+
+/* name of the file: only while the cursor is on the card, wraps instead of being cut */
+.mc-name {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 2.6rem 1rem 1.55rem;
+  background: linear-gradient(180deg, transparent, rgba(2, 6, 9, 0.78));
+  font: 500 0.8125rem/1.3 var(--sans); color: rgba(234, 251, 255, 0.82); overflow-wrap: anywhere;
+  border-radius: 0 0 1.375rem 1.375rem;
+  opacity: 0; transition: opacity 0.25s ease; pointer-events: none;
+}
+.mc-card.k-image .mc-name { padding-bottom: 0.9rem; }
+.mc-card:hover .mc-name, .mc-card:focus-visible .mc-name { opacity: 1; }
+
+/* close */
+.mc-x {
+  position: absolute; top: 0.6rem; right: 0.6rem; z-index: 3;
+  display: grid; place-items: center; width: 1.9rem; height: 1.9rem; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  background: rgba(4, 12, 16, 0.62); color: rgba(234, 251, 255, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.28);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  opacity: 0; transition: opacity 0.2s ease, background 0.2s ease;
+}
+.mc-x svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.mc-x:hover { background: rgba(127, 243, 255, 0.22); }
+.mc-card:hover .mc-x, .mc-card:focus-within .mc-x { opacity: 1; }
+@media (hover: none) { .mc-x { opacity: 0.9; } }
+
+/* video: sound state, the big play mark while paused */
+.mc-snd {
+  position: absolute; top: 0.6rem; left: 0.6rem; z-index: 2; display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 50%;
+  background: rgba(4, 12, 16, 0.55); color: rgba(234, 251, 255, 0.85); box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.22);
+  opacity: 0; transition: opacity 0.2s ease, color 0.2s ease; pointer-events: none;
+}
+.mc-snd svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.mc-snd .s-on { display: none; }
+.mc-card.is-sound .mc-snd { opacity: 1; color: var(--c); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, transparent), 0 0 1rem -0.2rem rgba(95, 230, 255, 0.7); }
+.mc-card.is-sound .mc-snd .s-on { display: inline; }
+.mc-card.is-sound .mc-snd .s-off { display: none; }
+.mc-card:hover .mc-snd { opacity: 1; }
+.mc-big {
+  position: absolute; left: 50%; top: 50%; z-index: 2; display: grid; place-items: center; width: 3.6rem; height: 3.6rem; margin: -1.8rem 0 0 -1.8rem; border-radius: 50%;
+  background: rgba(4, 12, 16, 0.5); color: var(--c); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent), 0 0 2rem -0.4rem rgba(95, 230, 255, 0.6);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  opacity: 0; transform: scale(0.85); transition: opacity 0.25s ease, transform 0.25s ease; pointer-events: none;
+}
+.mc-big svg { width: 1.6rem; height: 1.6rem; margin-left: 0.15rem; fill: currentColor; }
+.mc-card.is-paused.is-ready .mc-big { opacity: 1; transform: none; }
+
+/* the thin ice-blue time line, scrubbed by a click or a drag */
+.mc-scrub { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; height: 1.4rem; cursor: pointer; touch-action: none; }
+.mc-line { position: absolute; left: 0.95rem; right: 0.95rem; bottom: 0.6rem; height: 2px; border-radius: 2px; background: rgba(234, 251, 255, 0.16); transition: height 0.15s ease, bottom 0.15s ease; }
+.mc-fill { position: absolute; inset: 0; border-radius: inherit; background: var(--c); box-shadow: 0 0 0.6rem rgba(95, 230, 255, 0.85); transform: scaleX(0); transform-origin: 0 50%; }
+.mc-scrub:hover .mc-line, .mc-card.is-scrub .mc-line { height: 4px; bottom: 0.52rem; }
+.mc-time {
+  position: absolute; right: 0.95rem; bottom: 1.05rem; font: 500 0.75rem/1 var(--sans); font-variant-numeric: tabular-nums; color: rgba(234, 251, 255, 0.78);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8); opacity: 0; transition: opacity 0.2s ease; pointer-events: none;
+}
+.mc-card:hover .mc-time, .mc-card.is-paused .mc-time, .mc-card.is-scrub .mc-time { opacity: 1; }
+
+/* audio: a play button, the name and a glowing line that moves with the sound */
+.mc-card.k-audio .mc-media { inset: auto 0.95rem 1.7rem; height: 2.7rem; background: none; overflow: visible; }
+.mc-wave { display: block; width: 100%; height: 100%; }
+.mc-au { position: absolute; left: 0; right: 2.8rem; top: 0; display: flex; align-items: center; gap: 0.75rem; padding: 0.95rem 0 0 0.95rem; }
+.mc-pp {
+  flex: none; display: grid; place-items: center; width: 2.5rem; height: 2.5rem; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 50%, transparent), 0 0 1.4rem -0.4rem rgba(95, 230, 255, 0.7);
+}
+.mc-pp svg { width: 1.2rem; height: 1.2rem; fill: currentColor; }
+.mc-pp svg:first-child { margin-left: 0.12rem; }
+.mc-pp svg:last-child, .mc-card.k-audio:not(.is-paused) .mc-pp svg:first-child { display: none; }
+.mc-card.k-audio:not(.is-paused) .mc-pp svg:last-child { display: block; }
+.mc-au-name { min-width: 0; font: 600 0.9375rem/1.25 var(--sans); color: rgba(234, 251, 255, 0.92); overflow-wrap: anywhere; }
+.mc-card.k-audio .mc-time { opacity: 1; }
+
+.mc-fail { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; padding: 1.2rem; text-align: center; background: radial-gradient(80% 80% at 30% 20%, rgba(127, 243, 255, 0.12), transparent 70%); }
+.mc-fail span { font: 500 0.9375rem/1.35 var(--sans); color: rgba(234, 251, 255, 0.85); }
+.mc-fail small { font: 400 0.8125rem/1.3 var(--sans); color: rgba(234, 251, 255, 0.5); overflow-wrap: anywhere; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mc-card.is-on, .mc-in, .mc-card.is-out .mc-in { transition-duration: 0.01ms; transition-delay: 0s; }
+  .mc-in { transform: none; filter: none; }
+  .mc-card.is-on .mc-in { transform: translateZ(var(--depth)) rotateY(var(--turn)); }
+  .mc-card.is-pulse .mc-in { animation: none; }
+}

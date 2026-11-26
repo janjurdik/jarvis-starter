@@ -90,6 +90,25 @@ function linkify(s) {
   return esc(s).replace(/https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)]/g, (url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`)
 }
 
+/**
+ * Photos, videos and audio of a card, inline in the conversation. The files come from the same
+ * logged-in session as everything else; a tap on a photo shows it across the whole width.
+ */
+function mediaHtml(items) {
+  const ok = /^\/api\/(?:media\/m[0-9a-f]{16}|jobs\/j\d+\/file\/\d{1,2})$/
+  const list = items.filter((m) => m && ok.test(String(m.url ?? ''))).slice(0, 24)
+  if (!list.length) return ''
+  return `<div class="card-media">${list
+    .map((m) => {
+      const url = esc(m.url)
+      if (m.kind === 'image') return `<img class="cm-img" src="${url}" alt="${esc(m.name ?? '')}" loading="lazy" decoding="async">`
+      if (m.kind === 'video') return `<video class="cm-video" src="${url}#t=0.1" controls playsinline preload="metadata"></video>`
+      if (m.kind === 'audio') return `<div class="cm-audio"><span>${esc(m.name ?? '')}</span><audio src="${url}" controls preload="none"></audio></div>`
+      return ''
+    })
+    .join('')}</div>`
+}
+
 function cardHtml(c = {}) {
   const acc = c.accent === 'amber' ? ' acc-amber' : c.accent === 'red' ? ' acc-red' : ''
   let body = ''
@@ -101,6 +120,7 @@ function cardHtml(c = {}) {
   }
   if (Array.isArray(c.items) && c.items.length) body += `<ul class="card-list">${c.items.map((it) => `<li><span>${esc(it.label ?? '')}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span><span>${esc(it.value ?? '')}</span></li>`).join('')}</ul>`
   if (c.text) body += `<p class="card-text">${linkify(c.text)}</p>`
+  if (Array.isArray(c.media) && c.media.length) body += mediaHtml(c.media)
   if (c.caption) body += `<div class="card-c">${esc(c.caption)}</div>`
   return `<div class="card${acc}"><div class="card-h">${icon(c.icon || NODE_ICON[c.node] || 'sparkle')}<span>${esc(c.title ?? '')}</span></div>${body}</div>`
 }
@@ -559,6 +579,8 @@ $('bar').addEventListener('submit', (e) => {
   say(value)
 })
 feedIn.addEventListener('click', (e) => {
+  const photo = e.target.closest('.cm-img')
+  if (photo) return photo.classList.toggle('is-big')
   const chip = e.target.closest('[data-say]')
   if (chip) say(chip.dataset.say)
 })

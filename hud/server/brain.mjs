@@ -55,6 +55,7 @@ export function allowedTools() {
     'mcp__jarvis-hud__hud_focus',
     'mcp__jarvis-hud__hud_card',
     'mcp__jarvis-hud__hud_log',
+    'mcp__jarvis-hud__show_media',
     'mcp__jarvis-hud__weather',
     'mcp__jarvis-hud__call_user',
     'mcp__jarvis-hud__agent_task',

@@ -27,8 +27,9 @@ import { CodexBrain } from './server/brain-codex.mjs'
 import { aiProvider } from './server/provider.mjs'
 import { chatMetrics, currentTurnId, currentTurnInfo, getHistory, hudAction, initChat, onFilmChange, onUserTurn, onVoiceChange, sayText, sendChat, setVoice, standaloneCard, stopChat, ttsPlayed, voiceState } from './server/chat.mjs'
 import { CONFIG_FILE, getConfig } from './server/config.mjs'
-import { createJob, initJobs, jobDetail, jobFile, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob, waitNudge } from './server/jobs.mjs'
+import { createJob, initJobs, jobDetail, jobFile, jobMedia, jobsContextNote, listJobs, loadJobs, replyJob, stopAllJobs, stopJob, waitNudge } from './server/jobs.mjs'
 import { normalizeCard } from './server/cards.mjs'
+import { mediaFile, registerPaths, servedFile, trimText } from './server/shown-media.mjs'
 import { FILES, MEMORY_DIR, getIndex, stats } from './server/memory/index.mjs'
 import { attachMic, micStats, micStatus, micWorkerState, onVoice, setMicWake, stopMic, wakeAvailable } from './server/mic.mjs'
 import { currentSnapshot, filmNameList, forFilm, memoryStatus, refreshSnapshot, startSnapshots } from './server/snapshot.mjs'
@@ -109,6 +110,13 @@ const MIME = {
   '.mp3': 'audio/mpeg',
   '.m4a': 'audio/mp4',
   '.wav': 'audio/wav',
+  // Photos and videos Jarvis shows (server/shown-media.mjs). A .mov is the mp4 family: as video/mp4 Chrome plays it too.
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.mov': 'video/mp4',
+  '.webm': 'video/webm',
+  '.heic': 'image/heic',
+  '.heif': 'image/heif',
   '.txt': 'text/plain; charset=utf-8',
   '.glb': 'model/gltf-binary',
   '.ktx2': 'image/ktx2',
@@ -257,7 +265,7 @@ function allowRead(req, url) {
   if (isLocal(req)) return true
   return remoteTokenOk(req, url) || hasSession(req)
 }
-const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|settings|orbs|inner|setup|attachment|import|update|video|hands|record|telemetry)|tts\/)/
+const PRIVATE_GET = /^\/(api\/(events|status|mode|chat\/history|metrics|snapshot|weather|jobs|apps|settings|orbs|inner|setup|attachment|import|update|video|media|hands|record|telemetry)|tts\/)/
 
 async function serveFile(req, res, file, { cache, immutable = false }) {
   let info
@@ -691,6 +699,11 @@ async function routePost(req, res, path) {
     }
     // The brain's `settings` tool: the same change POST /api/settings makes (server/settings.mjs).
     if (body.action === 'settings') return sendJson(res, 200, await brainSettings(body))
+    // show_media: photos, videos and audio as floating cards on the screen and thumbnails in the chat.
+    if (body.action === 'media') {
+      const r = showMedia(body)
+      return sendJson(res, r.ok ? 200 : 400, r)
+    }
     const result = String(body.action ?? '').startsWith('job_') ? await jobAction(body) : hudAction(body)
     return sendJson(res, result.ok ? 200 : 400, result)
   }
@@ -914,12 +927,19 @@ async function route(req, res) {
   if (path === '/api/settings') return sendJson(res, 200, settingsBody())
   if (path === '/api/telemetry') return sendJson(res, 200, { ok: true, ...(await telemetryInfo()) })
   if (path === '/api/orbs') return sendJson(res, 200, { ok: true, ...getOrbs() })
-  // An image a finished job named in its result, shown in the middle of the desktop. Only those exact files.
+  // A photo, video or audio a finished job named in its result, shown on the desktop. Only those exact files.
   const jobImg = /^\/api\/jobs\/(j\d+)\/file\/(\d{1,2})$/.exec(path)
   if (jobImg) {
     const file = jobFile(jobImg[1], jobImg[2])
-    if (file && (await serveFile(req, res, file, { cache: false })) !== false) return
+    if (file && (await serveFile(req, res, await servedFile(file), { cache: false })) !== false) return
     return sendJson(res, 404, { ok: false, error: 'súbor nie je' })
+  }
+  // Media the brain showed with show_media: by an opaque id, never by a path (server/shown-media.mjs).
+  const shown = /^\/api\/media\/(m[0-9a-f]{16})$/.exec(path)
+  if (shown) {
+    const file = mediaFile(shown[1])
+    if (file && (await serveFile(req, res, await servedFile(file), { cache: false })) !== false) return
+    return sendJson(res, 404, { ok: false, error: 'súbor už nie je k dispozícii' })
   }
   // One job with its assignment and the whole feed, for the detail view.
   const jobOne = /^\/api\/jobs\/(j\d+)$/.exec(path)
@@ -1011,6 +1031,24 @@ async function jobAction(body) {
   }
 }
 
+/**
+ * The brain's show_media: the files it names become floating cards on every open screen (SSE
+ * `media`) and thumbnails in a card of the current answer (or a card of its own when no turn runs).
+ */
+function showMedia(body) {
+  const { items, skipped } = registerPaths(body.paths, { base: REPO })
+  if (!items.length) return { ok: false, error: skipped.length ? `Tieto súbory sa nedajú ukázať (nie sú, alebo to nie je fotka, video ani zvuk): ${skipped.slice(0, 6).join(', ')}` : 'chýbajú paths' }
+  const title = clean(body.title, 60) || (items.length === 1 ? items[0].name : `${items.length} ${items.length < 5 ? 'súbory' : 'súborov'}`)
+  send('media', { title, items })
+  const built = normalizeCard({ kind: 'media', title, icon: items.some((i) => i.kind === 'video') ? 'eye' : items.some((i) => i.kind === 'audio') ? 'music' : 'photo', media: items }, `c-media-${Date.now().toString(36)}`)
+  if (built.ok) {
+    const inTurn = hudAction({ action: 'card', card: built.card })
+    if (!inTurn.ok) standaloneCard(`media-${Date.now().toString(36)}`, built.card)
+  }
+  log('media', `na obrazovke ${items.length}${skipped.length ? `, nedá sa ${skipped.length}` : ''}`)
+  return { ok: true, shown: items.map((i) => ({ kind: i.kind, name: i.name })), skipped }
+}
+
 /** A job's state in Jarvis's own words: the jobs are his hands, he is the one who asks and waits. */
 const jobState = (job) =>
   job.status === 'done' ? 'hotovo' : job.status === 'needs_ok' ? (job.wait === 'question' ? 'mám otázku' : 'čakám na súhlas') : 'nepodarilo sa'
@@ -1071,8 +1109,10 @@ async function drainAnnounce() {
           icon: job.status === 'done' ? 'check' : wait ? 'alarm' : 'shield',
           node: 'projekty',
           accent: job.status === 'done' ? 'ice' : wait ? 'amber' : 'red',
-          text: (wait ? job.needsOk : job.summary && job.summary.length > 300 ? `${job.summary.slice(0, 297).trimEnd()}…` : job.summary) || jobLine(job),
+          text: (wait ? job.needsOk : trimText(job.summary ?? '', 400)) || jobLine(job),
           caption: job.cost?.ms ? `${Math.round(job.cost.ms / 1000)} s, ${job.cost.turns} krokov` : null,
+          // Photos, videos and audio the job made: thumbnails in the card, a click opens each one on the screen.
+          media: jobMedia(job),
         },
         `c-${job.id}-${Date.now().toString(36)}`,
       )

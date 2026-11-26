@@ -37,11 +37,31 @@ export function cardHtml(card = {}) {
       .join('')}</ul>`
   }
   if (card.text) body += `<p class="card-text">${esc(card.text)}</p>`
+  if (Array.isArray(card.media) && card.media.length) body += mediaHtml(card.media)
   if (card.caption) body += `<div class="card-c">${esc(card.caption)}</div>`
   return (
     `<div class="card${acc}${holo ? ' has-holo' : ''}">${holo ? `<img class="card-holo" src="${holo}" alt="" decoding="async">` : ''}` +
     `<div class="card-h">${icon(ic)}<span>${esc(card.title ?? '')}</span></div>${body}</div>`
   )
+}
+
+/**
+ * Thumbnails of the photos, videos and audio of a card. A video shows its frame at 0.1 s, only its
+ * metadata is loaded. A click opens the item as a floating card on the screen (media-cards.js).
+ */
+function mediaHtml(items) {
+  const list = items.filter((m) => m && ['image', 'video', 'audio'].includes(m.kind) && m.url).slice(0, 24)
+  if (!list.length) return ''
+  const one = list.length === 1 ? ' is-one' : ''
+  return `<div class="card-media${one}">${list
+    .map((m) => {
+      const src = esc(fileUrl(m.url))
+      const data = `data-kind="${esc(m.kind)}" data-url="${esc(m.url)}" data-name="${esc(m.name ?? '')}" title="${esc(m.name ?? '')}" aria-label="Ukázať ${esc(m.name || (m.kind === 'video' ? 'video' : m.kind === 'audio' ? 'zvuk' : 'fotku'))}"`
+      if (m.kind === 'image') return `<button type="button" class="cm k-image" ${data}><img src="${src}" alt="" loading="lazy" decoding="async"></button>`
+      if (m.kind === 'video') return `<button type="button" class="cm k-video" ${data}><video src="${src}#t=0.1" muted playsinline preload="metadata" tabindex="-1"></video><span class="cm-play"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.8v12.4L18.6 12Z"/></svg></span></button>`
+      return `<button type="button" class="cm k-audio" ${data}>${icon('music')}<span>${esc(m.name ?? '')}</span></button>`
+    })
+    .join('')}</div>`
 }
 
 function toolHtml(tool) {
@@ -142,7 +162,7 @@ function patchTurn(row, turn) {
   row._j.hidden = blocks.length === 0
 }
 
-export function createChat({ onSend, capture = false, fileUrl: toFileUrl = null }) {
+export function createChat({ onSend, onMedia = null, capture = false, fileUrl: toFileUrl = null }) {
   if (toFileUrl) fileUrl = toFileUrl
   const list = document.getElementById('chat')
   const view = document.getElementById('chat-view')
@@ -166,11 +186,25 @@ export function createChat({ onSend, capture = false, fileUrl: toFileUrl = null 
     const b = e.target.closest('.sugg')
     if (b) onSend?.(b.dataset.text, 'text')
   })
+  // A thumbnail of a photo or video in a card opens it on the screen.
+  list.addEventListener('click', (e) => {
+    const b = e.target.closest?.('.card-media .cm')
+    if (!b || !onMedia) return
+    onMedia({ kind: b.dataset.kind, url: b.dataset.url, name: b.dataset.name })
+  })
   // An attachment the browser cannot draw (HEIC outside Safari, a damaged file) turns into a named chip.
   list.addEventListener(
     'error',
     (e) => {
       const img = e.target
+      // A thumbnail of a file that is no longer there (an old job, a moved file): its name stays, the click does nothing.
+      const thumb = img?.closest?.('.card-media .cm')
+      if (thumb && !thumb.classList.contains('is-gone')) {
+        thumb.classList.add('is-gone')
+        thumb.disabled = true
+        thumb.innerHTML = `${icon(thumb.dataset.kind === 'video' ? 'film' : 'fotky')}<span>${esc(thumb.dataset.name || 'Súbor už nie je')}</span>`
+        return
+      }
       if (img?.tagName !== 'IMG' || !img.classList.contains('ma-img')) return
       const chip = document.createElement('span')
       chip.className = 'ma-file'

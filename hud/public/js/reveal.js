@@ -1,6 +1,6 @@
 // Hotová úloha v strede plochy. Namiesto zoznamu úloh v paneli sa výsledok ukáže sám, keď úloha
-// skončí: web ako sklenená 3D karta so živým náhľadom, obrázok ako obrázok, inak krátka karta
-// s výsledkom. Karta sa nakláňa za kurzorom a cez sklo jej prechádza tekutý odlesk. Sama zmizne,
+// skončí: web ako sklenená 3D karta so živým náhľadom, inak krátka karta s výsledkom. Fotky a videá
+// úlohy sú vlastné plávajúce karty (media-cards.js): karta úlohy je vtedy malá, hore nad nimi. Karta sa nakláňa za kurzorom a cez sklo jej prechádza tekutý odlesk. Sama zmizne,
 // klik ju otvorí v detaile úlohy, Esc alebo klik vedľa ju zavrie.
 
 import { icon } from './icons.js'
@@ -16,7 +16,7 @@ const sameOrigin = (url) => {
   }
 }
 
-export function createReveal({ onOpen, fileUrl = (u) => u }) {
+export function createReveal({ onOpen }) {
   const root = document.createElement('div')
   root.className = 'rv'
   root.hidden = true
@@ -36,16 +36,14 @@ export function createReveal({ onOpen, fileUrl = (u) => u }) {
   function cardHtml(job) {
     const arts = job.artifacts ?? []
     const web = arts.find((a) => a.kind === 'web')
-    const img = arts.find((a) => a.kind === 'image')
+    // Photos, videos and audio float as cards of their own: this card only says the job is done.
+    const hasMedia = arts.some((a) => a.kind === 'image' || a.kind === 'video' || a.kind === 'audio')
     const waiting = job.status === 'needs_ok'
     const badge = `<span class="rv-badge${waiting ? ' is-wait' : ''}">${icon(waiting ? 'hourglass' : 'check')}<span>${waiting ? (job.wait === 'question' ? 'Mám otázku' : 'Čakám na súhlas') : 'Hotovo'}</span></span>`
     const text = esc(waiting ? job.needsOk || job.summary || '' : job.summary || '')
     let media = ''
     let kind = 'text'
-    if (img) {
-      kind = 'image'
-      media = `<div class="rv-media"><img src="${esc(fileUrl(img.url))}" alt="${esc(img.name)}" decoding="async"></div>`
-    } else if (web) {
+    if (web && !hasMedia) {
       kind = 'web'
       const host = esc(web.name.split('/')[0])
       media =
@@ -54,6 +52,7 @@ export function createReveal({ onOpen, fileUrl = (u) => u }) {
         // A page of this very origin would run with Jarvis's own rights inside the frame: it is shown as a link only.
         `${sameOrigin(web.url) ? '' : `<iframe src="${esc(web.url)}" title="${host}" loading="eager" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" tabindex="-1"></iframe>`}</div></div>`
     }
+    if (hasMedia) kind = 'media'
     const links = web ? `<a class="rv-btn" href="${esc(web.url)}" target="_blank" rel="noopener">${icon('web')}<span>Otvoriť web</span></a>` : ''
     return {
       kind,
@@ -72,6 +71,7 @@ export function createReveal({ onOpen, fileUrl = (u) => u }) {
     stage.innerHTML = html
     root.hidden = false
     root.dataset.kind = kind
+    root.dataset.place = kind === 'media' ? 'top' : 'center'
     requestAnimationFrame(() => root.classList.add('is-on'))
     // The card is the only thing to read now: whatever is open behind it (a planet, the apps) steps back.
     document.body.classList.add('rv-on')
@@ -148,5 +148,11 @@ export function createReveal({ onOpen, fileUrl = (u) => u }) {
     },
     close,
     isOpen: () => Boolean(current),
+    /** Height taken at the top of the free zone by a small job-done card above its media cards, else 0. */
+    reserved() {
+      if (!current || root.dataset.place !== 'top') return 0
+      const card = stage.querySelector('.rv-card')
+      return card ? card.offsetHeight + 16 : 0
+    },
   }
 }

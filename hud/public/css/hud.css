@@ -640,6 +640,20 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
 .card-list .cl-l small { display: block; font-size: 0.8125rem; color: var(--t3); }
 .card-list .cl-v { font: 500 0.875rem/1 var(--mono); color: var(--ice); }
 .card-text { margin: 0.5rem 0 0; font: 400 0.9375rem/1.45 var(--sans); color: var(--t2); }
+/* photos, videos and audio of a card: thumbnails, a click opens each one on the screen (js/media-cards.js) */
+.card-media { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.6rem, 1fr)); gap: 0.4rem; margin-top: 0.65rem; }
+.card-media .cm { position: relative; display: block; aspect-ratio: 1; padding: 0; border: 0; border-radius: 0.7rem; overflow: hidden; cursor: pointer; background: #05090c; box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.16); transition: box-shadow 0.2s ease, transform 0.2s ease; }
+.card-media .cm:hover { box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.55), 0 0 1.2rem -0.4rem rgba(95, 230, 255, 0.6); transform: translateY(-1px); }
+.card-media .cm img, .card-media .cm video { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.card-media .cm-play { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.card-media .cm-play svg { width: 1.5rem; height: 1.5rem; fill: var(--ice); filter: drop-shadow(0 0 0.35rem rgba(0, 0, 0, 0.9)) drop-shadow(0 0 0.5rem rgba(95, 230, 255, 0.5)); }
+.card-media .cm.k-audio { grid-column: span 2; aspect-ratio: auto; min-height: 3rem; display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.7rem; text-align: left; font: 500 0.8125rem/1.25 var(--sans); color: var(--t1); overflow-wrap: anywhere; }
+.card-media .cm.k-audio .ic { flex: none; width: 1.2rem; height: 1.2rem; color: var(--ice); }
+.card-media .cm.is-gone { cursor: default; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.3rem; padding: 0.4rem; font: 500 0.6875rem/1.2 var(--sans); color: var(--t3); text-align: center; overflow-wrap: anywhere; transform: none; box-shadow: inset 0 0 0 1px rgba(127, 243, 255, 0.1); }
+.card-media .cm.is-gone .ic { width: 1.1rem; height: 1.1rem; color: var(--t3); }
+.card-media.is-one { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+.card-media.is-one .cm:not(.k-audio) { aspect-ratio: auto; max-width: 100%; }
+.card-media.is-one .cm img, .card-media.is-one .cm video { width: auto; max-width: 100%; height: auto; max-height: 13rem; }
 .card-chart { display: flex; align-items: flex-end; gap: 0.45rem; height: 5rem; margin-top: 0.8rem; }
 .cc { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 0.3rem; min-width: 0; }
 .cc i { width: 100%; max-width: 1.1rem; border-radius: 0.3rem 0.3rem 0.15rem 0.15rem; background: linear-gradient(180deg, var(--acc, var(--ice)), rgba(127, 243, 255, 0.15)); opacity: 0.85; }
@@ -1315,6 +1329,16 @@ body[data-voice='speaking'] .aw-hint, body[data-voice='listening'] .aw-hint, bod
   transform: translateZ(80px);
 }
 .rv-rim { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), inset 0 -30px 60px -40px color-mix(in srgb, var(--c) 50%, transparent); }
+/* A job that made photos or videos: a small card at the top of the free zone, its media float below it and stay usable. */
+.rv[data-place='top'] { align-items: start; padding-top: calc(var(--safe-top) + var(--top-h) + 0.25rem); }
+.rv[data-place='top']:not([hidden]) { pointer-events: none; }
+.rv[data-place='top'] .rv-card { pointer-events: auto; }
+.rv-card.k-media { width: min(27rem, 86vw); border-radius: 1.4rem; }
+.rv-card.k-media .rv-body { padding: 0.95rem 1.15rem 1rem; }
+.rv-card.k-media .rv-body h2 { margin-top: 0.55rem; font-size: 1.2rem; }
+.rv-card.k-media .rv-body p { margin-top: 0.3rem; font-size: 0.875rem; max-height: none; }
+.rv-card.k-media .rv-actions { margin-top: 0.7rem; }
+.rv-card.k-media .rv-btn { padding: 0.45rem 0.8rem; font-size: 0.8125rem; }
 @media (prefers-reduced-motion: reduce) { .rv-card { transition-duration: 0.01ms; } .rv-sheen { filter: none; } }
 .apv[hidden], .rv[hidden] { display: none; }
 
