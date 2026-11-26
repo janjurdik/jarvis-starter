@@ -2,6 +2,25 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.10.1 (2026-11-26)
+
+- **Fotky a videá priamo v Jarvisovi.** Čo Jarvis vyrobí alebo ukáže (fotky, videá, zvuk), sa otvorí ako samostatné
+  plávajúce karty na obrazovke: video hrá hneď, kartu posuniete kamkoľvek a zavriete krížikom. Nič sa neotvára mimo
+  Jarvisa. „Ukáž mi to video" funguje aj hlasom.
+- **Úlohy sa dajú upravovať.** Na tabuli úloh je pri každej krížik na zmazanie (s „Vrátiť"), klik úlohu prepíše a
+  fajka ju odškrtne.
+- **Žiadny terminál.** Prihlásenie do Garminu je karta priamo v rozhovore, heslo ide rovno službe a Jarvis ho nevidí.
+  Kde treba okno terminálu, otvorí ho Jarvis sám.
+- **Jarvis sa s vami aj baví.** Pozná hudbu, memy a slang, má vlastný názor a pýta sa späť. A už nehovorí to isté
+  dvakrát, pred úlohou a po nej.
+- **Čistý zvuk v Bluetooth slúchadlách.** Pri Bluetooth slúchadlách Jarvis počúva cez mikrofón počítača, takže
+  slúchadlá neprepnú do hovorovej kvality a hlas neznie ako z konzervy.
+- **Orby s úplnými dátami.** Orb, ktorý treba naplniť (hry, commity, appky), zbiera Jarvis na pozadí zo všetkých
+  zdrojov a výsledok si overí. Príliš dlhé číslo pri orbe sa už neoreže.
+- **Anonymné štatistiky** (len čísla, nikdy texty ani mená), vypínajú sa v Nastaveniach, časť Asistent.
+- **Bezpečnosť mobilu** po nezávislom audite: silnejšie heslo, vaše zariadenie prejde aj počas útoku na prihlásenie,
+  oznámenie o každom novom zariadení a zapnutí tunela, čip „Mobil zapnutý", token cez tunel neplatí.
+
 ## 1.10.0 (2026-11-26)
 
 - **Jarvis v mobile.** Na želanie je Jarvis aj v telefóne: rozhovor, hlas, úlohy a schvaľovanie odkiaľkoľvek. Ide cez
