@@ -686,6 +686,65 @@ body.capture .pane-scroll, body.scene .pane-scroll { overflow-y: hidden; }
   .lc-row { flex-direction: column; align-items: stretch; gap: 0.35rem; padding: 0.55rem 0; }
   .lc-in { max-width: none; text-align: left; }
 }
+/* The alarm card (server/alarm-card.mjs): the time on one row, the offered songs as rows to click, one button.
+   It speaks the login card's language (rows, a quiet note, the same buttons). */
+.alarm-card { display: flex; flex-direction: column; margin: 0; }
+.alarm-card .lc-l small { display: block; margin-top: 0.2rem; font: 400 0.8125rem/1.2 var(--sans); color: var(--t3); }
+.alarm-card .ac-time { max-width: 8.5rem; font-variant-numeric: tabular-nums; text-align: center; }
+.alarm-card .ac-ask { margin-top: 0.7rem; color: var(--t2); }
+.ac-songs { display: flex; flex-direction: column; }
+.ac-song { display: flex; align-items: center; gap: 0.8rem; min-height: 3.5rem; box-shadow: inset 0 1px 0 rgba(176, 246, 255, 0.08); cursor: pointer; outline: 0; }
+.ac-mark { flex: none; display: grid; place-items: center; width: 1.45rem; height: 1.45rem; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--t4); transition: background 0.2s ease, box-shadow 0.2s ease; }
+.ac-mark .ic { width: 0.9rem; height: 0.9rem; color: var(--bg); opacity: 0; transition: opacity 0.2s ease; }
+.ac-song:hover .ac-mark, .ac-song:focus-visible .ac-mark { box-shadow: inset 0 0 0 1.5px var(--ice-a); }
+.ac-song.is-on .ac-mark { background: var(--ice); box-shadow: 0 0 0.9rem rgba(127, 243, 255, 0.45); }
+.ac-song.is-on .ac-mark .ic { opacity: 1; }
+.ac-n { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.ac-n b { font: 500 0.9375rem/1.25 var(--sans); color: var(--t2); transition: color 0.2s ease; }
+.ac-n small { font: 400 0.8125rem/1.2 var(--sans); color: var(--t3); }
+.ac-song.is-on .ac-n b { color: var(--white); }
+.ac-play { flex: none; display: flex; align-items: center; gap: 0.35rem; height: 2.3rem; padding: 0 0.2rem 0 0.6rem; border: 0; background: none; font: 500 0.875rem/1 var(--sans); color: var(--t3); cursor: pointer; transition: color 0.2s ease; }
+.ac-play .ic { width: 0.95rem; height: 0.95rem; }
+.ac-play:hover:not(:disabled), .ac-play:focus-visible { color: var(--ice); outline: 0; }
+.ac-play.is-playing { color: var(--ice); }
+.ac-play.is-playing .ic { animation: breathe 1.2s ease-in-out infinite; }
+.alarm-card .lc-act button { height: 2.3rem; padding: 0 1rem; border: 0; border-radius: 1.15rem; font: 500 0.9375rem/1 var(--sans); cursor: pointer; transition: background 0.2s ease, opacity 0.2s ease; }
+.ac-cancel { background: none; color: var(--t3); }
+.ac-cancel:hover:not(:disabled) { color: var(--t1); }
+.ac-go, .ar-stop { background: linear-gradient(180deg, rgba(127, 243, 255, 0.32), rgba(127, 243, 255, 0.17)); box-shadow: inset 0 1px 0 rgba(225, 252, 255, 0.28), 0 0 1.5rem rgba(127, 243, 255, 0.16); color: var(--white); }
+.ac-go:hover:not(:disabled), .ac-go:focus-visible, .ar-stop:hover, .ar-stop:focus-visible { background: linear-gradient(180deg, rgba(127, 243, 255, 0.44), rgba(127, 243, 255, 0.24)); outline: 0; }
+.alarm-card.is-busy .ac-go { animation: breathe 1.2s ease-in-out infinite; }
+.alarm-card.is-closed .lc-msg { color: var(--t3); }
+.alarm-card :disabled { opacity: 0.5; cursor: default; }
+
+/* The ringing alarm (js/alarm-ring.js): the whole screen says good morning, one button stops the sound.
+   Above everything else on the page, Settings and the planets' insides included. */
+.alarm-ring {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--safe-top, 0px) + 1.5rem) 1.5rem calc(var(--safe-bottom, 0px) + 1.5rem);
+  background: radial-gradient(80% 70% at 50% 42%, rgba(8, 30, 40, 0.78), rgba(2, 5, 8, 0.94));
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  animation: ar-in 0.5s ease both;
+}
+.alarm-ring.is-leaving { opacity: 0; transition: opacity 0.4s ease; pointer-events: none; }
+.ar-in { display: flex; flex-direction: column; align-items: center; width: min(100%, 38rem); text-align: center; }
+.ar-clock { font: 200 clamp(5rem, 17vmin, 10.5rem)/0.95 var(--sans); letter-spacing: -0.045em; font-variant-numeric: tabular-nums; color: var(--white); text-shadow: 0 0 3.5rem rgba(127, 243, 255, 0.35); animation: ar-pulse 2.4s ease-in-out infinite; }
+.ar-hello { margin: 1.1rem 0 0; font: 300 clamp(1.75rem, 4.6vmin, 2.6rem)/1.15 var(--sans); letter-spacing: -0.02em; color: var(--white); text-wrap: balance; }
+.ar-line { margin: 0.8rem 0 0; font: 400 1.0625rem/1.45 var(--sans); color: var(--t2); text-wrap: balance; }
+.ar-stop { margin-top: 2.2rem; height: 3.5rem; padding: 0 2.4rem; border: 0; border-radius: 1.75rem; font: 500 1.125rem/1 var(--sans); cursor: pointer; transition: background 0.2s ease; }
+.ar-hint { margin: 0.95rem 0 0; font: 400 0.875rem/1.4 var(--sans); color: var(--t3); }
+.ar-left { width: min(100%, 15rem); height: 2px; margin-top: 1.5rem; border-radius: 1px; background: rgba(176, 246, 255, 0.1); overflow: hidden; }
+.ar-left i { display: block; height: 100%; background: var(--ice); transform-origin: left center; animation: ar-drain 45s linear both; }
+@keyframes ar-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ar-pulse { 0%, 100% { text-shadow: 0 0 3.5rem rgba(127, 243, 255, 0.28); } 50% { text-shadow: 0 0 5rem rgba(127, 243, 255, 0.6); } }
+@keyframes ar-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .ar-clock { animation: none; } }
+
 /* A command or a path that slipped into an answer: a code chip, not a run-on sentence. */
 .say-code { padding: 0.08em 0.4em; border-radius: 0.4em; background: rgba(176, 246, 255, 0.08); font: 400 0.86em/1.3 var(--mono); color: var(--ice); overflow-wrap: anywhere; }
 .msg-fix { margin-left: auto; flex: none; height: 2rem; padding: 0 0.9rem; border: 0; border-radius: 1rem; background: rgba(255, 90, 78, 0.14); font: 500 0.875rem/1 var(--sans); color: var(--t1); cursor: pointer; }

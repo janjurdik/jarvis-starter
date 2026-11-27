@@ -342,8 +342,8 @@ async function itemDetail(node, id) {
       title: r.title,
       sub: r.when,
       chips: [r.enabled ? 'zapnutá' : 'vypnutá'],
-      paragraphs: [r.id === 'budik' ? 'Budík zazvoní skladbou a povie vám ranný prehľad.' : `Bežím ju sám, bez pýtania. Zadanie je v súbore routines/${r.id}.md a výsledok ukladám do pamäte, do priečinka schranka.`],
-      actions: [{ label: r.enabled ? 'Vypnúť' : 'Zapnúť', say: `${r.enabled ? 'Vypni' : 'Zapni'} ${r.id === 'budik' ? 'budík' : `rutinu ${r.title}`}.` }, ...(r.id === 'budik' ? [] : [{ label: 'Spustiť teraz', say: `Spusti teraz rutinu ${r.title}.` }])],
+      paragraphs: [r.id === 'budik' ? 'Budík zazvoní skladbou a povie vám ranný prehľad. Zvonenie zastavíte tlačidlom na obrazovke, prehľad potom zaznie hneď.' : `Bežím ju sám, bez pýtania. Zadanie je v súbore routines/${r.id}.md a výsledok ukladám do pamäte, do priečinka schranka.`],
+      actions: [{ label: r.enabled ? 'Vypnúť' : 'Zapnúť', say: `${r.enabled ? 'Vypni' : 'Zapni'} ${r.id === 'budik' ? 'budík' : `rutinu ${r.title}`}.` }, ...(r.id === 'budik' ? [{ label: 'Zmeniť skladbu', say: 'Chcem si vybrať skladbu na budík.' }] : [{ label: 'Spustiť teraz', say: `Spusti teraz rutinu ${r.title}.` }])],
     }
   }
   return { title: it.t, sub: it.s }

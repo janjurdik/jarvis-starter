@@ -126,7 +126,8 @@ Jarvis má vlastný zoznam v `memory/ulohy.md`, ukazuje ho na ploche a stráži 
 
 Spýtaj sa, kedy vstáva (a či cez víkend inak) a navrhni tri až päť vecí, ktoré mu ráno povieš, podľa toho, čo o ňom vieš (`node scripts/alarm.mjs topics` ukáže všetky).
 `node scripts/alarm.mjs set 06:30 --days weekdays --rano pocasie,den,ulohy`, potom `node scripts/alarm.mjs test` (do minúty pripraví brief a zazvoní ako ráno).
-Budík zvoní skladbou Highway to Hell, ktorú príprava stiahla. Povedz mu, že si ju vie zmeniť: pretiahne Jarvisovi vlastnú skladbu alebo pošle odkaz (`node scripts/alarm.mjs sound <súbor alebo adresa>`, `sound default`, `sound builtin`).
+Čas a skladbu si vyberá sám na obrazovke Jarvisa: `node scripts/alarm.mjs card 06:30 --days weekdays` ukáže v rozhovore kartu budíka (na ploche nástroj `ask_alarm`). Sú na nej dve skladby, ktoré príprava stiahla, Highway to Hell a Should I Stay or Should I Go, každá s ukážkou: klikne na tú, ktorou ho máš budiť, a potvrdí čas. Skladbu za neho nevyberaj. Vlastnú si vie dať kedykoľvek: pretiahne ju Jarvisovi alebo pošle odkaz (`node scripts/alarm.mjs sound <súbor alebo adresa>`, ponuka `sound default`, `sound stay`, zvonenie `sound builtin`, zoznam `node scripts/alarm.mjs songs`).
+Povedz mu, ako to ráno vyzerá: keď budík zvoní, na obrazovke je „Dobré ráno" s jedným tlačidlom. Zastaví zvonenie a ranný prehľad zaznie hneď. Keď ho nestlačí, skladba dohrá a prehľad nasleduje sám.
 Povedz na rovinu, čo budík potrebuje: počítač zapnutý (MacBook otvorený a v zásuvke, Windows v zásuvke alebo v spánku, nie vypnutý) a zvuk nie úplne stíšený. Spánok povie, len keď ho vie (hodinky Garmin alebo „spal som sedem hodín").
 
 ### samostatnost

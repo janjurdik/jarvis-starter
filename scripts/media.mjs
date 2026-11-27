@@ -17,7 +17,7 @@
 import '../hud/server/env.mjs'
 import { resolve } from 'node:path'
 import { join } from 'node:path'
-import { DEFAULT_SONG_URL, describe as describeSound, ensureDefaultSong, soundSetting } from '../hud/server/alarm-sound.mjs'
+import { DEFAULT_SONG_URL, SONGS, describe as describeSound, ensureDefaultSong, ensureSong, soundSetting } from '../hud/server/alarm-sound.mjs'
 import { MediaError, checkUrl, downloadAudio, mediaAvailable, probe, subtitles, warm } from '../hud/server/media.mjs'
 import { onVideoEvent, openVideo, stamp, transcriptText } from '../hud/server/video.mjs'
 import { DATA_DIR, HUD_URL, hudAlive } from './lib.mjs'
@@ -104,6 +104,21 @@ async function prepare() {
     } catch (err) {
       problems.push(`${problem(err)} Budík ostáva so zvonením Jarvisa.`)
       step('alarm-song', 'error', null, problems.at(-1))
+    }
+    // The other songs the alarm card offers: on the disk before the user is asked, so the short listen works at once.
+    // One that fails is no problem of the setup: it is downloaded the moment it is chosen.
+    for (const other of SONGS.slice(1)) {
+      try {
+        const res = await ensureSong(other, {
+          onProgress: (p) => {
+            if (p.state === 'downloading') step('alarm-song', 'downloading', p.pct, `Sťahujem druhú pesničku na výber: ${other.title}`)
+            else if (p.state === 'converting') step('alarm-song', 'converting', null, 'Pripravujem z nej zvonenie')
+          },
+        })
+        if (res.state === 'done') step('alarm-song', 'done', 100, `Na výber je aj ${other.title}`)
+      } catch {
+        step('alarm-song', 'skipped', null, `${other.title} stiahnem, keď si ju vyberieš`)
+      }
     }
   } else {
     step('alarm-song', 'skipped', null, 'Pesničku na budík teraz nestiahnem, budík ostáva so zvonením Jarvisa')

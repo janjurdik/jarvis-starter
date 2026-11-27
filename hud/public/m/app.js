@@ -115,6 +115,11 @@ function cardHtml(c = {}) {
     const text = c.state === 'done' ? c.message || 'Prihlásené.' : c.state === 'closed' ? c.message || 'Prihlásenie zrušené.' : 'Prihlásenie dokončíte priamo na počítači, na ktorom bežím. Heslo cez internet neposielam.'
     return `<div class="card"><div class="card-h">${icon(c.icon || NODE_ICON[c.node] || 'shield')}<span>${esc(c.title ?? 'Prihlásenie')}</span></div><p class="card-text">${esc(text)}</p></div>`
   }
+  // The alarm card is clicked through at the computer, where the songs can be heard; the phone shows where it stands.
+  if (c.kind === 'alarm') {
+    const text = c.state === 'done' || c.state === 'closed' ? c.message || 'Budík je nastavený.' : `Budík na ${c.time ?? ''}: skladbu si vyberiete na počítači, na ktorom bežím.`
+    return `<div class="card"><div class="card-h">${icon('alarm')}<span>${esc(c.title ?? 'Budík')}</span></div><p class="card-text">${esc(text)}</p></div>`
+  }
   const acc = c.accent === 'amber' ? ' acc-amber' : c.accent === 'red' ? ' acc-red' : ''
   let body = ''
   if (c.value !== null && c.value !== undefined && c.value !== '') body += `<div class="card-v">${esc(c.value)}${c.unit ? `<small>${esc(c.unit)}</small>` : ''}</div>`

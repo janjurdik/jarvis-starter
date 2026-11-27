@@ -48,6 +48,7 @@ const META = {
   screen_look: { label: 'Pozerám sa na obrazovku', icon: 'eye', node: null },
   open_terminal: { label: 'Otváram okno', icon: 'code', node: null },
   ask_login: { label: 'Pripravujem prihlásenie', icon: 'shield', node: null },
+  ask_alarm: { label: 'Pripravujem budík', icon: 'alarm', node: 'rutiny' },
   record_start: { label: 'Zapínam záznam', icon: 'wave', node: null },
   record_stop: { label: 'Končím záznam', icon: 'wave', node: null },
   record_status: { label: 'Pozerám záznam', icon: 'wave', node: null },

@@ -31,6 +31,7 @@ import { createPeople } from './people.js'
 import { createAppsWorld, warmAppTiles } from './apps-world.js'
 import { createReveal } from './reveal.js'
 import { createMediaCards } from './media-cards.js'
+import { createAlarmRing } from './alarm-ring.js'
 import { initVideo, videoEvent } from './video.js'
 import { setWorldApps } from './world/apps.js'
 import { activeOrbs, layoutOrbs } from './orbs.js'
@@ -290,6 +291,8 @@ let wake = null
 let jobs = null
 /** Photos, videos and audio as floating cards (media-cards.js). */
 let mediaCards = null
+/** The ringing alarm on the screen: good morning and the button that stops it (alarm-ring.js). */
+let alarmRing = null
 /** Dropped files and imports (drop.js) and the people review (people.js). Not in capture and scenes. */
 let drop = null
 let people = null
@@ -777,6 +780,7 @@ function connectEvents() {
   on('video', videoEvent)
   // show_media from the brain: each file floats as its own card.
   on('media', (m) => Array.isArray(m?.items) && mediaCards?.show(m.items))
+  on('alarm', (m) => alarmRing?.apply(m))
   on('status', onStatus)
   on('mode', (m) => typeof m?.film === 'boolean' && setFilm(m.film, { remote: true }))
   source.addEventListener('open', () => {
@@ -1422,7 +1426,22 @@ async function main() {
     },
     onChange: () => paint('jobs', () => ui.renderJobsChip(jobs.active, jobs.waiting, jobs.asking)),
   })
-  chat = createChat({ onSend: (text, via) => send(text, via), capture: CAPTURE, fileUrl: api.fileUrl, login: api.login, openTerminal: api.openTerminal, onMedia: (item) => mediaCards?.open(item) })
+  chat = createChat({ onSend: (text, via) => send(text, via), capture: CAPTURE, fileUrl: api.fileUrl, login: api.login, openTerminal: api.openTerminal, alarmCard: api.alarmCard, onMedia: (item) => mediaCards?.open(item) })
+  if (!CAPTURE && !SCENE_ID)
+    alarmRing = createAlarmRing({
+      api,
+      // The Jarvis app comes forward while the alarm rings. On the desktop it rises above the other windows and goes back after.
+      raise: NATIVE
+        ? () => {
+            const d = desk()
+            if (typeof d?.post !== 'function') return false
+            const was = d.isRaised === true
+            d.post({ type: 'raise' })
+            return DESKTOP && !was
+          }
+        : null,
+      lower: NATIVE && DESKTOP ? () => desk()?.dismiss?.() : null,
+    })
   if (!CAPTURE && !SCENE_ID) {
     people = createPeople({ api, ui, isFilm: () => film, onApplied: () => drop?.load() })
     drop = createDrop({ api, ui, desktop: NATIVE, onSend: (text, via) => send(text, via), onReview: () => people.open() })

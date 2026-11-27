@@ -17,22 +17,29 @@ const SAY_VOICE = process.env.JARVIS_SAY_VOICE || (process.env.JARVIS_LANG === '
 /** Turned off with JARVIS_LOCAL_VOICE=0: then only the HUD speaks, nothing comes out of the speakers on its own. */
 export const localVoiceOn = () => process.env.JARVIS_LOCAL_VOICE !== '0'
 
-const run = (bin, args, opts = {}) =>
+/** Runs a program to its end. `stop` (an AbortSignal) ends it early: that is how a ringing alarm is silenced. */
+const run = (bin, args, { stop = null, ...opts } = {}) =>
   new Promise((resolve) => {
     let out = ''
     let child
+    if (stop?.aborted) return resolve({ code: 1, out: '', stopped: true })
     try {
       child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, ...opts })
     } catch (err) {
       return resolve({ code: 1, out: String(err?.message ?? err) })
     }
+    const kill = () => child.kill()
+    stop?.addEventListener('abort', kill, { once: true })
     child.stdout?.on('data', (d) => (out += d))
     child.stderr?.on('data', (d) => (out += d))
     child.on('error', (err) => resolve({ code: 1, out: err.message }))
-    child.on('exit', (code) => resolve({ code: code ?? 1, out: out.trim() }))
+    child.on('exit', (code) => {
+      stop?.removeEventListener('abort', kill)
+      resolve({ code: code ?? 1, out: out.trim(), stopped: stop?.aborted === true })
+    })
   })
 
-const powershell = (script, env = {}) => run(WIN_POWERSHELL, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { env: { ...process.env, ...env } })
+const powershell = (script, env = {}, { stop = null } = {}) => run(WIN_POWERSHELL, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], { env: { ...process.env, ...env }, stop })
 
 /** Splits a longer text into pieces the voice service handles quickly (sentences, at most ~220 chars). */
 export function chunks(text, max = 220) {
@@ -53,12 +60,13 @@ export function chunks(text, max = 220) {
 
 // ── playback ────────────────────────────────────────────────────────────
 
-/** Plays audio files one after another. `items` = [{ file, durMs }]. */
-async function playFiles(items) {
+/** Plays audio files one after another. `items` = [{ file, durMs }]. `stop` ends the playback early. */
+async function playFiles(items, { stop = null } = {}) {
   if (!items.length) return true
   if (IS_MAC) {
     for (const { file } of items) {
-      const res = await run('/usr/bin/afplay', [file])
+      const res = await run('/usr/bin/afplay', [file], { stop })
+      if (res.stopped) return true
       if (res.code !== 0) return false
     }
     return true
@@ -82,12 +90,14 @@ async function playFiles(items) {
       '  $p.Close()',
       '}',
     ].join('\n')
-    const res = await powershell(script, { J_FILES: items.map((i) => i.file).join('|'), J_DURS: items.map((i) => String(i.durMs || 6000)).join('|') })
-    return res.code === 0
+    const res = await powershell(script, { J_FILES: items.map((i) => i.file).join('|'), J_DURS: items.map((i) => String(i.durMs || 6000)).join('|') }, { stop })
+    return res.stopped || res.code === 0
   }
   const player = findBin('paplay') ?? findBin('aplay') ?? findBin('ffplay')
   if (!player) return false
-  for (const { file } of items) await run(player, player.endsWith('ffplay') ? ['-nodisp', '-autoexit', '-loglevel', 'quiet', file] : [file])
+  for (const { file } of items) {
+    if ((await run(player, player.endsWith('ffplay') ? ['-nodisp', '-autoexit', '-loglevel', 'quiet', file] : [file], { stop })).stopped) break
+  }
   return true
 }
 
@@ -168,11 +178,13 @@ export function chimeFile() {
  * { play, seconds, prepared } from alarm-sound.mjs. A prepared clip already fades in and out and
  * has the right length. A raw file is stopped after `seconds`, on Windows with a fade.
  * Returns false when the player could not play it: the caller then rings the chime.
+ * `stop` (an AbortSignal) silences it at once; a sound that was stopped counts as played.
  */
-async function playSound(sound) {
+export async function playSound(sound, { stop = null } = {}) {
   if (!sound?.play || !existsSync(sound.play)) return false
   const seconds = Math.max(3, Math.min(300, Number(sound.seconds) || 45))
-  if (IS_MAC) return (await run('/usr/bin/afplay', ['-t', String(seconds), sound.play])).code === 0
+  const ok = (res) => res.stopped === true || res.code === 0
+  if (IS_MAC) return ok(await run('/usr/bin/afplay', ['-t', String(seconds), sound.play], { stop }))
   if (IS_WIN) {
     const script = [
       'Add-Type -AssemblyName PresentationCore',
@@ -200,13 +212,13 @@ async function playSound(sound) {
       '$p.Close()',
     ].join('\n')
     const raw = sound.prepared !== true
-    const res = await powershell(script, { J_FILE: sound.play, J_MAX_MS: String(seconds * 1000), J_FADE_MS: raw ? String(Math.min(6000, Math.round((seconds * 1000) / 3))) : '0', J_OUT_MS: raw ? '2500' : '0' })
-    return res.code === 0
+    const res = await powershell(script, { J_FILE: sound.play, J_MAX_MS: String(seconds * 1000), J_FADE_MS: raw ? String(Math.min(6000, Math.round((seconds * 1000) / 3))) : '0', J_OUT_MS: raw ? '2500' : '0' }, { stop })
+    return ok(res)
   }
   const player = findBin('ffplay') ?? findBin('paplay') ?? findBin('aplay')
   if (!player) return false
   const args = player.endsWith('ffplay') ? ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-t', String(seconds), sound.play] : [sound.play]
-  return (await run(player, args, { timeout: (seconds + 5) * 1000 })).code === 0
+  return ok(await run(player, args, { timeout: (seconds + 5) * 1000, stop }))
 }
 
 // ── volume (macOS) ──────────────────────────────────────────────────────
@@ -240,15 +252,25 @@ async function restoreVolume(before) {
  *   sound   with chime: the user's own sound or the default song instead of the built-in chime
  *           ({ kind, play, seconds, prepared } from alarm-sound.mjs). When it cannot be played, the chime rings.
  *   force   speak even when the voice is turned off (JARVIS_TTS=off): the alarm must be heard
+ *   stop    with chime: an AbortSignal that silences the alarm sound at once (the user stopped the
+ *           alarm on the screen). The brief is still said, right away.
+ *   onChimeEnd  with chime: called once when the alarm sound is over (played out or stopped), before the voice
  * Returns { ok, via, rang } where via is edge, say, elevenlabs, system or none and rang says which
- * alarm sound played (custom, default, builtin, or null without chime).
+ * alarm sound played (custom, default, song, builtin, or null without chime).
  */
-export async function speakLocal(text, { chime = false, force = false, sound = null } = {}) {
+export async function speakLocal(text, { chime = false, force = false, sound = null, stop = null, onChimeEnd = null } = {}) {
   const parts = chunks(text)
   const wanted = chime ? (sound?.play && existsSync(sound.play) ? sound.kind ?? 'custom' : 'builtin') : null
   // JARVIS_AUDIO=off: everything is prepared (voice files, chime) but nothing is played. For tests.
   if (process.env.JARVIS_AUDIO === 'off') {
     chimeFile()
+    // Tests: the "sound" lasts JARVIS_AUDIO_FAKE_MS, so stopping the alarm from the screen can be tried without a speaker.
+    const fake = chime ? Math.min(60_000, Math.max(0, Number(process.env.JARVIS_AUDIO_FAKE_MS) || 0)) : 0
+    if (fake) await new Promise((done) => {
+      const t = setTimeout(done, fake)
+      stop?.addEventListener('abort', () => (clearTimeout(t), done()), { once: true })
+    })
+    if (chime) onChimeEnd?.()
     const made = await Promise.all(parts.map((p) => synthesize(p).catch(() => null))).finally(() => stopTts())
     return { ok: true, via: `muted:${made.find(Boolean)?.provider ?? 'none'}`, rang: wanted }
   }
@@ -261,10 +283,15 @@ export async function speakLocal(text, { chime = false, force = false, sound = n
   try {
     if (chime) {
       // A sound file that is missing, broken or refused by the player must never leave the alarm silent.
-      const own = wanted !== 'builtin' && (await playSound(sound))
+      const own = wanted !== 'builtin' && (await playSound(sound, { stop }))
       if (!own) {
         rang = 'builtin'
-        await playFiles([{ file: chimeFile(), durMs: 6000 }])
+        await playFiles([{ file: chimeFile(), durMs: 6000 }], { stop })
+      }
+      try {
+        onChimeEnd?.()
+      } catch {
+        // the caller's own bookkeeping must never cost the user the brief
       }
     }
     if (!parts.length) return { ok: chime, via: 'none', rang }

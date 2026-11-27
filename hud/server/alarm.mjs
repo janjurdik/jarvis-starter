@@ -8,8 +8,13 @@
  * the alarm time (a chime and the brief out loud through the computer's speakers, HUD or not).
  *
  * Quiet hours end for the day once the alarm has rung: the user is up, reminders may speak again.
+ *
+ * While the alarm sound plays, data/alarm/ringing.json says so. The screen shows "Dobré ráno" with
+ * a button; the button writes `stoppedAt` into that file (POST /api/alarm/stop), the alarm script
+ * sees it, silences the sound and says the brief right away. Nobody presses it: the sound plays to
+ * its end and the brief follows, as it always did.
  */
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { MEMORY_DIR, FOLDERS, parseFrontmatter } from './memory/index.mjs'
 import { BRAIN_DIR, DATA_DIR, addDays, hhmm, isoDay } from './util.mjs'
@@ -136,6 +141,59 @@ export function quietNow(cfg, date = new Date()) {
   const r = rang()
   if (r?.day === isoDay(date) && date >= new Date(r.at) && date.getHours() < 12) return false
   return true
+}
+
+// ── ringing right now ───────────────────────────────────────────────────
+
+const RINGING_FILE = join(ALARM_DIR, 'ringing.json')
+
+function readRinging() {
+  try {
+    const r = JSON.parse(readFileSync(RINGING_FILE, 'utf8'))
+    return r && typeof r === 'object' && typeof r.id === 'string' ? r : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The alarm sound starts: { id, at, seconds, time, greeting, sound, formal } goes to the disk for the HUD.
+ * `seconds` is how long the sound plays when nobody stops it.
+ */
+export function startRinging({ seconds, time = null, greeting = 'Dobré ráno', sound = null, formal = true, test = false } = {}, at = new Date()) {
+  const ring = { id: `ring-${at.getTime().toString(36)}`, at: at.toISOString(), seconds: Math.max(1, Math.round(Number(seconds) || 45)), time: time ?? hhmm(at.getTime()), greeting: String(greeting).slice(0, 80), sound: sound ? String(sound).slice(0, 120) : null, formal: formal !== false, test: test === true }
+  mkdirSync(ALARM_DIR, { recursive: true })
+  writeFileSync(RINGING_FILE, JSON.stringify(ring))
+  return ring
+}
+
+/** The alarm that is ringing at this moment, or null (nothing rings, it was stopped, or the file is a leftover of a crash). */
+export function ringingNow(now = new Date()) {
+  const r = readRinging()
+  if (!r || r.stoppedAt) return null
+  const end = new Date(r.at).getTime() + (r.seconds + 15) * 1000
+  return Number.isFinite(end) && now.getTime() <= end ? r : null
+}
+
+/** The user stopped the alarm on the screen. Returns the ring that was stopped, or null when nothing was ringing. */
+export function stopRinging(id = null, now = new Date()) {
+  const r = ringingNow(now)
+  if (!r || (id && r.id !== id)) return null
+  const next = { ...r, stoppedAt: now.toISOString() }
+  writeFileSync(RINGING_FILE, JSON.stringify(next))
+  return next
+}
+
+/** Did the user stop this ring? What the alarm script asks a few times a second while the sound plays. */
+export function ringStopped(id) {
+  const r = readRinging()
+  return Boolean(r && r.id === id && r.stoppedAt)
+}
+
+/** The sound is over (stopped or played to its end): nothing rings any more. */
+export function endRinging(id) {
+  const r = readRinging()
+  if (r && r.id === id) rmSync(RINGING_FILE, { force: true })
 }
 
 /** The brief Claude prepared for this morning's alarm: { say, text, at } or null. */

@@ -42,9 +42,40 @@ function loginHtml(card) {
   )
 }
 
+/** What the user picked in an alarm card before he confirmed (time, song), so a redraw keeps it. Only in this page's memory. */
+const alarmPick = new Map()
+
+/**
+ * The alarm card (server/alarm-card.mjs): the time on one row, the offered songs to click (each with
+ * a short listen), one button. States: form, done, closed.
+ */
+function alarmHtml(card) {
+  const acc = card.accent === 'amber' ? ' acc-amber' : ''
+  const head = `<div class="card-h">${icon(card.icon || 'alarm')}<span>${esc(card.title ?? 'Budík')}</span></div>`
+  const msg = card.message ? `<p class="lc-msg${card.state === 'done' ? ' is-done' : ''}" role="status">${card.state === 'done' ? icon('check') : ''}<span>${esc(card.message)}</span></p>` : ''
+  if (card.state === 'done' || card.state === 'closed') return `<div class="card alarm-card is-${card.state}${card.state === 'closed' ? '' : acc}" data-alarm="${esc(card.id)}">${head}${msg}</div>`
+  const pick = alarmPick.get(card.id) ?? {}
+  const time = pick.time ?? card.time ?? '07:00'
+  const chosen = pick.song !== undefined ? pick.song : card.song ?? null
+  const song = (s) =>
+    `<div class="ac-song${s.id === chosen ? ' is-on' : ''}" data-song="${esc(s.id)}" data-ready="${s.ready ? 1 : 0}" role="radio" aria-checked="${s.id === chosen}" tabindex="0">` +
+    `<span class="ac-mark">${icon('check')}</span><span class="ac-n"><b>${esc(s.title)}</b><small>${esc(s.artist ?? '')}</small></span>` +
+    (s.ready ? `<button type="button" class="ac-play" data-play="${esc(s.id)}" aria-label="Ukážka: ${esc(s.title)}">${icon('play')}<span>Ukážka</span></button>` : '') +
+    `</div>`
+  return (
+    `<form class="card alarm-card${acc}" data-alarm="${esc(card.id)}" novalidate>${head}` +
+    `<label class="lc-row"><span class="lc-l">Budiť o<small>${esc(card.daysText ?? '')}</small></span><input class="lc-in ac-time" name="time" type="time" value="${esc(time)}" required></label>` +
+    `<p class="lc-note ac-ask">${esc(card.ask ?? 'Ktorou skladbou vás mám zobudiť?')}</p>` +
+    `<div class="ac-songs" role="radiogroup" aria-label="Skladba na budík">${(card.songs ?? []).map(song).join('')}</div>` +
+    (card.note ? `<p class="lc-note">${esc(card.note)}</p>` : '') +
+    `${msg}<div class="lc-act"><button type="button" class="ac-cancel">Zrušiť</button><button type="submit" class="ac-go">Nastaviť budík</button></div></form>`
+  )
+}
+
 /** Karta od Jarvisa (hud_card): stat, list, chart alebo text, všetky polia voliteľné. */
 export function cardHtml(card = {}) {
   if (card.kind === 'login') return loginHtml(card)
+  if (card.kind === 'alarm') return alarmHtml(card)
   const acc = card.accent === 'amber' ? ' acc-amber' : card.accent === 'red' ? ' acc-red' : ''
   const holo = holoImage(card.node)
   const ic = card.icon || NODE_ICON[card.node] || 'sparkle'
@@ -213,7 +244,7 @@ function patchTurn(row, turn) {
   row._j.hidden = blocks.length === 0
 }
 
-export function createChat({ onSend, onMedia = null, capture = false, fileUrl: toFileUrl = null, login = null, openTerminal = null }) {
+export function createChat({ onSend, onMedia = null, capture = false, fileUrl: toFileUrl = null, login = null, openTerminal = null, alarmCard = null }) {
   if (toFileUrl) fileUrl = toFileUrl
   const list = document.getElementById('chat')
   const view = document.getElementById('chat-view')
@@ -243,7 +274,10 @@ export function createChat({ onSend, onMedia = null, capture = false, fileUrl: t
       const part = turn.parts.find((p) => p.kind === 'card' && p.card?.id === card.id)
       if (part) part.card = { ...card }
     }
-    if (card.state === 'done' || card.state === 'closed') loginEmail.delete(card.id)
+    if (card.state === 'done' || card.state === 'closed') {
+      loginEmail.delete(card.id)
+      alarmPick.delete(card.id)
+    }
     if (card.state === 'code' || card.state === 'form') focusLogin = card.id
     dirty = true
   }
@@ -295,6 +329,110 @@ export function createChat({ onSend, onMedia = null, capture = false, fileUrl: t
       body.values = null
     }
   }
+  // ── the alarm card: pick a song by a click, listen to it, confirm the time ──
+  const alarmForm = (el) => el?.closest?.('form.alarm-card') ?? null
+  const pickOf = (form) => {
+    const id = form.dataset.alarm
+    if (!alarmPick.has(id)) alarmPick.set(id, {})
+    return alarmPick.get(id)
+  }
+  let playingTimer = null
+  function markPlaying(form, song) {
+    clearTimeout(playingTimer)
+    for (const b of list.querySelectorAll('.ac-play.is-playing')) {
+      b.classList.remove('is-playing')
+      b.querySelector('span').textContent = 'Ukážka'
+    }
+    const b = song ? form?.querySelector(`.ac-play[data-play="${CSS.escape(song.id)}"]`) : null
+    if (!b) return
+    b.classList.add('is-playing')
+    b.querySelector('span').textContent = 'Zastaviť'
+    playingTimer = setTimeout(() => markPlaying(null, null), (song.seconds ?? 15) * 1000)
+  }
+  function alarmMsg(form, text) {
+    let p = form.querySelector('.lc-msg')
+    if (!p) {
+      p = document.createElement('p')
+      p.className = 'lc-msg'
+      p.setAttribute('role', 'status')
+      form.querySelector('.lc-act')?.before(p)
+    }
+    p.textContent = text
+  }
+  function chooseSong(form, row) {
+    pickOf(form).song = row.dataset.song
+    for (const r of form.querySelectorAll('.ac-song')) {
+      const on = r === row
+      r.classList.toggle('is-on', on)
+      r.setAttribute('aria-checked', String(on))
+    }
+  }
+  async function sendAlarm(form, step, extra = {}) {
+    if (!alarmCard || !form || form.classList.contains('is-busy')) return
+    const id = form.dataset.alarm
+    if (step === 'preview') {
+      try {
+        const res = await alarmCard({ card: id, step, song: extra.song })
+        markPlaying(form, res?.playing ? { id: res.playing, seconds: res.seconds } : null)
+        if (res?.error) alarmMsg(form, res.error)
+      } catch (err) {
+        alarmMsg(form, err?.message || 'Ukážku sa nepodarilo pustiť.')
+      }
+      return
+    }
+    const go = form.querySelector('.ac-go')
+    const pick = pickOf(form)
+    const time = form.querySelector('.ac-time')?.value ?? ''
+    const song = form.querySelector('.ac-song.is-on')
+    pick.time = time
+    if (step === 'set' && !/^\d{1,2}:\d{2}$/.test(time)) return alarmMsg(form, 'Čas napíšte ako 06:30.')
+    markPlaying(null, null)
+    form.classList.add('is-busy')
+    for (const el of form.querySelectorAll('input, button')) el.disabled = true
+    if (go) go.textContent = step === 'cancel' ? 'Ruším…' : song && song.dataset.ready !== '1' ? 'Sťahujem skladbu…' : 'Nastavujem…'
+    try {
+      const res = await alarmCard({ card: id, step, time, song: song?.dataset.song ?? null })
+      if (res?.card) applyCardUpdate(res.card)
+    } catch (err) {
+      if (err?.data?.card) applyCardUpdate(err.data.card)
+      else alarmMsg(form, err?.message || 'Budík sa nepodarilo nastaviť.')
+    } finally {
+      form.classList.remove('is-busy')
+      for (const el of form.querySelectorAll('input, button')) el.disabled = false
+      if (go) go.textContent = 'Nastaviť budík'
+    }
+  }
+  list.addEventListener('submit', (e) => {
+    const form = alarmForm(e.target)
+    if (!form) return
+    e.preventDefault()
+    sendAlarm(form, 'set')
+  })
+  list.addEventListener('click', (e) => {
+    const form = alarmForm(e.target)
+    if (!form) return
+    const play = e.target.closest('.ac-play')
+    if (play) return sendAlarm(form, 'preview', { song: play.dataset.play })
+    if (e.target.closest('.ac-cancel')) return sendAlarm(form, 'cancel')
+    const row = e.target.closest('.ac-song')
+    if (row) chooseSong(form, row)
+  })
+  list.addEventListener('input', (e) => {
+    const form = alarmForm(e.target)
+    if (form && e.target.classList.contains('ac-time')) pickOf(form).time = e.target.value
+  })
+  list.addEventListener('keydown', (e) => {
+    const form = alarmForm(e.target)
+    if (!form) return
+    // Keys pressed in the card stay in the card: Space must not start push-to-talk, Esc must not stop Jarvis.
+    e.stopPropagation()
+    const row = e.target.closest('.ac-song')
+    if (row && e.target === row && (e.key === ' ' || e.key === 'Enter')) {
+      e.preventDefault()
+      chooseSong(form, row)
+    }
+  })
+
   list.addEventListener('submit', (e) => {
     const form = e.target.closest?.('form.login-card')
     if (!form) return

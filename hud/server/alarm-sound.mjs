@@ -2,15 +2,17 @@
  * The sound of the alarm clock. Before the spoken brief Jarvis plays either his built-in chime, the
  * song that setup downloaded, or any sound the user gave him.
  *
- *   config/jarvis.json  "alarm": { …, "sound": "default" | "builtin" | "sound-custom.mp3", "soundSeconds": 45 }
+ *   config/jarvis.json  "alarm": { …, "sound": "default" | "stay" | "builtin" | "sound-custom.mp3", "soundSeconds": 45 }
  *
- *   no "sound" key, or "default"   the downloaded song when it is on the disk, otherwise the chime
+ *   no "sound" key, or "default"   the first song of SONGS when it is on the disk, otherwise the chime
+ *   the id of a song in SONGS      that song (the alarm card in the conversation offers them, alarm-card.mjs)
  *   "builtin"                      always the chime
  *   a file name                    that file in data/alarm (copied there by `alarm.mjs sound <file|url>`)
  *   an absolute path               played from where it is (for people who edit the config by hand)
  *
  * The files live in data/alarm:
- *   sound-default.mp3     the song from JARVIS_ALARM_SONG_URL (scripts/media.mjs prepare)
+ *   sound-default.mp3     the first song of SONGS, from JARVIS_ALARM_SONG_URL (scripts/media.mjs prepare)
+ *   sound-<id>.mp3        the other songs of SONGS, downloaded the same way
  *   sound-custom.<ext>    the user's own sound, one at a time
  *   ring-<name>-<n>s.mp3  the first n seconds with a fade in and out, which is what really plays
  *   sound.json            titles of the sounds, for the status line
@@ -29,6 +31,25 @@ import { IS_MAC } from './util.mjs'
 /** The song setup downloads as the default alarm sound. */
 export const DEFAULT_SONG_URL = process.env.JARVIS_ALARM_SONG_URL || 'https://www.youtube.com/watch?v=l482T0yNkeo'
 const DEFAULT_NAME = 'sound-default.mp3'
+/**
+ * The songs Jarvis offers for the alarm. Nothing of them ships with Jarvis: each is downloaded once
+ * on the user's computer (scripts/media.mjs prepare, or the moment it is chosen). The first one is
+ * the default, its config value stays "default" and its file sound-default.mp3, as it always was.
+ */
+export const SONGS = [
+  { id: 'highway', title: 'Highway to Hell', artist: 'AC/DC', url: DEFAULT_SONG_URL, file: DEFAULT_NAME, meta: 'default' },
+  { id: 'stay', title: 'Should I Stay or Should I Go', artist: 'The Clash', url: 'https://www.youtube.com/watch?v=BN1WwnEDWAM', file: 'sound-stay.mp3', meta: 'stay' },
+]
+/** A song by its id or by a word a person would use for it ("default" is the first one). */
+export function songOf(word) {
+  const w = String(word ?? '').toLowerCase().trim()
+  if (!w) return null
+  if (w === 'default' || w === 'predvolene' || w === 'predvolené') return SONGS[0]
+  return SONGS.find((s) => s.id === w || s.title.toLowerCase() === w) ?? null
+}
+const songFile = (song) => join(ALARM_DIR, song.file)
+/** The value a song has in the config. */
+const songSetting = (song) => (song === SONGS[0] ? 'default' : song.id)
 const META_FILE = join(ALARM_DIR, 'sound.json')
 /** Formats the system players handle on their own (afplay, Windows Media). Everything else is converted to mp3. */
 const NATIVE = new Set(['.mp3', '.wav', '.m4a'])
@@ -109,21 +130,39 @@ export function resolveSound() {
     return { kind, file, play: clip ?? file, prepared: Boolean(clip), seconds, title }
   }
   if (setting === 'builtin' || setting === 'off') return builtin
-  if (setting && setting !== 'default') {
+  const chosen = setting && setting !== 'default' ? SONGS.find((s) => s.id === setting.toLowerCase()) : null
+  // One of the offered songs. When its file is missing (never downloaded, deleted), the default song rings.
+  if (chosen && chosen !== SONGS[0] && usable(songFile(chosen))) return { ...pick('song', songFile(chosen), chosen.title), song: chosen.id }
+  if (setting && setting !== 'default' && !chosen) {
     const file = isAbsolute(setting) ? setting : NAME_RE.test(setting) ? join(ALARM_DIR, setting) : null
     const ext = file ? extname(file).toLowerCase() : ''
     if (file && NATIVE.has(ext) && usable(file)) return pick('custom', file, titles.custom?.file === basename(file) ? titles.custom.title : basename(file))
     // The chosen file is gone or broken: the default song, then the chime.
   }
   const fallback = join(ALARM_DIR, DEFAULT_NAME)
-  if (usable(fallback)) return pick('default', fallback, titles.default?.title || 'predvolená pesnička')
+  if (usable(fallback)) return { ...pick('default', fallback, titles.default?.title || 'predvolená pesnička'), song: SONGS[0].id }
   return builtin
+}
+
+/** The offered songs for the alarm card: [{ id, title, artist, ready, selected }]. `ready` = the file is on the disk. */
+export function songList() {
+  const now = resolveSound()
+  return SONGS.map((s) => ({ id: s.id, title: s.title, artist: s.artist, ready: usable(songFile(s)), selected: now.song === s.id }))
+}
+
+/** What the player gets for a short listen of one offered song (the alarm card's play button), or null when it is not on the disk. */
+export function songPreview(id) {
+  const song = SONGS.find((s) => s.id === id)
+  if (!song || !usable(songFile(song))) return null
+  const file = songFile(song)
+  const clip = readyClip(file, soundSeconds())
+  return { kind: 'song', song: song.id, file, play: clip ?? file, prepared: Boolean(clip), seconds: soundSeconds(), title: song.title }
 }
 
 /** One sentence about the sound, for the status of the alarm. */
 export function soundSummary(sound = resolveSound()) {
   if (sound.kind === 'builtin') return soundSetting() && !['builtin', 'off', 'default'].includes(soundSetting()) ? 'Zvuk: zvonenie Jarvisa (vybraný súbor sa nenašiel).' : 'Zvuk: zvonenie Jarvisa.'
-  const what = sound.kind === 'default' ? `pesnička ${sound.title}` : `tvoj zvuk ${sound.title}`
+  const what = sound.kind === 'default' || sound.kind === 'song' ? `pesnička ${sound.title}` : `tvoj zvuk ${sound.title}`
   return `Zvuk: ${what}, hrá ${sound.seconds} sekúnd a potom hovorím.`
 }
 
@@ -185,32 +224,36 @@ async function prepareClip(source, { signal = null } = {}) {
 }
 
 /**
- * Makes sure the default song is on the disk (downloads its audio once).
+ * Makes sure one of the offered songs is on the disk (downloads its audio once).
  * Returns { ok, state: 'skipped' | 'done', file, title, bytes, duration }.
  */
-export async function ensureDefaultSong({ onProgress = null, signal = null, force = false } = {}) {
-  const file = join(ALARM_DIR, DEFAULT_NAME)
+export async function ensureSong(song, { onProgress = null, signal = null, force = false } = {}) {
+  const file = songFile(song)
+  const prefix = basename(song.file, extname(song.file))
   mkdirSync(ALARM_DIR, { recursive: true })
   if (!force && usable(file) && decodable(file)) {
     if (!readyClip(file, soundSeconds())) await prepareClip(file, { signal })
-    const known = meta().default ?? {}
+    const known = meta()[song.meta] ?? {}
     return { ok: true, state: 'skipped', file, title: known.title ?? null, bytes: statSync(file).size, duration: known.duration ?? null }
   }
-  const res = await downloadAudio(DEFAULT_SONG_URL, file, { onProgress, signal })
+  const res = await downloadAudio(song.url, file, { onProgress, signal })
   if (!decodable(file)) {
     rmSync(file, { force: true })
     throw new MediaError('failed', 'Stiahnutá pesnička sa nedá prehrať.')
   }
-  saveMeta({ default: { title: res.info.title, url: DEFAULT_SONG_URL, duration: res.info.duration, at: new Date().toISOString() } })
-  dropClips('sound-default')
+  saveMeta({ [song.meta]: { title: res.info.title, url: song.url, duration: res.info.duration, at: new Date().toISOString() } })
+  dropClips(prefix)
   onProgress?.({ state: 'converting', pct: null })
   await prepareClip(file, { signal })
   return { ok: true, state: 'done', file, title: res.info.title, bytes: res.bytes, duration: res.info.duration }
 }
 
+/** The default song (the first of SONGS), as setup always prepared it. */
+export const ensureDefaultSong = (opts = {}) => ensureSong(SONGS[0], opts)
+
 /**
- * Sets the alarm sound from what the user gave: "default", "builtin" (or "off"), a link to a video
- * or a path to a sound file. Returns { ok, kind, title, summary }. Throws MediaError or Error with
+ * Sets the alarm sound from what the user gave: "default" or the id of another offered song
+ * (SONGS), "builtin" (or "off"), a link to a video or a path to a sound file. Returns { ok, kind, title, summary }. Throws MediaError or Error with
  * a Slovak message.
  */
 export async function setSound(input, { onProgress = null, signal = null } = {}) {
@@ -222,9 +265,10 @@ export async function setSound(input, { onProgress = null, signal = null } = {})
     writeSoundSetting('builtin')
     return { ok: true, ...describe() }
   }
-  if (word === 'default' || word === 'predvolene' || word === 'predvolené') {
-    const song = await ensureDefaultSong({ onProgress, signal })
-    writeSoundSetting('default')
+  const offered = songOf(word)
+  if (offered) {
+    const song = await ensureSong(offered, { onProgress, signal })
+    writeSoundSetting(songSetting(offered))
     return { ok: true, downloaded: song.state === 'done', ...describe() }
   }
 
@@ -300,5 +344,5 @@ export async function setSound(input, { onProgress = null, signal = null } = {})
 /** The current sound for a JSON answer: { kind, title, seconds, prepared, summary }. */
 export function describe() {
   const sound = resolveSound()
-  return { kind: sound.kind, title: sound.title, seconds: sound.seconds, prepared: sound.prepared, file: sound.file, summary: soundSummary(sound) }
+  return { kind: sound.kind, ...(sound.song ? { song: sound.song } : {}), title: sound.title, seconds: sound.seconds, prepared: sound.prepared, file: sound.file, summary: soundSummary(sound) }
 }

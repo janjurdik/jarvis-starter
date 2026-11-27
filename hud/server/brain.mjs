@@ -80,6 +80,7 @@ export function allowedTools() {
     'mcp__jarvis-hud__record_stop',
     'mcp__jarvis-hud__record_status',
     'mcp__jarvis-hud__ask_login',
+    'mcp__jarvis-hud__ask_alarm',
     'WebSearch',
     'WebFetch',
     'Read',

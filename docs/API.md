@@ -216,6 +216,11 @@ travels through the tunnel.
 | Method and path | What it does |
 |---|---|
 | `POST /api/login/card` | `{ service: "garmin", reason?: "expired" }` → `{ ok, card }`. Puts the card into the conversation (what the voice tool `ask_login` does; `node scripts/garmin.mjs connect` uses it). |
+| `GET /api/alarm` | `{ ok, ring, songs }`. `ring` is the alarm that is ringing right now (`{ id, at, seconds, time, greeting, sound, formal, test }`) or `null`; `songs` are the songs offered for the alarm (`[{ id, title, artist, ready, selected }]`). |
+| `POST /api/alarm/ring` | From the alarm script (`scripts/alarm.mjs ring`): `{ ring }` when the alarm sound starts, `{ ring: null, id, stopped }` when it is over. Open windows get the SSE event `alarm` and show or take away "Dobré ráno" with the button. Loopback only. |
+| `POST /api/alarm/stop` | `{ id? }` → `{ ok, stopped }`. The button on the ringing alarm: the alarm script silences the sound and says the brief at once (`hud/server/alarm.mjs`, `data/alarm/ringing.json`). |
+| `POST /api/alarm/card` | `{ time?, days? }` → `{ ok, card }`. Puts the alarm card into the conversation (what the voice tool `ask_alarm` does; `node scripts/alarm.mjs card` uses it). Loopback only. |
+| `POST /api/alarm/card/step` | One step of the alarm card: `{ card, step: "preview", song }` plays or stops a short listen through the speakers, `{ card, step: "set", time, song }` sets the alarm and the song, `{ card, step: "cancel" }` closes it. → `{ ok, card }` (`hud/server/alarm-card.mjs`). |
 | `POST /api/login` | `{ card, step: "credentials", values: { email, password } }`, `{ card, step: "code", code }` or `{ card, step: "cancel" }` → `{ ok, card }`. The values go to the service's own client and nowhere else. `404` unknown card, `409` a step is still running, `410` the card is done or closed. |
 | `POST /api/terminal` | `{ action }` → `{ ok, say }`. Opens a terminal window with one of the known commands (`hud/server/terminal.mjs`): the button under "not signed in". |
 

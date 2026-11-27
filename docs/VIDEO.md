@@ -51,7 +51,8 @@ node scripts/media.mjs info "<odkaz>"         # názov, dĺžka, kapitoly
 | Kde | Čo |
 |---|---|
 | `data/video/<id>/` | jedno video: `video.mp4`, náhľad, `transcript.json` (prepis), `peaks.json` (vlna), `meta.json` |
-| `data/alarm/sound-default.mp3` | pesnička na budík stiahnutá pri nastavení |
+| `data/alarm/sound-default.mp3` | pesnička na budík stiahnutá pri nastavení (Highway to Hell) |
+| `data/alarm/sound-stay.mp3` | druhá pesnička z ponuky (Should I Stay or Should I Go) |
 | `data/alarm/sound-custom.*` | tvoj vlastný zvuk budíka |
 | `data/alarm/ring-*.mp3` | úsek, ktorý naozaj hrá: začiatok zvuku s plynulým nábehom |
 
@@ -59,11 +60,16 @@ Priečinok `data/` sa neukladá do gitu a pri aktualizácii sa nemení.
 
 ## Zvuk budíka
 
-Pri nastavení Jarvis spustí `node scripts/media.mjs prepare`. Ten pripraví yt-dlp a stiahne pesničku na budík
-(adresa je v `.env` ako `JARVIS_ALARM_SONG_URL`). Keď sa to nepodarí, nastavenie pokračuje a budík zvoní pôvodným
-zvonením Jarvisa.
+Pri nastavení Jarvis spustí `node scripts/media.mjs prepare`. Ten pripraví yt-dlp a stiahne dve pesničky na budík:
+Highway to Hell (adresa je v `.env` ako `JARVIS_ALARM_SONG_URL`) a Should I Stay or Should I Go. Pesničky nie sú
+súčasťou Jarvisa, každá sa stiahne raz do tvojho počítača. Keď sa to nepodarí, nastavenie pokračuje a budík zvoní
+pôvodným zvonením Jarvisa.
 
-Ráno pesnička hrá 45 sekúnd s plynulým nábehom a potom Jarvis povie ranný brief. Vlastný zvuk:
+Ktorou ťa má budiť, si vyberieš klikom na karte budíka v rozhovore (Jarvis ju ukáže pri nastavení, neskôr stačí
+povedať „zmeň mi skladbu na budík"). Pri každej je ukážka.
+
+Ráno pesnička hrá 45 sekúnd s plynulým nábehom a potom Jarvis povie ranný brief. Kým hrá, na obrazovke je „Dobré
+ráno" s tlačidlom Zastaviť budík: zvonenie stíchne a brief zaznie hneď. Vlastný zvuk:
 
 - **V HUD:** pretiahni do okna súbor mp3, wav alebo m4a a povedz „toto chcem ako budík". Alebo pošli odkaz na video
   a povedz „toto mi daj ako budík".
@@ -73,12 +79,15 @@ Ráno pesnička hrá 45 sekúnd s plynulým nábehom a potom Jarvis povie ranný
 node scripts/alarm.mjs sound                      # čo je nastavené
 node scripts/alarm.mjs sound "~/Music/rano.mp3"   # vlastný súbor
 node scripts/alarm.mjs sound "<odkaz na video>"   # zvuk z videa
-node scripts/alarm.mjs sound default              # späť na stiahnutú pesničku
+node scripts/alarm.mjs songs                      # skladby z ponuky
+node scripts/alarm.mjs sound default              # späť na stiahnutú pesničku (Highway to Hell)
+node scripts/alarm.mjs sound stay                 # druhá z ponuky (Should I Stay or Should I Go)
+node scripts/alarm.mjs card 06:30                 # karta budíka na obrazovke: čas a výber skladby klikom
 node scripts/alarm.mjs sound builtin              # späť na zvonenie Jarvisa
 node scripts/alarm.mjs sound default --seconds 60 # ako dlho hrá, kým začne hovoriť
 node scripts/alarm.mjs test --quick               # vyskúšať hneď
 ```
 
-Voľba je v `config/jarvis.json` pod `alarm.sound` (`default`, `builtin` alebo názov súboru v `data/alarm`) a dĺžka pod
+Voľba je v `config/jarvis.json` pod `alarm.sound` (`default`, `stay`, `builtin` alebo názov súboru v `data/alarm`) a dĺžka pod
 `alarm.soundSeconds`. Keď vybraný súbor chýba alebo sa nedá prehrať, zazvoní pôvodné zvonenie. Budík nikdy neostane
 ticho.

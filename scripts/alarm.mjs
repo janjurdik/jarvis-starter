@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
  * Jarvis's alarm clock. At the set time he plays a chime and says the morning brief out loud
- * through the computer's speakers, whether the HUD window is open or not. A few minutes earlier
+ * through the computer's speakers, whether the HUD window is open or not. While the sound plays,
+ * the screen shows "Dobré ráno" with a button that stops it and starts the brief at once; left
+ * alone, the sound plays to its end and the brief follows. A few minutes earlier
  * Claude prepares the brief (routines/budik.md): sleep when it is known, weather, today's
  * calendar, deadlines and what Jarvis did overnight. Without Claude (no network, no subscription)
  * he still says a shorter brief straight from the memory.
@@ -20,7 +22,11 @@
  *   node scripts/alarm.mjs sound <file|url>         the user's own sound: an mp3, wav or m4a file, or a link to a video
  *                                                   (its audio is downloaded), copied into data/alarm
  *   node scripts/alarm.mjs sound default            back to the song setup downloaded (downloads it when it is missing)
+ *   node scripts/alarm.mjs sound stay               another of the offered songs (node scripts/alarm.mjs songs lists them)
  *   node scripts/alarm.mjs sound builtin | off      back to Jarvis's own chime
+ *   node scripts/alarm.mjs songs                    the songs Jarvis offers for the alarm
+ *   node scripts/alarm.mjs card [06:30] [--days …]  the alarm card on Jarvis's screen: the user clicks the song
+ *                                                   he wants and confirms the time (the voice tool ask_alarm)
  *                                                   (--seconds 60 sets how long the sound plays before he speaks)
  *
  * The time lives in config/jarvis.json under "alarm". `set`, `on` and `off` register it in the
@@ -31,7 +37,7 @@
 import '../hud/server/env.mjs'
 import { appendFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { RANO_TOPICS, daysLabel, markRang, nextAlarmAt, nightStart, overnightWork, parseAlarm, readPrepared, weekdaysOf } from '../hud/server/alarm.mjs'
+import { RANO_TOPICS, daysLabel, endRinging, markRang, nextAlarmAt, nightStart, overnightWork, parseAlarm, readPrepared, ringStopped, startRinging, weekdaysOf } from '../hud/server/alarm.mjs'
 import { describe as describeSound, resolveSound, setSound, soundSummary } from '../hud/server/alarm-sound.mjs'
 import { callReady } from '../hud/server/call.mjs'
 import { CONFIG_FILE, getConfig } from '../hud/server/config.mjs'
@@ -176,11 +182,14 @@ async function quickBrief(cfg, now = new Date()) {
   return parts.join(' ')
 }
 
-function greeting(cfg, now = new Date()) {
+/** "Dobré ráno, pane": what the screen shows while the alarm rings and how the spoken brief starts. */
+function hello(cfg, now = new Date()) {
   const address = String(cfg.address ?? '').trim()
-  const hello = now.getHours() < 10 ? 'Dobré ráno' : now.getHours() < 18 ? 'Dobrý deň' : 'Dobrý večer'
-  return `${hello}${address ? `, ${address}` : ''}. Je ${clockSpoken(now.getHours(), now.getMinutes())}.`
+  const word = now.getHours() < 10 ? 'Dobré ráno' : now.getHours() < 18 ? 'Dobrý deň' : 'Dobrý večer'
+  return `${word}${address ? `, ${address}` : ''}`
 }
+
+const greeting = (cfg, now = new Date()) => `${hello(cfg, now)}. Je ${clockSpoken(now.getHours(), now.getMinutes())}.`
 
 // ── ring ────────────────────────────────────────────────────────────────
 
@@ -228,11 +237,40 @@ async function ring({ test = false, quick = false } = {}) {
   }
 
   const { speakLocal } = await import('../hud/server/speak.mjs')
-  // The user's own sound or the default song first, Jarvis's chime when there is none or it cannot be played.
+  // The user's own sound or the chosen song first, Jarvis's chime when there is none or it cannot be played.
   const sound = resolveSound()
-  const res = await speakLocal(spoken, { chime: true, force: true, sound })
+  // The screen says good morning with one button: it stops the sound and the brief starts at once.
+  // Nobody at the screen (or no window open): the sound plays to its end, then the brief, as always.
+  const ringing = startRinging({ seconds: sound.kind === 'builtin' ? 8 : sound.seconds, time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, greeting: hello(cfg, now), sound: sound.kind === 'builtin' ? null : sound.title, formal: cfg.formal !== false, test })
+  const stop = new AbortController()
+  let stopped = false
+  const watch = setInterval(() => {
+    if (stopped || !ringStopped(ringing.id)) return
+    stopped = true
+    stop.abort()
+  }, 200)
+  const onScreen = await hudAlive()
+  if (onScreen) await postHud('/api/alarm/ring', { ring: ringing })
+  let res
+  try {
+    res = await speakLocal(spoken, {
+      chime: true,
+      force: true,
+      sound,
+      stop: stop.signal,
+      onChimeEnd: () => {
+        clearInterval(watch)
+        endRinging(ringing.id)
+        if (onScreen) postHud('/api/alarm/ring', { ring: null, id: ringing.id, stopped })
+        log(stopped ? 'zvonenie zastavené na obrazovke, hovorím brief' : 'zvonenie dohralo')
+      },
+    })
+  } finally {
+    clearInterval(watch)
+    endRinging(ringing.id)
+  }
   log(res.ok ? `povedané (${res.via}), zvuk: ${res.rang ?? 'builtin'}` : 'nepodarilo sa prehrať zvuk')
-  return { ok: res.ok, via: res.via, sound: res.rang ?? 'builtin', prepared: Boolean(prepared), text: spoken }
+  return { ok: res.ok, via: res.via, sound: res.rang ?? 'builtin', stopped, prepared: Boolean(prepared), text: spoken }
 }
 
 /** `test`: what the user hears tomorrow, now. Without --quick Claude prepares the brief first. */
@@ -250,6 +288,22 @@ async function test() {
 const out = (data, text) => {
   if (asJson) console.log(JSON.stringify(data, null, 2))
   else console.log(text)
+}
+
+if (action === 'songs') {
+  // The songs Jarvis offers for the alarm (the alarm card in the conversation shows the same list).
+  const { songList } = await import('../hud/server/alarm-sound.mjs')
+  const songs = songList()
+  out({ ok: true, songs }, songs.map((s) => `${s.id.padEnd(8)} ${s.title} (${s.artist})${s.selected ? ' · zvoní teraz' : ''}${s.ready ? '' : ' · stiahne sa pri výbere'}`).join('\n'))
+  process.exit(0)
+}
+
+if (action === 'card') {
+  // The alarm card in the conversation on Jarvis's screen: the user clicks the song and confirms the time himself.
+  const time = /^\d{1,2}[:.]\d{2}$/.test(rest[1] ?? '') ? rest[1] : undefined
+  const shown = (await hudAlive()) && (await postHud('/api/alarm/card', { time, days: value('days') ?? undefined }))
+  out({ ok: Boolean(shown), summary: shown ? 'Karta budíka je na obrazovke Jarvisa. Skladbu si vyberie klikom a potvrdí čas.' : 'Jarvis nie je otvorený, kartu nemám kde ukázať. Spusti ho: node scripts/hud.mjs' }, shown ? 'Karta budíka je na obrazovke Jarvisa.' : 'Jarvis nie je otvorený, kartu nemám kde ukázať. Spusti ho: node scripts/hud.mjs')
+  process.exit(shown ? 0 : 1)
 }
 
 if (action === 'topics') {
@@ -273,7 +327,7 @@ if (action === 'sound') {
   }
   if (!what) {
     const now = describeSound()
-    out({ ok: true, sound: now, summary: now.summary }, `${now.summary}\nVlastný zvuk: node scripts/alarm.mjs sound <súbor mp3, wav, m4a alebo odkaz na video>. Späť: sound default, sound builtin.`)
+    out({ ok: true, sound: now, summary: now.summary }, `${now.summary}\nVlastný zvuk: node scripts/alarm.mjs sound <súbor mp3, wav, m4a alebo odkaz na video>. Ponúkané skladby: node scripts/alarm.mjs songs. Späť: sound default, sound builtin.`)
     process.exit(0)
   }
   try {

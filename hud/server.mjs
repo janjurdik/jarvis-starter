@@ -20,7 +20,9 @@ import { stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { networkInterfaces } from 'node:os'
 import { extname, join, normalize, sep } from 'node:path'
-import { quietNow } from './server/alarm.mjs'
+import { quietNow, ringingNow, stopRinging } from './server/alarm.mjs'
+import { alarmCardStep, brainAlarmCard, stopPreview } from './server/alarm-card.mjs'
+import { songList } from './server/alarm-sound.mjs'
 import { Brain, EFFORT, MODEL } from './server/brain.mjs'
 import { AntigravityBrain } from './server/brain-antigravity.mjs'
 import { CodexBrain } from './server/brain-codex.mjs'
@@ -665,6 +667,20 @@ async function routePost(req, res, path) {
     if (!originOk(req)) return sendJson(res, 403, { ok: false, error: 'cudzí origin' })
     return postAnnounce(req, res)
   }
+  // The alarm script says the alarm sound started ({ ring }) or is over ({ ring: null, id, stopped }):
+  // open windows show "Dobré ráno" with the button that stops it, or take it away (server/alarm.mjs).
+  if (path === '/api/alarm/ring') {
+    if (!isLocal(req) || !originOk(req)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
+    const body = await readJson(req, 8_000)
+    const ring = body.ring ? ringingNow() : null
+    send('alarm', ring ? { ring } : { ring: null, id: clean(body.id, 40) || null, stopped: body.stopped === true })
+    return sendJson(res, 202, { ok: true, clients: clientCount() })
+  }
+  // How a script shows the alarm card (node scripts/alarm.mjs card), the same as the voice tool `ask_alarm`.
+  if (path === '/api/alarm/card') {
+    if (!isLocal(req) || !originOk(req)) return sendJson(res, 403, { ok: false, error: 'len z localhostu' })
+    return sendJson(res, 200, brainAlarmCard(await readJson(req, 8_000)))
+  }
   if (path === '/api/brain/hud') {
     if (!isLocal(req) || !tokenOk(req.headers['x-brain-token'], BRAIN_TOKEN)) return sendJson(res, 403, { ok: false, error: 'zlý token' })
     const body = await readJson(req, 64_000)
@@ -715,6 +731,8 @@ async function routePost(req, res, path) {
       const r = await brainRecord(body)
       return sendJson(res, r.ok ? 200 : 400, r)
     }
+    // The brain's `ask_alarm` tool: the alarm card with the time and the songs to click (server/alarm-card.mjs).
+    if (body.action === 'alarm_card') return sendJson(res, 200, brainAlarmCard(body))
     // The brain's `ask_login` tool: a login card in the conversation (server/login.mjs).
     if (body.action === 'login') {
       const r = brainLogin(body)
@@ -839,6 +857,21 @@ async function routePost(req, res, path) {
     return sendJson(res, 200, { ok: true, items })
   }
   if (path === '/api/orbs') return sendJson(res, 200, orbAction(body))
+  // The button on the ringing alarm: the alarm script silences the sound and says the brief at once.
+  if (path === '/api/alarm/stop') {
+    const ring = stopRinging(clean(body.id, 40) || null)
+    if (ring) send('alarm', { ring: null, id: ring.id, stopped: true })
+    return sendJson(res, 200, { ok: true, stopped: Boolean(ring) })
+  }
+  // The alarm card in the conversation: a short listen, the chosen time and song, or cancel.
+  if (path === '/api/alarm/card/step') {
+    const r = await alarmCardStep(body)
+    if (r.changed) {
+      send('inner', { node: 'rutiny' })
+      pushSnapshot('budík').catch(() => {})
+    }
+    return sendJson(res, r.status, r.body)
+  }
   // One task of ulohy.md: delete, rewrite, tick or put back (server/memory/todo-edit.mjs), the same as the brain's todo tools.
   if (path === '/api/todos') return postTodos(res, body)
   if (path === '/api/jobs') {
@@ -962,6 +995,8 @@ async function route(req, res) {
   if (path === '/api/events') return openStream(req, res, { role: streamRole(url.searchParams.get('client') ?? 'browser', isLocal(req)) })
   if (path === '/api/status') return sendJson(res, 200, statusBody())
   if (path === '/api/setup') return sendJson(res, 200, await setupBody())
+  // Is the alarm ringing right now (a window that opens in the middle of it shows the button too), and the offered songs.
+  if (path === '/api/alarm') return sendJson(res, 200, { ok: true, ring: ringingNow(), songs: songList() })
   if (path === '/api/mode') return sendJson(res, 200, { film: state.film })
   if (path === '/api/jobs') return sendJson(res, 200, listJobs())
   if (path === '/api/apps') return sendJson(res, 200, getApps())
@@ -1263,6 +1298,7 @@ function shutdown(signal) {
   brain?.stop()
   stopMobile()
   stopLogins()
+  stopPreview()
   stopAllJobs()
   stopVideo()
   stopMic()

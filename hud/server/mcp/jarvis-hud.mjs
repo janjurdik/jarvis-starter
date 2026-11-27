@@ -14,6 +14,7 @@
  *   settings(set?)              voice, assistant's name and gender, how the user is addressed (server/settings.mjs)
  *   video_open / video_seek / video_transcript / video_info / video_control / video_close, set_alarm_sound   (video-tools.mjs)
  *   record_start(title?) / record_stop / record_status   record mode (server/record.mjs)
+ *   ask_alarm(time?, days?)     the alarm card in the chat: the time and the offered songs to click (server/alarm-card.mjs)
  *   ask_login(service)          the login card in the chat: the user types the password there, never into the chat (server/login.mjs)
  */
 import { execFile, spawn } from 'node:child_process'
@@ -143,6 +144,22 @@ serveMcp({
       inputSchema: { type: 'object', properties: { service: { type: 'string', enum: ['garmin'] } }, required: ['service'] },
       handler: async ({ service }) => {
         const r = await hud('login', { service })
+        return r.isError ? r : r.text
+      },
+    },
+    {
+      name: 'ask_alarm',
+      description:
+        'Ukáže v rozhovore kartu budíka: čas, kedy má Jarvis budiť, a skladby, z ktorých si používateľ klikom vyberie, ktorou ho zobudí (Highway to Hell od AC/DC alebo Should I Stay or Should I Go od The Clash), s krátkou ukážkou. Použi v kroku nastavenia budik a vždy, keď si chce vybrať alebo zmeniť skladbu budíka z ponuky. time = čas HH:MM, keď ho už povedal (inak ostane ten, čo je nastavený), days ako pri set_alarm. Skladbu za neho nevyberaj a nepýtaj sa na ňu slovami, vyberie si ju v karte. Výsledok ti príde sám ako správa [systém: …].',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          time: { type: 'string', description: 'Čas HH:MM v 24-hodinovom tvare, napr. "06:30".' },
+          days: { type: 'string', description: 'daily, weekdays, weekend alebo zoznam po,ut,st,št,pi,so,ne.' },
+        },
+      },
+      handler: async ({ time, days }) => {
+        const r = await hud('alarm_card', { time, days })
         return r.isError ? r : r.text
       },
     },

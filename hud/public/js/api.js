@@ -51,6 +51,12 @@ export function createApi({ token = null } = {}) {
     scene: (id) => get(`/api/scene/${encodeURIComponent(id)}`),
     /** The login card (server/login.mjs): only this computer is let in, the values are sent once and not kept. */
     login: (body) => post('/api/login', body),
+    /** The alarm card in the conversation (server/alarm-card.mjs): { card, step: 'set' | 'preview' | 'cancel', time, song }. */
+    alarmCard: (body) => post('/api/alarm/card/step', body),
+    /** Is the alarm ringing right now: { ring }. */
+    alarm: () => get('/api/alarm'),
+    /** The button on the ringing alarm: stop the sound, the brief starts at once. */
+    alarmStop: (id) => post('/api/alarm/stop', { id }),
     /** A button under "not signed in": Jarvis opens the login window himself (server/terminal.mjs). */
     openTerminal: (action) => post('/api/terminal', { action }),
     /** One task of the Úlohy board: { action: 'delete' | 'edit' | 'done' | 'restore', ref, text, due, undo }. */

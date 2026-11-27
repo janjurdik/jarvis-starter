@@ -2,6 +2,15 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.11.0 (2026-11-27)
+
+- **Budík sa dá zastaviť z obrazovky.** Keď budík zvoní, Jarvis ukáže cez celú obrazovku čas, „Dobré ráno" a jedno
+  tlačidlo. Zastaví zvonenie a ranný prehľad zaznie hneď. Keď ho nestlačíte, skladba dohrá a prehľad nasleduje sám,
+  ako doteraz. Appka Jarvis sa pri zvonení sama dostane dopredu.
+- **Skladbu na budík si vyberiete klikom.** Na výber sú dve, Highway to Hell a Should I Stay or Should I Go. Pri prvom
+  nastavení sa Jarvis spýta, kedy vstávate, a ukáže kartu budíka: kliknete na skladbu, môžete si ju vopred vypočuť a
+  potvrdíte čas. Neskôr stačí povedať „zmeň mi skladbu na budík". Vlastnú skladbu mu ďalej stačí pretiahnuť do okna.
+
 ## 1.10.3 (2026-11-26)
 
 - **„Ahoj Jarvis“ naozaj počuje.** Slovenské oslovenie si Jarvis overí lokálnym prepisom reči, takže ho chytí aj

@@ -63,7 +63,7 @@ s tvojimi úpravami. Nič nesťahuješ znova a o pamäť ani nastavenia nepríde
 - **Vidí, na čo sa pozeráš.** „Čo to je", „odpíš na toto", „prelož mi to": pozrie sa na okno pred tebou, nič nekopíruješ ([docs/ZAZNAM.md](docs/ZAZNAM.md)).
 - **Záznam.** „Počúvaj ma" a nahráva mikrofón aj obrazovku, medzitým s tebou hovorí ďalej. Po konci z toho spraví poznámku, úlohy, termíny a návrhy správ. Všetko ostáva v tvojom počítači ([docs/ZAZNAM.md](docs/ZAZNAM.md)).
 - **Je živý.** Ozve sa sám na Nový rok, Vianoce a tvoje narodeniny, dá vedieť, keď dochádza batéria, a keď treba, zavolá ti na mobil.
-- **Budík.** „Zobuď ma o pol siedmej." Ráno zazvoní skladbou (môžeš mu dať vlastnú) a povie ti, ako si spal, aké je počasie, čo ťa čaká a čo spravil, kým si spal.
+- **Budík.** „Zobuď ma o pol siedmej." Ráno zazvoní skladbou (vyberieš si z dvoch alebo mu dáš vlastnú), zvonenie zastavíš tlačidlom na obrazovke a povie ti, ako si spal, aké je počasie, čo ťa čaká a čo spravil, kým si spal.
 - **Pamäť.** Obyčajné textové súbory v priečinku `memory/`: kto si, tvoji ľudia, projekty, ciele, denník. Zapisuje si sám, ty ich vieš kedykoľvek otvoriť.
 - **Pošta, kalendár, úlohy.** Triedi poštu a ozve sa len pri dôležitom, upozorní pred stretnutím, stráži termíny a pripomienky.
 - **3D svet na ploche.** Každá väčšia vec v tvojom živote je orb. Pribúdajú a miznú podľa toho, čo naozaj používaš.

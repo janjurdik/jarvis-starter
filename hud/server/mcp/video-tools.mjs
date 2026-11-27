@@ -186,7 +186,7 @@ export function videoTools({ hudUrl, repo }) {
     {
       name: 'set_alarm_sound',
       description:
-        'Zvuk budíka pred ranným briefom. sound: cesta k súboru mp3, wav alebo m4a (napr. z riadku [prílohy: …], keď používateľ pustí do okna pesničku a povie „toto chcem ako budík"), odkaz na video (stiahne sa jeho zvuk), "default" (pesnička stiahnutá pri nastavení) alebo "builtin" (pôvodné zvonenie Jarvisa). Prázdne sound povie, čo je nastavené.',
+        'Zvuk budíka pred ranným briefom. sound: cesta k súboru mp3, wav alebo m4a (napr. z riadku [prílohy: …], keď používateľ pustí do okna pesničku a povie „toto chcem ako budík"), odkaz na video (stiahne sa jeho zvuk), "default" (Highway to Hell, pesnička stiahnutá pri nastavení), "stay" (Should I Stay or Should I Go, druhá z ponuky) alebo "builtin" (pôvodné zvonenie Jarvisa). Prázdne sound povie, čo je nastavené.',
       inputSchema: { type: 'object', properties: { sound: { type: 'string', description: 'Cesta k súboru, odkaz https://…, "default" alebo "builtin".' } } },
       handler: async ({ sound }) => {
         const value = String(sound ?? '').trim()
