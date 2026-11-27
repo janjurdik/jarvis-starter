@@ -20,8 +20,13 @@ export function initControl({ on }) {
     frame.hidden = true
   }
   on('control', (c) => {
-    const native = window.__jarvisDesktop?.post
-    if (typeof native === 'function') native({ type: 'control', on: c?.on !== false, label: c?.label ?? null, x: c?.x ?? null, y: c?.y ?? null, click: c?.click === true })
+    // In the Mac app the app draws the frame and the label over the whole screen, so the window
+    // must not draw them a second time.
+    const desk = window.__jarvisDesktop
+    if (desk?.native && typeof desk.post === 'function') {
+      desk.post({ type: 'control', on: c?.on !== false, label: c?.label ?? null, x: c?.x ?? null, y: c?.y ?? null, click: c?.click === true })
+      return hide()
+    }
     if (c?.on === false) return hide()
     pill.textContent = c?.label ? `Jarvis · ${c.label}` : 'Jarvis ovláda počítač'
     frame.hidden = false

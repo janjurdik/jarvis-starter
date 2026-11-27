@@ -2,6 +2,11 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.11.1 (2026-11-27)
+
+- **Rámik „Jarvis pracuje“ je už len jeden.** Keď Jarvis ovládal počítač alebo prehliadač, appka na Macu ukazovala
+  rámik a nápis dvakrát: cez celú obrazovku a ešte raz v okne Jarvisa. Teraz ho kreslí len appka, cez celú obrazovku.
+
 ## 1.11.0 (2026-11-27)
 
 - **Budík sa dá zastaviť z obrazovky.** Keď budík zvoní, Jarvis ukáže cez celú obrazovku čas, „Dobré ráno" a jedno
