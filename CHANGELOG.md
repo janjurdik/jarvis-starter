@@ -2,6 +2,12 @@
 
 Čo je v ktorej verzii Jarvisa nové. Najnovšia verzia je hore. Ako aktualizovať: [docs/AKTUALIZACIE.md](docs/AKTUALIZACIE.md).
 
+## 1.11.2 (2026-11-28)
+
+- **Stiahnutie na Windowse už neblokuje antivírus.** Niektoré antivírusové programy označili stiahnutý ZIP ako vírus
+  kvôli dvom pomocným súborom (skript na spúšťanie rutín bez okna a prázdny testovací súbor s príponou .exe). V balíku
+  už nie sú. Skript si Jarvis vytvorí sám až vo vašom počítači, keď registruje rutiny. Na funkciách sa nič nemení.
+
 ## 1.11.1 (2026-11-27)
 
 - **Rámik „Jarvis pracuje“ je už len jeden.** Keď Jarvis ovládal počítač alebo prehliadač, appka na Macu ukazovala

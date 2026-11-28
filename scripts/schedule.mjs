@@ -117,13 +117,36 @@ async function macInstall(routines) {
 const PS_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const psq = (s) => `'${String(s).replace(/'/g, "''")}'`
 
+/**
+ * A small helper that starts a command without a console window, so nothing pops up when a routine starts.
+ * Jarvis writes it into the data folder when the routines are registered. It is not a file of the download:
+ * antivirus programs refuse a ZIP that carries a script like this one.
+ *   wscript run-hidden.vbs "C:\path\node.exe" "C:\path\script.mjs" arg1 arg2
+ */
+const RUN_HIDDEN = join(DATA_DIR, 'run-hidden.vbs')
+const RUN_HIDDEN_SOURCE = [
+  "' Jarvis: runs a command without a console window (Windows scheduled tasks). Written by scripts/schedule.mjs.",
+  'Set shell = CreateObject("WScript.Shell")',
+  'cmd = ""',
+  'For Each a In WScript.Arguments',
+  '  cmd = cmd & " """ & a & """"',
+  'Next',
+  'shell.Run Trim(cmd), 0, False',
+  '',
+].join('\r\n')
+
+function writeRunHidden() {
+  mkdirSync(DATA_DIR, { recursive: true })
+  writeFileSync(RUN_HIDDEN, RUN_HIDDEN_SOURCE)
+}
+
 function winScript(routine) {
   const wd = weekdays(routine.days)
   const trigger = routine.every
     ? `New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes ${routine.every}) -RepetitionDuration (New-TimeSpan -Days 3650)`
     : wd ? `New-ScheduledTaskTrigger -Weekly -DaysOfWeek ${wd.map((d) => PS_DAYS[d]).join(',')} -At ${psq(routine.time)}` : `New-ScheduledTaskTrigger -Daily -At ${psq(routine.time)}`
   // wscript + run-hidden.vbs: no console window pops up when the routine starts.
-  const argument = `"${join(REPO, 'scripts', 'run-hidden.vbs')}" "${NODE}" ${command(routine).map((a) => `"${a}"`).join(' ')}`
+  const argument = `"${RUN_HIDDEN}" "${NODE}" ${command(routine).map((a) => `"${a}"`).join(' ')}`
   return [
     `$action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ${psq(argument)} -WorkingDirectory ${psq(REPO)}`,
     `$trigger = ${trigger}`,
@@ -141,6 +164,7 @@ async function winInstalled() {
 }
 
 async function winInstall(routines) {
+  writeRunHidden()
   for (const name of await winInstalled()) if (!routines.some((r) => r.id === name)) await ps(`Unregister-ScheduledTask -TaskName ${psq(name)} -TaskPath ${psq(`\\${TASK_FOLDER}\\`)} -Confirm:$false`)
   for (const r of routines) {
     const res = await ps(winScript(r))

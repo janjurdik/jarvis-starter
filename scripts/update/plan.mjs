@@ -12,6 +12,7 @@ import { mergeFile } from './merge.mjs'
 import { verifyRelease } from './signature.mjs'
 import { fetchIncoming, upstream } from './source.mjs'
 
+// scripts/run-hidden.vbs was a shipped file until 1.11.1; when an update removes it, the routines have to be registered again.
 const SCHEDULE_FILES = new Set(['scripts/schedule.mjs', 'scripts/autostart.mjs', 'scripts/routine.mjs', 'scripts/run-hidden.vbs'])
 const MINE_LIMIT = 300
 
